@@ -27,6 +27,12 @@ provides:
   - name: speckit.workflow.scope
     file: commands/scope.md
     description: 'Scopes a GitHub issue and runs the managed lifecycle through Specify, Clarify and Plan. Use when starting work on an issue, or for "scope issue 42".'
+  - name: speckit.workflow.scope-run
+    file: commands/scope-run.md
+    description: "Scopes a GitHub issue: checks prerequisites, sizes effort, asks how many sub-issues to create and publishes only an approved decomposition. Use when asked to scope, size, estimate or split an issue."
+  - name: speckit.workflow.scope-plan
+    file: commands/scope-plan.md
+    description: "Redraws and validates the dependency plan with Illustrate after a Scope split is published. Use when asked to refresh the plan, or when the scope plan-pending marker exists."
   - name: speckit.workflow.clarify
     file: commands/clarify.md
     description: 'Applies the GitHub answers to a feature''s clarification questions and continues the lifecycle. Use when the issue''s questions are answered, or for "apply the answers".'
@@ -60,6 +66,34 @@ provides:
   - name: speckit.workflow.apply-pending
     file: commands/apply-pending.md
     description: 'Applies queued pending artifact updates to contracts, data model or research. Use when Execute or Review ends, or for "apply pending updates".'
+# The Scope hook commands below are not listed under provides.commands (Spec Kit would register each as a
+# host skill with triggers that collide with speckit.specify and speckit.plan); the event dispatcher
+# finds them by file name, commands/<command name>.md.
+hooks:
+  before_specify:
+    command: speckit.workflow.scope-guard
+    priority: 1
+    optional: false
+    description: "Block Specify before side effects unless the explicit GitHub issue has a fresh scope and eligible prerequisites."
+  after_specify:
+    - command: speckit.workflow.scope-bind
+      priority: 1
+      optional: false
+      description: "Bind the source issue and set Feature Specification before Project sync."
+    - command: speckit.workflow.scope-after-specify
+      priority: 30
+      optional: false
+      description: "Run unattended Brainstorm when available, otherwise Clarify, after the spec is created."
+  before_plan:
+    command: speckit.workflow.scope-plan-guard
+    priority: 1
+    optional: false
+    description: "Require Ready before technical planning; unresolved clarification must not be bypassed."
+  after_implement:
+    command: speckit.workflow.scope-reconcile
+    priority: 30
+    optional: false
+    description: "Reconcile scope parents after Project sync updates child progress."
 tags:
 - workflow
 - qa

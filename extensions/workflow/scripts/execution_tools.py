@@ -49,7 +49,7 @@ PREFLIGHT_SCHEMA = 'sanduq.execution.preflight.v1'
 PR_LINT_SCHEMA = sanduq_pr_lint.PR_LINT_SCHEMA
 PROGRESS_SCHEMA = 'sanduq.execution.progress.v1'
 SCOPE_COMMAND_SCHEMA = 'sanduq.execution.scope-command.v1'
-SCOPE_SCRIPT = 'python .specify/extensions/scope/scripts/scope.py'
+SCOPE_SCRIPT = 'python .specify/extensions/workflow/scripts/scope/scope.py'
 
 NEWLINES = ('lf', 'crlf')
 IDENTITY_KINDS = ('source', 'base', 'artifact', 'fixture')

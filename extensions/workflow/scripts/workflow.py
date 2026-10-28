@@ -49,7 +49,7 @@ from packaging.version import Version
 
 # The runtime modules (W9), lowest layer first. Every name is re-exported, so `from workflow import X` and
 # `w.X` keep working. The operation memo `_OPERATION` lives only in wf_core and is never copied here.
-from wf_core import (SCHEMA, CHECKPOINT_SCHEMA, CHECKPOINT_SCHEMAS, RANGES, BASE_STAGES, COMMANDS, CORE_INPUTS,
+from wf_core import (SCHEMA, CHECKPOINT_SCHEMA, CHECKPOINT_SCHEMAS, RANGES, BASE_STAGES, COMMANDS, RENAMED_COMMANDS, CORE_INPUTS,
                      INPUT_ROLES, RECEIPT_POLICY_KEYS, AMENDMENT_ASSESSMENTS, AMENDMENT_DEPENDENTS,
                      RUNTIME_RECEIPT_FIELDS, SOURCE_STAGES, EFFORT_SCORES, TIERS, DEFAULT_PROFILES, LITE_SKIPPED,
                      LITE_FOLDED, LITE_OPTIONAL_INPUTS, LINT_COMMAND, ARTIFACT_BUDGETS, ARTIFACT_ENFORCE, PROJECT_SYNC_PHASES,
@@ -503,7 +503,9 @@ class Run:
         policy_digest = delivery_digest(self.policy)
         commands = resolve_commands(self.root, self.policy, state_tier(state))
         selected = stages(self.policy, state_tier(state), state.get('skipped'))
-        changed = [stage for stage in selected if state['commands'].get(stage) != commands[stage]]
+        # A renamed command (Scope's, DEC-03) is the same command: its receipts stay.
+        recorded = {stage: RENAMED_COMMANDS.get(name, name) for stage, name in state['commands'].items()}
+        changed = [stage for stage in selected if recorded.get(stage) != commands[stage]]
         if policy_digest != old_policy_digest:
             reached = policy_cutoff(state.get('policy'), self.policy)
             if reached < len(BASE_STAGES): changed.append(BASE_STAGES[reached])
@@ -514,7 +516,7 @@ class Run:
         return {'from': state['dependency_digest'], 'to': package_digest(self.root),
                 'policy_from': old_policy_digest, 'policy_to': policy_digest,
                 'commands': commands, 'changed_commands': sorted(
-                    stage for stage in selected if state['commands'].get(stage) != commands[stage]),
+                    stage for stage in selected if recorded.get(stage) != commands[stage]),
                 'invalidated': invalidated,
                 'preserved_as_historical': [s for s in state['receipts'] if s not in invalidated]}
 
@@ -1486,7 +1488,7 @@ class Run:
                 or '[NEEDS CLARIFICATION' in spec.read_text(encoding='utf-8-sig'):
             return None
         n, f = state['issue'].split('#')[1], self.relative
-        script = 'python .specify/extensions/scope/scripts/clarification.py'
+        script = 'python .specify/extensions/workflow/scripts/scope/clarification.py'
         snapshot = '.specify/scope/clarification-' + n + '-snapshot.json'
         review = f + '/clarify-review.json'
         return {'expected_questions': 0,
@@ -1520,7 +1522,7 @@ class Run:
         scores = [int(label[len('effort:'):]) for label in labels if re.fullmatch(r'effort:\d+', label)]
         require(len(scores) == 1, 'EFFORT_SCORE_UNVERIFIED: ' + state['issue'] + ' carries ' + str(len(scores)) +
                 ' effort:<n> labels and scope-source.json records no Scope-verified score; rerun Scope for the issue '
-                '(/speckit-scope-run ' + number + ') so its receipt and label agree, then claim again')
+                '(/speckit-workflow-scope-run ' + number + ') so its receipt and label agree, then claim again')
         return scores[0], 'effort:' + str(scores[0]) + ' label on ' + state['issue']
 
     def fix_profile(self, state, gh=None):

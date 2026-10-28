@@ -208,6 +208,10 @@ def prepare(root=ROOT, development=False):
                       'tags':doc.get('tags',[]),'category':meta.get('category','process'),
                       'effect':meta.get('effect','read-write'),'verified':False,
                       'sha256':built['sha256'],'inventory_sha256':inventory_sha256(name,root),'updated_at':datetime.now(timezone.utc).isoformat()})
+        # A retired package (Scope 2.0.0, DEC-03) says so in its manifest; the catalog entry points at its successor.
+        for key in ('deprecated', 'superseded_by'):
+            entry.pop(key, None)
+            if key in meta: entry[key] = meta[key]
         catalog['extensions'][name] = entry
         releases.append({'id':name,'version':version,'tag':name+'-v'+version,'asset':name+'.zip',
                          'archive':(Path('dist')/(name+'.zip')).as_posix(),'sha256':built['sha256']})

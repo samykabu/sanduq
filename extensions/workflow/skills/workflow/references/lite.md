@@ -6,7 +6,7 @@ delegation-and-decisions.md. Each claim's `reference_text` still carries its sta
 the claim's `cli` its exact `complete` and `pause` commands; no `--help` is needed.
 
 `W` is `python .specify/extensions/workflow/scripts/workflow.py`, `S` is
-`python .specify/extensions/scope/scripts/scope.py`, `F` is `specs/<feature>`, `n` the issue number.
+`python .specify/extensions/workflow/scripts/scope/scope.py`, `F` is `specs/<feature>`, `n` the issue number.
 
 ## Loop
 

@@ -8,8 +8,7 @@ import zipfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-PRESETS = {'workflow': ('workflow', 'scope-gate', 'scope-brainstorm'),
-           'scope': ('scope-gate', 'scope-brainstorm')}
+PRESETS = {'workflow': ('workflow', 'scope-gate', 'scope-brainstorm')}
 EXCLUDE = {'.git', '__pycache__', 'node_modules', '.specify', '.specify-dev', 'tests', 'test', 'runs',
            # Caches and reports a local test or lint run leaves behind, never package content.
            '.pytest_cache', '.mypy_cache', '.ruff_cache', '.hypothesis', '.tox', '.nox', 'htmlcov',
@@ -37,8 +36,8 @@ NOTICES = {'illustrate': ('Illustrate skill', 'Bundled icon sources'),
            'progress': ('Progress, Delegate Task and User Manual skills',),
            'workflow': ('Progress, Delegate Task and User Manual skills',),
            'user-manual': ('Progress, Delegate Task and User Manual skills',)}
-SHARED = {'sanduq_remote.py': ('workflow', 'project', 'scope'), 'sanduq_pr_lint.py': ('pr', 'workflow'),
-          'sanduq_gh.py': ('scope', 'workflow', 'project', 'pr'), 'sanduq_fs.py': ('workflow', 'memory', 'scope')}
+SHARED = {'sanduq_remote.py': ('workflow', 'project'), 'sanduq_pr_lint.py': ('pr', 'workflow'),
+          'sanduq_gh.py': ('workflow', 'project', 'pr'), 'sanduq_fs.py': ('workflow', 'memory')}
 
 
 def excluded(name):
@@ -112,10 +111,6 @@ def package_files(extension, root=ROOT):
         shared_file = root / 'extensions/scripts/shared' / helper
         if extension in consumers and shared_file.exists():
             files[extension + '/scripts/' + helper] = shared_file.read_bytes()
-    # Workflow's decisions reach Scope's Project transport without loading scope.py (SC8); Scope ships it natively.
-    scope_github = root / 'extensions/scope/scripts/sanduq_scope_github.py'
-    if extension == 'workflow' and scope_github.exists():
-        files['workflow/scripts/sanduq_scope_github.py'] = scope_github.read_bytes()
     return files
 
 

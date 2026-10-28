@@ -926,7 +926,7 @@ class BindOnlyAndLazyIssueTests(Base):
         """Publish #10 with Scope's fake GitHub, complete Scope, render the spec, claim Specify and run the
         claim's printed Scope bind; returns the run."""
         import shlex
-        sys.path.insert(0, str(SCRIPT.parents[2] / 'scope/tests'))
+        sys.path.insert(0, str(SCRIPT.parents[1] / 'tests'))
         import test_scope as scope_fixture
         sm = scope_fixture.m
         analysis_file = self.feature + '/scope-analysis.json'

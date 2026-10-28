@@ -45,7 +45,7 @@ class RuntimeModuleTests(unittest.TestCase):
         self.assertEqual(sorted(used - set(vars(w))), [])
 
     def test_scope_path_loading_reaches_checkpoint_identity(self):
-        path = SCRIPTS.parents[1] / 'scope/scripts/workflow_policy.py'
+        path = SCRIPTS / 'scope/workflow_policy.py'
         spec = importlib.util.spec_from_file_location('w9_workflow_policy', path)
         policy = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(policy)

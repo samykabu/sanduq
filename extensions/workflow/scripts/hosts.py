@@ -25,7 +25,7 @@ from workflow import (WORKFLOW_SCRIPT, WorkflowError, active_host, doctor, ensur
 # The skill folder each supported host reads.
 HOST_SKILLS = {'codex': '.agents/skills', 'claude': '.claude/skills'}
 # Extensions and presets whose commands Sanduq installs and so must keep on every host.
-MANAGED_EXTENSIONS = ('workflow', 'illustrate', 'project', 'scope', 'pr', 'assure', 'user-manual')
+MANAGED_EXTENSIONS = ('workflow', 'illustrate', 'project', 'pr', 'assure', 'user-manual')
 MANAGED_PRESETS = ('workflow', 'scope-gate', 'scope-brainstorm')
 SANDUQ = 'https://github.com/samykabu/sanduq'
 PACKAGE = Path(__file__).resolve().parents[1]

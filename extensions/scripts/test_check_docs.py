@@ -21,7 +21,7 @@ def fails_with(target, content, expected):
 
 # A longer command must not satisfy a missing command.
 for target, command, longer in (
-    (check_docs.COMMANDS_PAGE, '$speckit-scope-plan', '$speckit-scope-plan-guard'),
+    (check_docs.COMMANDS_PAGE, '$speckit-workflow-scope-plan', '$speckit-workflow-scope-plan-guard'),
     (check_docs.LIFECYCLE_PAGE, '$speckit-tasks', '$speckit-taskstoissues'),
 ):
     content = read_text(target, encoding='utf-8')

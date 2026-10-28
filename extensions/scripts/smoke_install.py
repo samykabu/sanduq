@@ -27,7 +27,7 @@ def smoke(host, superspec_source=None, second_host=None):
     run(['specify','init','--here','--force','--ignore-agent-tools','--integration',host] + (['--integration-options=--skills'] if host == 'codex' else []))
     if second_host:
         run(['specify','integration','install',second_host] + (['--integration-options=--skills'] if second_host == 'codex' else []))
-    for name in ('illustrate','project','scope','pr','assure','user-manual','progress','workflow'):
+    for name in ('illustrate','project','pr','assure','user-manual','progress','workflow'):
         result = package(name, output=workspace / 'archives' / (name + '.zip'))
         with zipfile.ZipFile(result['archive']) as archive: archive.extractall(workspace / 'packages')
         if name == 'workflow': run(['specify','extension','add','--dev',str(workspace / 'packages' / name)])

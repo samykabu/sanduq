@@ -829,6 +829,26 @@ def wire_illustrate(root, policy, hosts):
     return record
 
 
+# DEC-03: Scope's code, commands and skills are Workflow's (speckit.scope.<x> -> speckit.workflow.scope-<x>). An
+# installed Sanduq Scope (a release with code, or the 2.0.0 shim) is removed by Spec Kit before any other package
+# changes, which also drops its commands, skills and hook entries; its state in .specify/scope is read in place.
+SCOPE_STATE = '.specify/scope'
+
+
+def scope_removal(root, existing, repository):
+    """The `specify extension remove scope` operation for an installed Sanduq Scope, else None. Spec Kit never
+    enforces `requires.extensions`, so this order is the installer's job. Another source's `scope` is refused."""
+    if 'scope' not in existing:
+        return None
+    manifest = root / '.specify/extensions/scope/extension.yml'
+    doc = (yaml.safe_load(manifest.read_text(encoding='utf-8-sig')) or {}) if manifest.is_file() else {}
+    require(((doc.get('extension') or {}).get('repository') or '').rstrip('/') == repository,
+            'EXISTING_EXTENSION_SOURCE_CONFLICT: scope')
+    return {'extension': 'scope', 'version': existing['scope'].get('version'),
+            'args': ['specify', 'extension', 'remove', 'scope', '--force'],
+            'state': SCOPE_STATE + (' (kept, read in place)' if (root / SCOPE_STATE).is_dir() else ' (none)')}
+
+
 def preset_digest(folder):
     """sha256 over a bundled preset's files (paths and LF-normalised bytes), to tell a changed preset from the last apply's."""
     digest = hashlib.sha256()
@@ -849,6 +869,7 @@ def install(root, apply=False, packages=None, package_root=PACKAGE, runner=comma
     for process, enabled in policy['processes'].items():
         if enabled: selected.update(lock['selected'][process])
     existing = registry(root); operations = []; retained = []
+    scope_removed = scope_removal(root, existing, lock['repository'])
     last_wiring = (read(root / '.specify/workflow/install-lock.json', {}).get('progress') or {}).get('hook_wiring')
     was_native = last_wiring == 'native'
     # IP21: without an explicit key, Progress keeps the wiring it has (Spec Kit's, if installed before the lock
@@ -861,7 +882,7 @@ def install(root, apply=False, packages=None, package_root=PACKAGE, runner=comma
     require(not unknown, 'UNKNOWN_OPTIONAL_EXTENSION: ' + ', '.join(unknown) + '; offered: ' + ', '.join(sorted(offered)))
     chosen = sorted(set(with_optional) | {name for name in offered if name in existing})
     selected.update({name: offered[name] for name in chosen})
-    order = ('illustrate', 'project', 'scope', 'pr', 'assure', 'user-manual', 'progress')
+    order = ('illustrate', 'project', 'pr', 'assure', 'user-manual', 'progress')
     for name in sorted(selected, key=lambda key: order.index(key)):
         version = selected[name]
         manifest = root / '.specify/extensions' / name / 'extension.yml'
@@ -900,9 +921,10 @@ def install(root, apply=False, packages=None, package_root=PACKAGE, runner=comma
         require((source / 'preset.yml').is_file(), 'BUNDLED_PRESET_MISSING: build/install the workflow archive first')
         preset_ops.append({'name':name,'source':str(source),'priority':priority,'sha256':preset_digest(source)})
     # Re-add a preset only when it changed since the last apply. An extension update re-renders the commands a preset
-    # replaces, so any extension operation still re-adds every preset.
+    # replaces, so any extension operation still re-adds every preset; so does an upgrade, which re-added Workflow,
+    # whose speckit.workflow.scope-run the workflow preset replaces, and a Scope removal.
     last = read(root / '.specify/workflow/install-lock.json', {}).get('presets') or {}
-    skipped_presets = [] if operations else [
+    skipped_presets = [] if operations or scope_removed or upgrade_owner is not None else [
         op['name'] for op in preset_ops
         if (root / '.specify/presets' / op['name'] / 'preset.yml').is_file()
         and (last.get(op['name']) or {}).get('source_sha256') == op['sha256']
@@ -911,6 +933,7 @@ def install(root, apply=False, packages=None, package_root=PACKAGE, runner=comma
     # every other installed host is re-registered after the packages change.
     default_host, hosts = active_host(root), installed_hosts(root)
     result = {'applied':False,'extensions':operations,'retained_newer':retained,'presets':preset_ops,
+              'scope_removed': scope_removed,
               'skipped_presets':skipped_presets,'processes':policy['processes'],
               'optional_extensions': chosen,
               'hosts': {'default': default_host, 'installed': hosts,
@@ -960,6 +983,8 @@ def install(root, apply=False, packages=None, package_root=PACKAGE, runner=comma
                 restored_hooks = reconcile(root, apply=True, restore=True)
                 result['hook_metadata_refreshes'] = [change for change in restored_hooks['changes']
                                                     if change.get('metadata_refresh')]
+            if scope_removed:
+                runner(root, scope_removed['args'], log)
             for operation in operations:
                 preserved = preservation(root, operation['extension'])
                 runner(root, operation['args'], log)

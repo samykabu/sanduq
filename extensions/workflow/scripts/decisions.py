@@ -6,7 +6,6 @@ import argparse
 import hashlib
 import json
 import os
-import importlib.util
 import re
 import sys
 from pathlib import Path
@@ -88,17 +87,10 @@ def local_transport(state):
 
 
 def scope_transport():
-    """Scope's GitHub client module (`sanduq_scope_github`, with its GraphQL-to-REST Project switch), without
-    loading `scope.py`: the copy packaged next to this file, else the one in Scope's scripts."""
-    try:
-        import sanduq_scope_github
-        return sanduq_scope_github
-    except ModuleNotFoundError:
-        path = Path(__file__).resolve().parents[2] / 'scope/scripts/sanduq_scope_github.py'
-    spec = importlib.util.spec_from_file_location('sanduq_scope_github', path)
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
+    """Scope's GitHub client module (`sanduq_scope_github`, with its GraphQL-to-REST Project switch), next to
+    this file, without loading `scope.py`."""
+    import sanduq_scope_github
+    return sanduq_scope_github
 
 
 class GitHub:

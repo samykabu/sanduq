@@ -26,11 +26,11 @@ UPSTREAM_BRIDGE = (b'---\nname: speckit-superpowers-bridge\ndescription: Execute
                    b'  source: speckit-superpowers-bridge:commands/speckit.speckit-superpowers-bridge.execute.md\n'
                    b'---\nUpstream Bridge executor: run every task now.\n')
 # The commands each fake managed package provides.
-PROVIDES = {'scope': ['speckit.scope.run', 'speckit.scope.bind'], 'project': ['speckit.project.sync'],
+PROVIDES = {'project': ['speckit.project.sync'],
             'pr': ['speckit.pr.generate'], 'illustrate': ['speckit.illustrate.generate'],
             'assure': ['speckit.assure.analyze', 'speckit.assure.document'],
             'user-manual': ['speckit.user-manual.analyze', 'speckit.user-manual.update'],
-            'workflow': ['speckit.workflow.continue', 'speckit.workflow.doctor']}
+            'workflow': ['speckit.workflow.continue', 'speckit.workflow.doctor', 'speckit.workflow.scope-run']}
 
 
 class FakeSpecify:
@@ -72,6 +72,22 @@ class FakeSpecify:
             self.extension_add(args)
         elif args[1:3] == ['integration', 'use']:
             self.use(args[3])
+        elif args[1:3] == ['extension', 'remove']:
+            self.extension_remove(args[3])
+
+    def extension_remove(self, name):
+        """Spec Kit's remove: the extension folder, its registry entry, its skills on every host and its hooks."""
+        shutil.rmtree(self.root / '.specify/extensions' / name)
+        registered = w.registry(self.root); registered.pop(name)
+        w.write(self.root / '.specify/extensions/.registry', {'extensions': registered})
+        for folder in hosts.HOST_SKILLS.values():
+            for skill in (self.root / folder).glob('speckit-' + name + '-*'):
+                shutil.rmtree(skill)
+        config = self.root / '.specify/extensions.yml'
+        document = yaml.safe_load(config.read_text(encoding='utf-8')) or {}
+        document['hooks'] = {event: [h for h in items if h.get('extension') != name]
+                             for event, items in (document.get('hooks') or {}).items()}
+        config.write_text(yaml.safe_dump(document, sort_keys=False), encoding='utf-8')
 
     def extension_add(self, args):
         if '--dev' in args:

@@ -147,7 +147,7 @@ class ScopeCommandTests(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'scope' / 'scripts'))
+        sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts' / 'scope'))
         import scope
         import workflow_policy
         cls.scope, cls.policy = scope, workflow_policy

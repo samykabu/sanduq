@@ -15,7 +15,7 @@ STOP; never re-enter it from a claim. Full contract:
 Inside a matching claim, follow `.specify/extensions/workflow/skills/workflow/references/stage-clarify.md`
 from the claim's `reference_text`.
 
-In every case execute `.specify/extensions/scope/skills/github-clarification/SKILL.md` with
+In every case execute `.specify/extensions/workflow/skills/github-clarification/SKILL.md` with
 `engine: clarify`, using the explicit issue number or the active feature's `scope-source.json`.
 With `clarification_transport: github-comments` on the claim, questions go to GitHub, one
 comment each, not to this chat (the managed in-session first round is the one exception). With

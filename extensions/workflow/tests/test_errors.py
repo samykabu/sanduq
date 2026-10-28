@@ -84,12 +84,12 @@ class CliErrorTests(unittest.TestCase):
     def test_dependency_unavailable_names_install_before_the_first_apply(self):
         registered = w.registry(self.root)
         registered['workflow'] = {'version': '1.18.0', 'enabled': True}
-        registered['scope'] = {'version': '1.0.0', 'enabled': True}
+        registered['project'] = {'version': '1.0.0', 'enabled': True}
         w.write(self.root / '.specify/extensions/.registry', {'extensions': registered})
-        error = [e for e in w.doctor(self.root, self.policy)['errors'] if e.startswith('DEPENDENCY_UNAVAILABLE: scope')][0]
+        error = [e for e in w.doctor(self.root, self.policy)['errors'] if e.startswith('DEPENDENCY_UNAVAILABLE: project')][0]
         self.assertIn('run "python .specify/extensions/workflow/scripts/install.py --apply"', error)
         w.write(self.root / '.specify/workflow/install-lock.json', {'host': 'codex'})
-        error = [e for e in w.doctor(self.root, self.policy)['errors'] if e.startswith('DEPENDENCY_UNAVAILABLE: scope')][0]
+        error = [e for e in w.doctor(self.root, self.policy)['errors'] if e.startswith('DEPENDENCY_UNAVAILABLE: project')][0]
         self.assertIn('upgrade.py --version 1.18.0 --apply', error)
 
 

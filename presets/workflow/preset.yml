@@ -13,9 +13,9 @@ requires:
 provides:
   templates:
   - type: command
-    name: speckit.scope.run
-    file: commands/speckit.scope.run.md
-    replaces: speckit.scope.run
+    name: speckit.workflow.scope-run
+    file: commands/speckit.workflow.scope-run.md
+    replaces: speckit.workflow.scope-run
     strategy: prepend
   - type: command
     name: speckit.specify

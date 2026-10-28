@@ -213,9 +213,11 @@ def release_facts(manifests, texts):
                 errors.append(f'{source.relative_to(ROOT)}:{line}: says {number} extensions; there are {len(versions)}')
     block = re.search(r'^## All \w+ extensions\n(.*?)(?=^## )', texts[INSTALL_PAGE], re.M | re.S)
     added = set(re.findall(r'specify extension add ([a-z][a-z0-9-]*)', block.group(1))) if block else set()
-    if added != set(versions):
+    # A retired package (`deprecated: true`, such as the Scope shim) is never installed.
+    installable = {m['extension']['id'] for m in manifests if not m['extension'].get('deprecated')}
+    if added != installable:
         errors.append(f'{INSTALL_PAGE.relative_to(ROOT)}: the add-all block differs from the extensions: '
-                      f'missing {sorted(set(versions) - added)}, extra {sorted(added - set(versions))}')
+                      f'missing {sorted(installable - added)}, extra {sorted(added - installable)}')
     catalog = {k: v['version'] for k, v in json.loads((ROOT / 'catalog.json').read_text(encoding='utf-8'))['extensions'].items()}
     changelog = CHANGELOG.read_text(encoding='utf-8')
     headings = [(n, line) for n, line in enumerate(changelog.splitlines(), 1) if line.startswith('## ')]

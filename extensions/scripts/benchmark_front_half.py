@@ -38,14 +38,22 @@ COUNTED = ('doctor', 'fingerprint_files', 'source_fingerprints', 'git')
 RUNTIME_MODULES = ('wf_core', 'wf_identity', 'wf_fingerprints', 'wf_policy', 'wf_health', 'wf_receipts')
 WORKFLOW_SKILL = 'extensions/workflow/skills/workflow/'
 STAGE_EXTRAS = {
-    'scope': ['extensions/scope/commands/run.md', 'extensions/scope/skills/scope-analyst/SKILL.ext.md',
-              'extensions/scope/references/analysis-contract.md'],
-    'specify': ['presets/scope-gate/commands/specify-gate.md', 'extensions/scope/commands/speckit.scope.guard.md',
-                'extensions/scope/commands/speckit.scope.bind.md'],
-    'clarify': ['extensions/scope/skills/github-clarification/SKILL.ext.md'],
+    'scope': ['extensions/workflow/commands/scope-run.md', 'extensions/workflow/skills/scope-analyst/SKILL.ext.md',
+              'extensions/workflow/references/analysis-contract.md'],
+    'specify': ['presets/scope-gate/commands/specify-gate.md', 'extensions/workflow/commands/speckit.workflow.scope-guard.md',
+                'extensions/workflow/commands/speckit.workflow.scope-bind.md'],
+    'clarify': ['extensions/workflow/skills/github-clarification/SKILL.ext.md'],
     'execute': [WORKFLOW_SKILL + 'references/execution-assign.md', WORKFLOW_SKILL + 'references/execution-report.md',
                 WORKFLOW_SKILL + 'references/reporting.md'],
 }
+# The same files in a tree from before Scope merged into Workflow (DEC-03), so an older ref measures alike.
+PRE_MERGE = {'extensions/workflow/commands/scope-run.md': 'extensions/scope/commands/run.md',
+             'extensions/workflow/skills/scope-analyst/SKILL.ext.md': 'extensions/scope/skills/scope-analyst/SKILL.ext.md',
+             'extensions/workflow/references/analysis-contract.md': 'extensions/scope/references/analysis-contract.md',
+             'extensions/workflow/commands/speckit.workflow.scope-guard.md': 'extensions/scope/commands/speckit.scope.guard.md',
+             'extensions/workflow/commands/speckit.workflow.scope-bind.md': 'extensions/scope/commands/speckit.scope.bind.md',
+             'extensions/workflow/skills/github-clarification/SKILL.ext.md':
+                 'extensions/scope/skills/github-clarification/SKILL.ext.md'}
 # Workflow 1.15 prints the Execute protocol for the claimed mode inside the claim (`execute_protocol`), so
 # those files are already counted in claim stdout and must not be counted again as static reads.
 PROTOCOL_IN_CLAIM = {'execute'}
@@ -102,7 +110,9 @@ class Bench:
             p.write_text('schema_version: "1.0"\n', encoding='utf-8')
         w.write(root / '.specify/presets/.registry',
                 {'presets': {p: {'enabled': True} for p in ('workflow', 'scope-gate', 'scope-brainstorm')}})
-        versions = {'scope': '1.11.0', 'project': '2.2.0', 'pr': '4.2.0', 'assure': '2.2.0', 'user-manual': '1.2.0'}
+        versions = {'project': '2.2.0', 'pr': '4.2.0', 'assure': '2.2.0', 'user-manual': '1.2.0'}
+        if 'scope' in w.RANGES:  # a Workflow from before 2.0.0 needs the separate Scope package
+            versions['scope'] = '1.11.0'
         w.write(root / '.specify/extensions/.registry',
                 {'extensions': {n: {'version': v, 'enabled': True} for n, v in versions.items()}})
         for n, v in versions.items():
@@ -378,6 +388,8 @@ def instruction_load(repo, claimed):
         files = {}
         for name in names:
             path = repo / name
+            if not path.is_file() and name in PRE_MERGE:
+                path = repo / PRE_MERGE[name]
             if path.is_file():
                 files[name] = path.stat().st_size
                 direct.add(path.resolve())

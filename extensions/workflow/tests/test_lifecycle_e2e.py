@@ -33,7 +33,7 @@ def drive(tier, out, defect=None):
     feature with `clarification.transport: local` (REQ-21): the Clarify receipt lists specs/<f>/clarifications.md."""
     sys.path.insert(0, str(HARNESS))
     import benchmark_front_half as bench
-    sys.path.insert(0, str(REPO / 'extensions/scope/tests'))
+    sys.path.insert(0, str(REPO / 'extensions/workflow/tests'))
     import test_scope as scope_fixture
     sm = scope_fixture.m
 

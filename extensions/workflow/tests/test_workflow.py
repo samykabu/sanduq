@@ -81,7 +81,7 @@ class WorkflowTests(unittest.TestCase):
             p.parent.mkdir(parents=True, exist_ok=True)
             p.write_text('schema_version: "1.0"\n', encoding='utf-8')
         w.write(self.root / '.specify/presets/.registry', {'presets': {p: {'enabled':True} for p in ('workflow','scope-gate','scope-brainstorm')}})
-        versions = {'scope': '1.11.0', 'project': '2.2.0', 'pr': '4.2.0', 'assure': '2.2.0', 'user-manual': '1.2.0'}
+        versions = {'project': '2.2.0', 'pr': '4.2.0', 'assure': '2.2.0', 'user-manual': '1.2.0'}
         if superspec: versions['superspec'] = '1.0.2'
         w.write(self.root / '.specify/extensions/.registry', {'extensions': {n: {'version': v, 'enabled': True} for n, v in versions.items()}})
         for n, v in versions.items():
@@ -223,27 +223,27 @@ class WorkflowTests(unittest.TestCase):
         self.assertTrue(w.doctor(self.root, self.policy)['ok'])
 
     def test_doctor_project_names_versions_and_upgrade_command_for_an_older_dependency(self):
-        # MARWA-14: Workflow updated alone through Spec Kit leaves an older Scope behind.
+        # MARWA-14: Workflow updated alone through Spec Kit leaves an older Project behind.
         lock = json.loads((Path(w.__file__).resolve().parents[1] / 'dependencies.json').read_text(encoding='utf-8'))
         w.write(self.root / '.specify/extensions/workflow/dependencies.json', lock)
         registered = w.registry(self.root)
         registered['workflow'] = {'version': '1.18.0', 'enabled': True}
-        registered['scope'] = {'version': '1.10.0', 'enabled': True}
+        registered['project'] = {'version': '2.0.0', 'enabled': True}
         w.write(self.root / '.specify/extensions/.registry', {'extensions': registered})
         w.write(self.root / '.specify/workflow/install-lock.json', {'host': 'codex'})  # installed before: not a fresh install
         command = 'python .specify/extensions/workflow/scripts/upgrade.py --version 1.18.0 --apply'
-        errors = [e for e in w.doctor(self.root, self.policy, project=True)['errors'] if e.startswith('DEPENDENCY_UNAVAILABLE: scope')]
+        errors = [e for e in w.doctor(self.root, self.policy, project=True)['errors'] if e.startswith('DEPENDENCY_UNAVAILABLE: project')]
         self.assertEqual(len(errors), 1)
-        for text in ('scope 1.10.0 is installed', 'Workflow 1.18.0 requires scope ' + lock['required']['scope'], command):
+        for text in ('project 2.0.0 is installed', 'Workflow 1.18.0 requires project ' + lock['required']['project'], command):
             self.assertIn(text, errors[0])
         # Inside RANGES but older than the lock: only `doctor --project` reports it.
-        lock['required']['scope'] = '1.12.0'
+        lock['required']['project'] = '2.3.0'
         w.write(self.root / '.specify/extensions/workflow/dependencies.json', lock)
-        registered['scope'] = {'version': '1.11.0', 'enabled': True}
+        registered['project'] = {'version': '2.2.0', 'enabled': True}
         w.write(self.root / '.specify/extensions/.registry', {'extensions': registered})
-        self.assertIn('DEPENDENCY_UNAVAILABLE: scope 1.11.0 is installed; Workflow 1.18.0 requires scope 1.12.0 '
-                      '(>=1.11,<2); run "' + command + '"', w.doctor(self.root, self.policy, project=True)['errors'])
-        self.assertFalse(any(e.startswith('DEPENDENCY_UNAVAILABLE: scope') for e in w.doctor(self.root, self.policy)['errors']))
+        self.assertIn('DEPENDENCY_UNAVAILABLE: project 2.2.0 is installed; Workflow 1.18.0 requires project 2.3.0 '
+                      '(>=2.1,<3); run "' + command + '"', w.doctor(self.root, self.policy, project=True)['errors'])
+        self.assertFalse(any(e.startswith('DEPENDENCY_UNAVAILABLE: project') for e in w.doctor(self.root, self.policy)['errors']))
 
     def test_doctor_fails_when_an_installed_scope_or_memory_is_not_sanduqs(self):
         """SEC-14: the community catalogs publish other packages under the ids scope and memory."""
@@ -278,6 +278,32 @@ class WorkflowTests(unittest.TestCase):
         (memory / 'run.py').write_bytes(b'print(2)\r\n')
         self.assertIn('DEPENDENCY_SOURCE_MISMATCH: memory differs from its package inventory: memory/run.py',
                       w.doctor(self.root, self.policy, explicit=True)['errors'])
+
+    def test_doctor_names_the_upgrade_while_a_scope_with_code_is_installed(self):
+        """DEC-03: Workflow provides Scope; no scope package is needed, a foreign one fails, an old one names the fix."""
+        self.assertNotIn('scope', w.registry(self.root))
+        self.assertTrue(w.doctor(self.root, self.policy, explicit=True)['ok'])
+        folder = self.root / '.specify/extensions/scope'
+        folder.mkdir(parents=True)
+
+        def install(version, repository='https://github.com/samykabu/sanduq', author='Samy K. Abushanab'):
+            (folder / 'extension.yml').write_text(yaml.safe_dump({'extension': {
+                'id': 'scope', 'version': version, 'repository': repository, 'author': author}}), encoding='utf-8')
+            registered = w.registry(self.root)
+            registered['scope'] = {'version': version, 'enabled': True}
+            w.write(self.root / '.specify/extensions/.registry', {'extensions': registered})
+            return w.doctor(self.root, self.policy)['errors']
+        errors = install('1.0.0', 'https://github.com/someone/scope', 'Someone')
+        self.assertIn('DEPENDENCY_SOURCE_MISMATCH: scope must come from samykabu/sanduq', errors)
+        w.write(self.root / '.specify/workflow/install-lock.json', {'host': 'codex'})
+        version = w.registry(self.root).get('workflow', {}).get('version') or '<workflow version>'
+        errors = install('1.14.0')
+        self.assertEqual([e for e in errors if 'scope' in e], [
+            'SCOPE_MERGED_INTO_WORKFLOW: scope 1.14.0 is installed, but Workflow provides Scope now (speckit.scope.<x> is '
+            'speckit.workflow.scope-<x>); run "python .specify/extensions/workflow/scripts/upgrade.py --version ' + version +
+            ' --apply" to remove it; its state in .specify/scope is kept'])
+        self.assertIn('SCOPE_MERGED_INTO_WORKFLOW', w.ERRORS)
+        self.assertEqual([e for e in install('2.0.0') if 'scope' in e], [])  # the retired shim carries no code
 
     def test_context_reserves_space_and_labels_estimation(self):
         gate = w.context_gate(self.policy, self.usage(.46))

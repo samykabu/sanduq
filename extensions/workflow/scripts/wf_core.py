@@ -29,12 +29,14 @@ SCHEMA = 1  # the policy schema
 # The checkpoint has its own version (W27): 2 drops `repo_path`. Readers accept 1 and 2; every write is 2.
 CHECKPOINT_SCHEMA = 2
 CHECKPOINT_SCHEMAS = (1, 2)
-RANGES = {'scope': '>=1.11,<2', 'assure': '>=2.2,<3', 'user-manual': '>=1.2,<2',
+RANGES = {'assure': '>=2.2,<3', 'user-manual': '>=1.2,<2',
           'pr': '>=4.1,<5', 'superspec': '>=1.0.2,<2', 'project': '>=2.1,<3', 'progress': '>=1.0,<2'}
 BASE_STAGES = ['scope', 'specify', 'clarify', 'plan', 'tasks', 'qa_analyze',
                'manual_analyze', 'analyze', 'taskstoissues', 'execute', 'verify',
                'review', 'qa_document', 'manual_update', 'ready', 'pr']
-COMMANDS = {'scope': 'speckit.scope.run', 'specify': 'speckit.specify',
+# Scope's commands became Workflow's in 2.0.0 (DEC-03); a checkpoint written before records the old names.
+RENAMED_COMMANDS = {'speckit.scope.run': 'speckit.workflow.scope-run'}
+COMMANDS = {'scope': 'speckit.workflow.scope-run', 'specify': 'speckit.specify',
             'clarify': 'speckit.clarify', 'plan': 'speckit.plan', 'tasks': 'speckit.tasks',
             'qa_analyze': 'speckit.assure.analyze', 'manual_analyze': 'speckit.user-manual.analyze',
             'analyze': 'speckit.analyze', 'taskstoissues': 'speckit.taskstoissues',
@@ -151,6 +153,7 @@ ERRORS = {
     'DEPENDENCY_CHANGED': ('The installed packages changed since this checkpoint was written.', 'A package change can change what stage evidence means, so it needs a reviewed migration.', W + ' migrate --feature <feature> --reason "<text>" (preview with --preview); an incomplete upgrade is finished with upgrade.py --version <v> --apply'),
     'DEPENDENCY_SOURCE_MISMATCH': ("A required extension, or an installed scope or memory, is not Sanduq's: another repository or author, a catalog install without the release inventory, or files that differ from it.", 'The community package with the same id is not the one Workflow runs.', 'specify extension remove <name>, then ' + INSTALL_SCRIPT + ' --apply'),
     'DEPENDENCY_UNAVAILABLE': ('A required extension is missing, disabled or outside the version range Workflow needs.', "Stages run the companions' commands.", INSTALL_SCRIPT + ' --apply on a fresh install; after an upgrade, the upgrade.py command the message names'),
+    'SCOPE_MERGED_INTO_WORKFLOW': ('A Scope package that still carries code (before its 2.0.0 shim) is installed next to a Workflow that provides Scope itself.', "Scope's commands are now speckit.workflow.scope-*; the old package's hooks would run the old guard and bind a second time.", 'The upgrade.py command the message names: it removes the old Scope and keeps .specify/scope'),
     'DETACHED_HEAD_UNSUPPORTED': ('HEAD is detached.', 'A feature branch is created from the current branch, so there must be one.', 'git switch <branch>, then run the command again'),
     'DUPLICATE_STAGE_OWNER': ('An extension hook is still enabled for a stage the Workflow dispatcher owns.', 'The stage would run twice.', 'python .specify/extensions/workflow/scripts/reconcile.py --apply'),
     'EVIDENCE_MISSING': ('A receipt names evidence that does not exist on disk.', 'A stage passes only on evidence a reader can open.', 'Write the file, then run complete again with the same receipt'),

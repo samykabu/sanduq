@@ -77,18 +77,23 @@ class HostFilesTests(HostTests):
         self.assertIn(b'mine', alias.read_bytes())
 
     def test_hook_only_scope_skills_are_hidden_on_claude_only(self):
+        """A hook-only skill an older Scope rendered (before 1.12) is hidden on Claude; Workflow's own Scope commands
+        are not, and the hook commands Workflow provides are never rendered (not in provides.commands)."""
         register = self.specify.register
 
         def rendered(host, names):  # Spec Kit writes frontmatter; the fake writes a bare line
             register(host, names)
-            for path in (self.specify.root / hosts.HOST_SKILLS[host]).glob('speckit-scope-*/SKILL.md'):
-                path.write_text('---\nname: ' + path.parent.name + '\ndescription: x\n---\nbody\n', encoding='utf-8')
+            for name in ('speckit-scope-bind', 'speckit-workflow-scope-run'):
+                path = self.specify.root / hosts.HOST_SKILLS[host] / name / 'SKILL.md'
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text('---\nname: ' + name + '\ndescription: x\n---\nbody\n', encoding='utf-8')
         self.specify.register = rendered
         self.install()
         claude = (self.root / '.claude/skills/speckit-scope-bind/SKILL.md').read_text(encoding='utf-8')
         self.assertIn('user-invocable: false', claude)
         self.assertNotIn('user-invocable', (self.root / '.agents/skills/speckit-scope-bind/SKILL.md').read_text(encoding='utf-8'))
-        self.assertNotIn('user-invocable', (self.root / '.claude/skills/speckit-scope-run/SKILL.md').read_text(encoding='utf-8'))
+        self.assertNotIn('user-invocable', (self.root / '.claude/skills/speckit-workflow-scope-run/SKILL.md').read_text(encoding='utf-8'))
+        self.assertFalse(list((self.root / '.claude/skills').glob('speckit-workflow-scope-bind*')))
         self.assertEqual(hosts.skill_report(self.root)['missing'], {})
 
     def test_hidden_flag_is_idempotent_and_reapplied_by_reconcile(self):

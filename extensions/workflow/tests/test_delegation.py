@@ -3496,7 +3496,7 @@ class DelegationTests(unittest.TestCase):
 
     def test_stage_work_type_covers_qa_document_and_qa_analyze_and_discovery(self):
         commands = {'qa_document': 'speckit.assure.document', 'qa_analyze': 'speckit.assure.analyze',
-                   'scope': 'speckit.scope.run'}
+                   'scope': 'speckit.workflow.scope-run'}
         self.assertEqual(delegation.stage_work_type(commands, 'qa_document'), 'documentation')
         self.assertEqual(delegation.stage_work_type(commands, 'qa_analyze'), 'qa_author')
         self.assertEqual(delegation.stage_work_type(commands, 'scope'), 'discovery')

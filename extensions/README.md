@@ -15,9 +15,9 @@ PR, illustration, Memory, and Progress reporting processes. Use [install by host
 | [pr](pr/README.md) | 4.7.3 | 2 |
 | [progress](progress/README.md) | 1.7.0 | 5 |
 | [project](project/README.md) | 2.7.1 | 2 |
-| [scope](scope/README.md) | 1.14.0 | 2 |
+| [scope](scope/README.md) | 2.0.0 | 1 |
 | [user-manual](user-manual/README.md) | 1.8.3 | 4 |
-| [workflow](workflow/README.md) | 1.25.0 | 13 |
+| [workflow](workflow/README.md) | 1.25.0 | 15 |
 
 Published versions live in the authoritative root [catalog](../catalog.json);
 [catalog.json](catalog.json) mirrors it.
@@ -37,6 +37,6 @@ versions independently.
 
 Package READMEs linked above retain detailed runtime contracts. Commands register through the
 consumer's Spec Kit integration; read the [host naming table](../docs/reference/commands.md#command-names).
-The community catalog also publishes `scope` and `memory`; Workflow's versioned dependency installer
-gets Sanduq's Scope, and [catalog priority](../docs/start/install-speckit.md#if-you-keep-spec-kits-default-catalogs)
+The community catalog also publishes `scope` and `memory`. Workflow provides Scope itself from 2.0.0
+(Sanduq's Scope 2.0.0 is a retired shim), and [catalog priority](../docs/start/install-speckit.md#if-you-keep-spec-kits-default-catalogs)
 decides the rest.

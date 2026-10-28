@@ -71,7 +71,7 @@ class PackageExclusionTests(unittest.TestCase):
         self.assertFalse(package.excluded('pr/templates/CHANGELOG.md'))  # only the top-level release history
 
     def test_license_and_text_files_are_lf_in_every_checkout(self):
-        for path in ('LICENSE', 'extensions/workflow/LICENSE', 'extensions/scope/requirements.txt'):
+        for path in ('LICENSE', 'extensions/workflow/LICENSE', 'extensions/workflow/requirements.txt'):
             result = subprocess.run(['git', 'check-attr', 'text', 'eol', '--', path], cwd=package.ROOT,
                                     capture_output=True, text=True, check=True)
             self.assertIn(path + ': text: set', result.stdout)

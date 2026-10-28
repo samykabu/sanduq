@@ -41,7 +41,7 @@ def manifest_metadata_refresh(root, event, hook, record):
 def managed_hook(event, hook):
     """The one hook-ownership rule, for reconcile and doctor. check_docs.py evaluates the `managed` expression with
     only OWNED in scope, so keep it one assignment with inline literals."""
-    managed = hook.get('extension') in OWNED or (hook.get('extension') == 'pr' and event == 'after_implement') or (hook.get('command') == 'speckit.scope.after-specify') or (hook.get('extension') == 'memory' and hook.get('command') in ('speckit.memory.session', 'speckit.memory.prepare'))
+    managed = hook.get('extension') in OWNED or (hook.get('extension') == 'pr' and event == 'after_implement') or (hook.get('command') == 'speckit.workflow.scope-after-specify') or (hook.get('extension') == 'memory' and hook.get('command') in ('speckit.memory.session', 'speckit.memory.prepare'))
     return managed
 
 

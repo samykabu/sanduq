@@ -127,8 +127,8 @@ class PackagedCopies(unittest.TestCase):
         cls.tmp.cleanup()
 
     def test_each_consumer_archive_carries_the_source_bytes_in_its_inventory(self):
-        self.assertEqual(package.SHARED['sanduq_remote.py'], ('workflow', 'project', 'scope'))
-        self.assertEqual(package.SHARED['sanduq_gh.py'], ('scope', 'workflow', 'project', 'pr'))
+        self.assertEqual(package.SHARED['sanduq_remote.py'], ('workflow', 'project'))
+        self.assertEqual(package.SHARED['sanduq_gh.py'], ('workflow', 'project', 'pr'))
         for helper, consumers in package.SHARED.items():
             source = (SHARED / helper).read_bytes()
             for extension in consumers:
@@ -170,7 +170,7 @@ class PackagedCopies(unittest.TestCase):
 
     def test_workflow_carries_scopes_github_client(self):
         """Workflow's decisions reach Scope's Project transport from its own scripts folder (SC8)."""
-        source = (package.ROOT / 'extensions/scope/scripts/sanduq_scope_github.py').read_bytes()
+        source = (package.ROOT / 'extensions/workflow/scripts/sanduq_scope_github.py').read_bytes()
         with zipfile.ZipFile(self.archives['workflow']) as z:
             self.assertEqual(z.read('workflow/scripts/sanduq_scope_github.py'), source)
             inventory = json.loads(z.read('workflow/package-inventory.json'))

@@ -7,7 +7,7 @@ description: "Structured clarification workflow for underspecified requirements,
 Input: $ARGUMENTS
 
 This command replaces the upstream interactive Clarify. Execute
-`.specify/extensions/scope/skills/github-clarification/SKILL.md` with `engine: clarify`, using the
+`.specify/extensions/workflow/skills/github-clarification/SKILL.md` with `engine: clarify`, using the
 explicit issue number or the active feature's `scope-source.json`. It owns the status check, the
 GitHub questions (one comment each, no question or answer-length limit), the spec edits and the
 Plan handoff. Never ask clarification questions in this chat unless the feature's claim says

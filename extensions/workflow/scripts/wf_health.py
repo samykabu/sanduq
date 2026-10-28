@@ -464,8 +464,17 @@ def doctor(root, policy, project=False, preserved_ci=None, check_delegation=True
            explicit=False):
     """Installation health. `explicit` (the `doctor` command) also runs the skill inventory (with `project`)
     and the byte-sensitive line-ending scan, which no claim or other command pays for."""
-    needed = ['scope', 'project', 'pr'] + (['assure'] if policy['processes']['qa'] else []) + (['user-manual'] if policy['processes']['user_manual'] else [])
+    needed = ['project', 'pr'] + (['assure'] if policy['processes']['qa'] else []) + (['user-manual'] if policy['processes']['user_manual'] else [])
     errors = dependency_errors(root, needed, project)
+    scope = registry(root).get('scope', {}).get('version')
+    try:  # DEC-03: Workflow provides Scope; a Scope with code (before its 2.0.0 shim) would run old hooks too
+        merged = scope is None or Version(str(scope)) >= Version('2.0.0')
+    except ValueError:
+        merged = False
+    if not merged:
+        errors.append('SCOPE_MERGED_INTO_WORKFLOW: scope ' + str(scope) + ' is installed, but Workflow provides Scope now '
+                      '(speckit.scope.<x> is speckit.workflow.scope-<x>); run "' + upgrade_command(root)[0] +
+                      '" to remove it; its state in .specify/scope is kept')
     if active_host(root) not in ('codex','claude'):
         errors.append('HOST_UNSUPPORTED: this release supports Codex and Claude skills mode')
     if (check_delegation and policy.get('delegation', {}).get('enabled') and

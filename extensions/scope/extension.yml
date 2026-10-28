@@ -1,65 +1,32 @@
 schema_version: "1.0"
 extension:
   id: scope
-  name: Speckit Scope
-  version: "1.14.0"
-  description: "Analyze GitHub issue scope, enforce prerequisites, review user-selected decomposition before publishing, and maintain parent progress."
+  name: Speckit Scope (retired)
+  version: "2.0.0"
+  description: "Retired: Scope is part of Sanduq Workflow 2.0.0. Run python .specify/extensions/workflow/scripts/upgrade.py --version 2.0.0 --apply; it removes this package and keeps .specify/scope."
   author: "Samy K. Abushanab"
   repository: "https://github.com/samykabu/sanduq"
   license: MIT
+  deprecated: true
+  superseded_by: workflow
 requires:
   speckit_version: ">=1.0.0"
   extensions:
     - id: workflow
-      version: ">=1.13.0,<2.0.0"
-      required: true
-    - id: illustrate
-      version: ">=2.2.1,<3.0.0"
+      version: ">=2.0.0,<3.0.0"
       required: true
   tools:
-    - name: gh
-      required: true
     - name: python
       version: ">=3.11"
       required: true
+# No code, presets or hooks. Installing this release over Scope 1.x removes its commands, skills and hook
+# entries; Spec Kit prints the description above. Workflow's installer removes this package too.
 provides:
   commands:
-    - name: speckit.scope.run
-      file: commands/run.md
-      description: "Scopes a GitHub issue: checks prerequisites, sizes effort, asks how many sub-issues to create and publishes only an approved decomposition. Use when asked to scope, size, estimate or split an issue."
-    - name: speckit.scope.plan
-      file: commands/plan.md
-      description: "Redraws and validates the dependency plan with Illustrate after a Scope split is published. Use when asked to refresh the plan, or when the scope plan-pending marker exists."
-# The hook commands below are not listed under provides.commands (Spec Kit would register each as a
-# host skill with triggers that collide with speckit.specify and speckit.plan); the event dispatcher
-# finds them by file name, commands/<command name>.md, as Progress 1.1.2 does.
-hooks:
-  before_specify:
-    command: speckit.scope.guard
-    priority: 1
-    optional: false
-    description: "Block Specify before side effects unless the explicit GitHub issue has a fresh scope and eligible prerequisites."
-  after_specify:
-    - command: speckit.scope.bind
-      priority: 1
-      optional: false
-      description: "Bind the source issue and set Feature Specification before Project sync."
-    - command: speckit.scope.after-specify
-      priority: 30
-      optional: false
-      description: "Run unattended Brainstorm when available, otherwise Clarify, after the spec is created."
-  before_plan:
-    command: speckit.scope.plan-guard
-    priority: 1
-    optional: false
-    description: "Require Ready before technical planning; unresolved clarification must not be bypassed."
-  after_implement:
-    command: speckit.scope.reconcile
-    priority: 30
-    optional: false
-    description: "Reconcile scope parents after Project sync updates child progress."
+    - name: speckit.scope.migrate
+      file: commands/migrate.md
+      description: "Prints the one command that moves a project from the retired Scope package to Workflow 2.0.0. Use only when asked how to migrate from Scope."
 tags:
-  - github
+  - deprecated
   - scope
   - workflow
-  - dependencies
