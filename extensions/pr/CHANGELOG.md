@@ -3,7 +3,7 @@
 ## [4.7.3] - 2026-10-28
 
 - `pr_publish.py` adds `Closes <owner/repo>#<issue>` for the bound issue to the published section when the explainer does not close it already, so merging the PR closes its issue; the lint refuses a body that never closes it (`BOUND_ISSUE_NOT_CLOSED`). The explainer and the rest of the body are unchanged (lite re-measure N1).
-- `pr_publish.py` rewrites relative Markdown links to `https://github.com/<repo>/blob/<HEAD sha>/<path>`, keeping the anchor, after the same commit and contents-API checks as images; absolute URLs, `#anchors` and code are left alone, so links need no hand rewrite and no second publish (N4). Link destinations are parsed, not cut at the first parenthesis: `<angle brackets>`, balanced parentheses and an optional title work. `speckit.pr.generate` commits (and, for an existing PR, pushes) every linked document before publishing, and a file that is not committed is named in the error with the `git add`/`git commit`/`git push` commands.
+- `pr_publish.py` rewrites relative Markdown links to `https://github.com/<repo>/blob/<HEAD sha>/<path>`, keeping the anchor, after the same commit and contents-API checks as images; absolute URLs, `#anchors` and code are left alone, so links need no hand rewrite and no second publish (N4). Image and link destinations are parsed, not cut at the first parenthesis: `<angle brackets>`, balanced parentheses, an optional title and backslash-escaped punctuation work. `speckit.pr.generate` commits (and, for an existing PR, pushes) every linked document before publishing, and a file that is not committed is named in the error with the `git add`/`git commit`/`git push` commands.
 
 ## [4.7.2] - 2026-10-28
 

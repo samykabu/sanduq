@@ -45,8 +45,11 @@ except ModuleNotFoundError:
 
 START, END = '<!-- speckit-pr:start -->', '<!-- speckit-pr:end -->'
 DEFAULT_HEADING = 'What have been developed and how to review it'
-IMAGE = re.compile(r'(!\[[^\]]*\]\(\s*<?)([^)\s>]+)|(<img\b[^>]*?\bsrc=["\'])([^"\']+)', re.I)
-LINK = re.compile(r'(?<!!)\[(?:[^\[\]\n]|\[[^\[\]\n]*\])*\]\([ \t]*')  # a link's text, not an image; one nested [..]
+IMG_TAG = re.compile(r'(<img\b[^>]*?\bsrc=["\'])([^"\']+)', re.I)
+# a Markdown image (group 1 is "!") or link up to its destination; zero-width, so an image inside a link's text
+# is found too; the text allows one nested [..]
+LINK = re.compile(r'(?:(!)|(?<!!))(?=(\[(?:[^\[\]\n]|\[[^\[\]\n]*\])*\]\([ \t]*))')
+ESCAPE = re.compile(r'\\([!-/:-@\[-`{-~])')  # CommonMark backslash-escaped ASCII punctuation
 REMOTE = re.compile(r'[a-z][a-z0-9+.-]*:|//|#', re.I)
 NO_PR = 'no pull requests found'
 
@@ -97,15 +100,15 @@ def splice(existing, section):
 
 
 def link_targets(text):
-    """(start, end) of each Markdown link destination in text: `<...>`, or bare with balanced parentheses and
-    backslash escapes, ending at whitespace (an optional title follows) or the closing parenthesis."""
+    """(start, end, is_image) of each Markdown image or link destination in text: `<...>`, or bare with balanced
+    parentheses and backslash escapes, ending at whitespace (an optional title follows) or the closing parenthesis."""
     spans = []
     for m in LINK.finditer(text):
-        i = m.end()
+        i, image = m.end() + len(m.group(2)), bool(m.group(1))
         if text[i:i + 1] == '<':
             end = text.find('>', i)
             if end > i + 1 and '\n' not in text[i:end]:
-                spans.append((i + 1, end))
+                spans.append((i + 1, end, image))
             continue
         depth, j = 0, i
         while j < len(text) and not text[j].isspace():
@@ -119,21 +122,23 @@ def link_targets(text):
                 depth -= 1
             j += 1
         if j > i and depth == 0:
-            spans.append((i, j))
+            spans.append((i, j, image))
     return spans
 
 
-def pin_links(text, urls):
-    for start, end in reversed(link_targets(text)):
-        text = text[:start] + urls.get(text[start:end], text[start:end]) + text[end:]
+def pin_markdown(text, urls, link_urls):
+    for start, end, image in sorted(link_targets(text), reverse=True):  # last destination first: offsets hold
+        target = text[start:end]
+        text = text[:start] + (urls if image else link_urls).get(target, target) + text[end:]
     return text
 
 
 def pin_images(root, content, explained, push):
     """Relative image paths and links (outside code) become commit-pinned GitHub URLs, each verified first."""
     parts, fences = FENCE.split(content), FENCE.findall(content)
-    images = {m.group(2) or m.group(4) for part in parts for m in IMAGE.finditer(part)}
-    links = {part[a:b] for part in parts for a, b in link_targets(part)}
+    spans = [(part[a:b], image) for part in parts for a, b, image in link_targets(part)]
+    images = {m.group(2) for part in parts for m in IMG_TAG.finditer(part)} | {t for t, image in spans if image}
+    links = {t for t, image in spans if not image}
     targets = sorted(t for t in images | links if t and not REMOTE.match(t))
     if not targets:
         return content
@@ -145,7 +150,7 @@ def pin_images(root, content, explained, push):
     sha, folder, urls, link_urls = head.stdout.strip(), posixpath.dirname(explained), {}, {}
     for target in targets:
         kind = 'image' if target in images else 'link'
-        clean, _, anchor = target.partition('#')
+        clean, _, anchor = ESCAPE.sub(r'\1', target).partition('#')
         clean = unquote(clean.split('?')[0])
         path = posixpath.normpath(clean.lstrip('/') if clean.startswith('/') else posixpath.join(folder, clean))
         if path == '..' or path.startswith('../'):
@@ -159,8 +164,8 @@ def pin_images(root, content, explained, push):
                              ' (git push, then rerun): ' + (check.stderr or check.stdout).strip())
         blob = 'https://github.com/%s/blob/%s/%s' % (repo, sha, quote(path))
         urls[target], link_urls[target] = blob + '?raw=true', blob + ('#' + anchor if anchor else '')
-    pin = lambda m: (m.group(1) or m.group(3)) + urls.get(m.group(2) or m.group(4), m.group(2) or m.group(4))
-    pinned = [IMAGE.sub(pin, pin_links(part, link_urls)) for part in parts]
+    pin = lambda m: m.group(1) + urls.get(m.group(2), m.group(2))
+    pinned = [IMG_TAG.sub(pin, pin_markdown(part, urls, link_urls)) for part in parts]
     return ''.join(text + (fences[i] if i < len(fences) else '') for i, text in enumerate(pinned))
 
 
