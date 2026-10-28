@@ -470,6 +470,11 @@ class NativeRoutingTests(unittest.TestCase):
             with self.subTest(code=code):
                 self.assertNotIn('workflow.yml', ' '.join(w.ERRORS[code]))
         self.assertIn('between claims', w.ERRORS['NATIVE_ROUTE_DISALLOWED'][2])
+        # A remedy's start command takes --claim-token; start has no --token flag.
+        source = Path(dispatch.__file__).read_text(encoding='utf-8')
+        self.assertNotIn("' --token <token>'", source)
+        with self.assertRaises(SystemExit), patch('sys.stderr'):
+            dispatch.main(['start', '--feature', self.feature, '--id', 'stage:scope', '--token', 'x'])
 
     def test_task_annotation_names_the_route_kind_and_reason(self):
         path = self.tasks('- [ ] T001 Implement parser\n')

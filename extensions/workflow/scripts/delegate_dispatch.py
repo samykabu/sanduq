@@ -1233,18 +1233,23 @@ def fallback_message(feature, attempt, pending):
     identity = attempt['identity'].removeprefix(feature + '/')
     confirm = (DISPATCH_SCRIPT + ' collect --feature ' + feature + ' --run-id ' + attempt['run_id'] +
                ' --confirm-fallback ' + pending['pair'])
+    token = ' --claim-token ' + attempt['claim_token'] if attempt.get('claim_token') else ''
+    # A reclaim issues a new token, so work restarts under it; the old run's confirmation cannot carry over.
+    fresh = ' --claim-token <new token>' if attempt.get('claim_token') else ''
     if not pending['listed']:
         confirm = ('the substitute is not pre-listed: ' +
                    delegation.reclaim_steps('set allow_default_model: true on the ' + str(attempt.get('rule')) +
-                                            ' route', feature) + ', then ' + confirm)
-    token = ' --claim-token ' + attempt['claim_token'] if attempt.get('claim_token') else ''
+                                            ' route', feature) + ', then ' + DISPATCH_SCRIPT + ' start --feature ' +
+                   feature + ' --id ' + identity + fresh + ' and, when collect stops on the same rejection, ' +
+                   DISPATCH_SCRIPT + ' collect --feature ' + feature + ' --run-id <new run id> --confirm-fallback ' +
+                   pending['pair'])
     others = [c for c in attempt['route_candidates'] if c['requested_model'] and
               (c['harness'], c['requested_model']) != (attempt['requested_harness'], attempt['requested_model'])]
     pick = (DISPATCH_SCRIPT + ' start --feature ' + feature + ' --id ' + identity + ' --harness ' +
             others[0]['harness'] + ' --model ' + others[0]['requested_model'] + token if others else
             delegation.reclaim_steps('set delegation.models.' + attempt['requested_harness'] + ' to a model this '
                                      'account can use', feature) +
-            ', then ' + DISPATCH_SCRIPT + ' start --feature ' + feature + ' --id ' + identity + token)
+            ', then ' + DISPATCH_SCRIPT + ' start --feature ' + feature + ' --id ' + identity + fresh)
     native = (WORKFLOW_NATIVE_STAGE.format(script=DISPATCH_SCRIPT, feature=feature, identity=identity,
                                            token=attempt['claim_token'])
               if attempt.get('claim_token') else
@@ -2100,7 +2105,7 @@ def attest_native(root, feature, identity, token, requested_model, reported_mode
                            .get(route.get('task_type'), True),
                            'NATIVE_ROUTE_DISALLOWED: delegation.native_allowed.' + str(route.get('task_type')) +
                            ' is false, so ' + full_identity + ' runs externally; run it with ' + DISPATCH_SCRIPT +
-                           ' start --feature ' + feature + ' --id ' + identity + ' --token <token>')
+                           ' start --feature ' + feature + ' --id ' + identity + ' --claim-token <token>')
         reserve(ledger, full_identity, None)
         now = stamp()
         attempt = {'kind': 'native', 'identity': full_identity, 'task_type': route.get('task_type'),
@@ -2206,7 +2211,7 @@ def record_native(root, feature, identity, token, host_agent_id, requested_model
                        'NATIVE_ROUTE_DISALLOWED: the route for ' + full_identity + ' is external (' + str(reason) +
                        '), so it is not recorded as native work; run it on that route with ' + DISPATCH_SCRIPT +
                        ' start --feature ' + feature + ' --id ' + identity +
-                       (' --token <token>' if stage else '') + '. Routes are fixed for the claim')
+                       (' --claim-token <token>' if stage else '') + '. Routes are fixed for the claim')
     owned_paths = list(owned) if owned else [feature]
     before = (active.get('delegation') or {}).get('git_status_at_claim')
     git_before = ({'source': 'claim', 'at': active.get('claimed_at'), 'porcelain': before} if before is not None

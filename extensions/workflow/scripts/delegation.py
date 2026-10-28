@@ -117,8 +117,9 @@ def reclaim_steps(edit, feature='<feature>'):
     """How a route changes: between claims. Pause keeps the claim active, so claiming again needs a recover first."""
     return ('with the owner\'s agreement, release this claim with ' + wf_core.WORKFLOW_SCRIPT + ' recover --feature ' +
             feature + ' --token <token> --reason "<why>" (with --force-live-owner "<this session releases its own '
-            'claim>" when this session owns the claim), ' + edit + ' in .specify/workflow.yml, then claim again '
-            '(routes are fixed for a claim)')
+            'claim>" when this session owns the claim), ' + edit + ' in .specify/workflow.yml, then claim again and '
+            'start the work under the new claim token (routes are fixed for a claim, so a run of the old claim '
+            'cannot be resumed)')
 
 
 POLICY_CHANGED_IN_CLAIM = ('DELEGATION_POLICY_CHANGED_IN_CLAIM: the delegation policy changed after this claim, '
