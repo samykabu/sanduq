@@ -2,7 +2,7 @@
 
 Stage loop step 4: invoke the claimed command and pause for a material decision. A claim that
 carries a `delegation` route or an `environment` (lean execution) also follows
-[delegation.md](delegation.md); read it then, not every session.
+[delegation.md](delegation.md) and its [routing rule](delegation.md#routing-rule); read it then.
 
 ## Invoking
 

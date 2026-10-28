@@ -3,16 +3,28 @@
 Read when a claim carries a `delegation` route or an `environment` (lean execution). Invoking the
 command and decisions stay in [delegation-and-decisions.md](delegation-and-decisions.md).
 
+## Routing rule
+
+The claim's route decides: each candidate's `route_kind` says who runs the work. Run it natively
+when the claim lists the native candidate (`route_kind: native`, `route_reason: native-first`);
+the host pins the exact model through the tier's role file. Use an external candidate only for
+the reason it records: `native-unsupported:<capability>`, `native-failed:<category>`, or
+`external:cross-vendor`, the named exception for debate and consultation routes that need the
+other vendor's model. A native attempt the host cannot support selects the external candidate
+once; a temporary native failure retries natively within `lean_execution.max_attempts` before
+falling back. Never substitute a model silently: a rejected model stops at
+`FALLBACK_CONFIRMATION_REQUIRED` ([Confirmed fallback](#confirmed-fallback)).
+
 ## Delegation
 
-When `delegation.enabled` is true, use the claim's `delegation` route: `delegate_dispatch.py
-start --feature specs/<feature> --id stage:<stage> --claim-token <token>`, then
-`delegate_dispatch.py collect --feature specs/<feature> --run-id <id>` until terminal,
-following any `replacement` run ID. A `successful` delegate result means the driver saw no
-failure or abandonment signal; it does not verify the objective. It is candidate evidence, not a
-passed stage: inspect outputs and checks before the receipt. Failed, abandoned or unresolved
-work keeps the claim active. An unreported actual model stays unverified. Disabled mode ignores
-routing tags and uses the user's selected model.
+`delegate_dispatch.py start --feature specs/<feature> --id stage:<stage> --claim-token <token>`
+launches the external candidates only; then `delegate_dispatch.py collect --feature
+specs/<feature> --run-id <id>` until terminal, following any `replacement` run ID. A
+`successful` delegate result means the driver saw no failure or abandonment signal; it does not
+verify the objective. It is candidate evidence, not a passed stage: inspect outputs and checks
+before the receipt. Failed, abandoned or unresolved work keeps the claim active. An unreported
+actual model stays unverified. Disabled mode ignores routing tags and uses the user's selected
+model.
 
 A rejected model falls back to the next candidate automatically, as does a start that provably
 created no run (or whose driver exited 5 with proof no agent launched). On
@@ -46,16 +58,15 @@ Review work stays refused through the external driver for now (the PH-01 interim
 warning, and tasks.md marks such a task `refused:DELEGATION_REVIEW_ROUTE_UNSAFE`. Run reviews
 natively in the selected host. Every other route is unchanged.
 
-Native attestation: when a native subagent of the host (not the external driver) did a claimed
-stage, the top-level session records it with `delegate_dispatch.py attest-native --feature
-specs/<feature> --id stage:<stage> --claim-token <token> --requested-model <m>
-[--reported-model <m>]`, then completes the stage. The ledger attempt is `kind: native`, bound
-to the claim, with `actual_model: unreported` unless the host reported one. It is self-asserted
-with no external ledger evidence, labelled as such in the ledger, `status` and the receipt, and
-never counts as a dispatched run. Only the top-level session runs it: the guard and the
-dispatcher refuse it from a worker, subagent or delegated orchestrator
-(`NATIVE_ATTESTATION_FORBIDDEN`). A claim with no route (review-kind stages, delegation off)
-completes without it (`NATIVE_ATTESTATION_NOT_NEEDED`). Any route accepts it.
+Native work: the top-level session records a native task or stage with `delegate_dispatch.py
+record-native --feature specs/<feature> --id <stage:name|T###> --token <claim token>
+--host-agent-id <id> --requested-model <m> --command "<check>" --expect counts|files`; the check
+decides the status, and a review or QA by the authoring lineage is refused
+(`SAME_LINEAGE_REVIEW`). `attest-native ... --id stage:<stage> --claim-token <token>
+--requested-model <m> [--reported-model <m>]` remains for a stage: self-asserted, labelled
+`kind: native`, never a dispatched run. Both are top-level only (`NATIVE_ATTESTATION_FORBIDDEN`
+in a worker, subagent or delegated orchestrator). A claim with no route completes without them
+(`NATIVE_ATTESTATION_NOT_NEEDED`).
 
 ## Confirmed fallback
 
