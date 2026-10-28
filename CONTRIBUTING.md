@@ -11,6 +11,7 @@ usable example. Generated agent registrations and installed consumer copies are 
 - [Find the owning source](#find-the-owning-source)
 - [Test a local package](#test-a-local-package)
 - [Validate a change](#validate-a-change)
+- [No-behaviour-change rule for cleanup PRs](#no-behaviour-change-rule-for-cleanup-prs)
 - [Update documentation and assets](#update-documentation-and-assets)
 - [Prepare a release](#prepare-a-release)
 - [Release trains](#release-trains)
@@ -139,6 +140,19 @@ python extensions/scripts/smoke_memory_install.py
 CI exercises Linux/Windows regression, Codex/Claude and core/SuperSpec installs, transactional
 upgrades, Project initialization on Linux and Windows, and Memory registration. Report unavailable
 infrastructure and skipped checks accurately; package creation alone is not live acceptance.
+
+## No-behaviour-change rule for cleanup PRs
+
+A cleanup pull request (a merge, a rename, dead-code removal, a simplification) changes no behaviour a
+user can reach. Its description shows all four:
+
+1. The affected suites pass, unchanged, before and after (see [Validate a change](#validate-a-change)).
+2. The fixture lifecycle gives identical outputs before and after: `test_lifecycle_e2e` passes and
+   `python extensions/scripts/benchmark_front_half.py --repo . --tier <lite|standard|full> --out <file>`
+   writes the same JSON for each tier once `meta.generated_at` and `meta.repo_head` are ignored.
+3. No capability or code path a user can reach is removed. A renamed command keeps its old name as an
+   alias with the same output; a migration stays while any released version can have left the state it reads.
+4. The line counts of the changed files before and after.
 
 ## Update a vendored skill
 
