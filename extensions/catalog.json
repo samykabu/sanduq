@@ -1,6 +1,6 @@
 {
   "schema_version": "1.0",
-  "updated_at": "2026-10-28T02:41:49.338728+00:00",
+  "updated_at": "2026-10-28T05:01:59.850262+00:00",
   "catalog_url": "https://raw.githubusercontent.com/samykabu/sanduq/main/catalog.json",
   "extensions": {
     "project": {
@@ -58,14 +58,14 @@
     "pr": {
       "name": "Pull Request Workflow",
       "id": "pr",
-      "version": "4.7.1",
+      "version": "4.7.2",
       "description": "Generate or update pull requests from Spec Kit artifacts, enforce installed QA and User Manual freshness policies, then process review feedback through an approval-gated fix and reply workflow.",
       "author": "Samy K. Abushanab",
       "repository": "https://github.com/samykabu/sanduq",
       "homepage": "https://github.com/samykabu/sanduq/tree/main/extensions/pr",
       "documentation": "https://github.com/samykabu/sanduq/blob/main/extensions/pr/README.md",
       "changelog": "https://github.com/samykabu/sanduq/blob/main/extensions/pr/CHANGELOG.md",
-      "download_url": "https://github.com/samykabu/sanduq/releases/download/pr-v4.7.1/pr.zip",
+      "download_url": "https://github.com/samykabu/sanduq/releases/download/pr-v4.7.2/pr.zip",
       "license": "MIT",
       "category": "process",
       "effect": "read-write",
@@ -124,9 +124,9 @@
       ],
       "verified": false,
       "created_at": "2026-07-09T20:26:15Z",
-      "updated_at": "2026-10-27T23:43:03.536920+00:00",
-      "sha256": "c8af6a416d9b67b547b653f786265b95abc1b1e4c48df199ded9b48d7f34b2ef",
-      "inventory_sha256": "3f98c2e65dad1a0c82988f4ced7d0b3c323ba8504ee564058c91fd0860da2dd0"
+      "updated_at": "2026-10-28T05:01:59.850203+00:00",
+      "sha256": "df7af2ed571f7ceb035bb480f755be18f344495d25c777dd83ce6b31fc028f88",
+      "inventory_sha256": "27e8dde6bb35544e5e69e5c4eaf0be72c373aad629b816c9fe2b4ca2e8a3c7aa"
     },
     "illustrate": {
       "name": "Illustrate",
@@ -325,7 +325,7 @@
     "workflow": {
       "name": "Sanduq Workflow",
       "id": "workflow",
-      "version": "1.23.0",
+      "version": "1.24.0",
       "description": "GitHub issue decisions and resumable Scope-to-PR orchestration with optional model-aware delegation, QA, User Manual, and workflow evidence CI.",
       "author": "Samy K. Abushanab",
       "license": "MIT",
@@ -333,7 +333,7 @@
       "homepage": "https://github.com/samykabu/sanduq/tree/main/extensions/workflow",
       "documentation": "https://github.com/samykabu/sanduq/blob/main/extensions/workflow/README.md",
       "changelog": "https://github.com/samykabu/sanduq/blob/main/extensions/workflow/CHANGELOG.md",
-      "download_url": "https://github.com/samykabu/sanduq/releases/download/workflow-v1.23.0/workflow.zip",
+      "download_url": "https://github.com/samykabu/sanduq/releases/download/workflow-v1.24.0/workflow.zip",
       "requires": {
         "speckit_version": ">=1.0.0,<2.0.0",
         "tools": [
@@ -367,14 +367,14 @@
       "category": "process",
       "effect": "read-write",
       "verified": false,
-      "sha256": "6de44a74d352452b4efcadf40054bb0915a8d55955eea31996bf4022b472ae5a",
-      "updated_at": "2026-10-28T02:41:49.298997+00:00",
-      "inventory_sha256": "4361ad28cb0f57a25f6e7901a9cbb631a2814ebd704e90ca85f6c6842f60d2b0"
+      "sha256": "6ad7675c9ccdbdf0a89b72eac94a9f22b85b779ceaae81af5e67a424cc3e6f53",
+      "updated_at": "2026-10-28T05:01:59.792417+00:00",
+      "inventory_sha256": "84b3844ff8e10d3d0cfb49b4682b13dac0e3640c4b69201c4124d8f87fd8f81a"
     },
     "scope": {
       "name": "Speckit Scope",
       "id": "scope",
-      "version": "1.13.1",
+      "version": "1.14.0",
       "description": "Analyze GitHub issue scope, enforce prerequisites, review user-selected decomposition before publishing, and maintain parent progress.",
       "author": "Samy K. Abushanab",
       "license": "MIT",
@@ -382,7 +382,7 @@
       "homepage": "https://github.com/samykabu/sanduq/tree/main/extensions/scope",
       "documentation": "https://github.com/samykabu/sanduq/blob/main/extensions/scope/README.md",
       "changelog": "https://github.com/samykabu/sanduq/blob/main/extensions/scope/CHANGELOG.md",
-      "download_url": "https://github.com/samykabu/sanduq/releases/download/scope-v1.13.1/scope.zip",
+      "download_url": "https://github.com/samykabu/sanduq/releases/download/scope-v1.14.0/scope.zip",
       "requires": {
         "speckit_version": ">=1.0.0",
         "extensions": [
@@ -422,9 +422,9 @@
       "category": "process",
       "effect": "read-write",
       "verified": false,
-      "sha256": "d7d78dc09671626b97bc48dc0c305f979dc045dd4f2d8aa3a5c2c8eefddc2778",
-      "updated_at": "2026-10-28T02:41:49.338657+00:00",
-      "inventory_sha256": "6e5e46f6caeeee404067014bb61b690586d694c87618cf321abb042e6ba4baf5"
+      "sha256": "9049c5937f21731e730c1d593b64e38d2633154086a559170b57ea5b43a1eacd",
+      "updated_at": "2026-10-28T05:01:59.831770+00:00",
+      "inventory_sha256": "cb66d3a345c8517270a16b5f2fe2838a45cb6abe6c95cdc478636bbc851c53b8"
     },
     "memory": {
       "name": "Sanduq Memory",

@@ -4,7 +4,7 @@ All notable changes to sanduq extensions/plugins are recorded here.
 Format: [Keep a Changelog](https://keepachangelog.com/). Extensions are versioned
 independently via `<extension>-vX.Y.Z` tags.
 
-## 2026-10-28 — Workflow 1.24.0, Scope 1.14.0, PR 4.7.2 (pending release)
+## 2026-10-28 — Workflow 1.24.0, Scope 1.14.0, PR 4.7.2
 
 - Lean lite pass two, from the lite re-measure runs. A lite claim and `status` name one instruction card, `references/lite.md` (4.1 KB), in `instructions` instead of the three dispatcher references, and print the exact `complete` and `pause` commands in `cli`. On a Scope-rendered spec with no `[NEEDS CLARIFICATION]` marker, a lite Clarify claim prints `clarification_round` with the zero-question steps, so the clarification skill is not loaded. Standard and full claims are unchanged.
 - The PR stage reads the remote check once with a bound: `ci_report.py --check workflow-evidence --ref <sha>` polls three times and reports its `state` (`queued` means no runner took the job), and the stage records a pending state and tells the user instead of waiting. The PR body is built once, only through `pr_publish.py` (PR 4.7.2 says so in `speckit.pr.generate`). The guard allows a `--body-file` path holding an unexpanded shell variable.
