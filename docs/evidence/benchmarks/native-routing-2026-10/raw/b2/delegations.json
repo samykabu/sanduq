@@ -1,0 +1,1539 @@
+{
+  "schema_version": 1,
+  "feature": "specs/101-add-initials-and-squeeze-commands-t07-b2",
+  "attempts": [
+    {
+      "kind": "native",
+      "identity": "specs/101-add-initials-and-squeeze-commands-t07-b2/stage:scope",
+      "task_type": "discovery",
+      "run_id": "native-0b3be4924c65",
+      "intent_id": "05de0b3e5d30434ba89294297fc8bd23",
+      "status": "successful",
+      "started_at": "2026-10-28T21:32:21.075491+00:00",
+      "ended_at": "2026-10-28T21:32:21.075491+00:00",
+      "requested_harness": "claude",
+      "actual_harness": "claude",
+      "requested_model": "sonnet",
+      "actual_model": "claude-opus-5-5",
+      "model_observed": true,
+      "rule": "native",
+      "choice": "native",
+      "route_candidates": [
+        {
+          "harness": "claude",
+          "requested_model": "sonnet",
+          "tier": "standard",
+          "rule": "default:discovery",
+          "choice": "preferred",
+          "route_kind": "native",
+          "route_reason": "native-first"
+        },
+        {
+          "harness": "claude",
+          "requested_model": "sonnet",
+          "tier": "standard",
+          "rule": "default:discovery",
+          "choice": "preferred",
+          "route_kind": "external",
+          "route_reason": "native-failed:pending"
+        },
+        {
+          "harness": "claude",
+          "requested_model": null,
+          "tier": null,
+          "rule": "default:discovery",
+          "choice": "fallback:1",
+          "route_kind": "external",
+          "route_reason": "native-failed:pending"
+        }
+      ],
+      "route_kind": "native",
+      "route_reason": "native-first",
+      "attested_by": "top-level",
+      "attested_at": "2026-10-28T21:32:21.075491+00:00",
+      "session_id": "b2-scope-101",
+      "claim_token": "c3ea22ba81054d11a0a2b188177b65cf",
+      "claim_id": "c-f6350b900a76284110d5",
+      "delegation_digest": "72e76288f79a0778404e8969dbc565a97bec749cd10f451509a408a78957a769",
+      "delegation_claim_id": "c-f6350b900a76284110d5",
+      "status_provenance": {
+        "primary": "self_report",
+        "source": "top-level-attestation"
+      },
+      "fidelity": "reported",
+      "token_usage": null,
+      "evidence_location": null,
+      "result_summary": "native subagent stage attested by the top-level session",
+      "actual_model_evidence": "host-reported"
+    },
+    {
+      "kind": "native",
+      "identity": "specs/101-add-initials-and-squeeze-commands-t07-b2/stage:specify",
+      "task_type": "discovery",
+      "run_id": "native-15ee6db57aec",
+      "intent_id": "b3442245756547afbcf64b8374de0f4e",
+      "status": "successful",
+      "started_at": "2026-10-28T21:32:57.923416+00:00",
+      "ended_at": "2026-10-28T21:32:57.923416+00:00",
+      "requested_harness": "claude",
+      "actual_harness": "claude",
+      "requested_model": "sonnet",
+      "actual_model": "claude-opus-5-5",
+      "model_observed": true,
+      "rule": "native",
+      "choice": "native",
+      "route_candidates": [
+        {
+          "harness": "claude",
+          "requested_model": "sonnet",
+          "tier": "standard",
+          "rule": "default:discovery",
+          "choice": "preferred",
+          "route_kind": "native",
+          "route_reason": "native-first"
+        },
+        {
+          "harness": "claude",
+          "requested_model": "sonnet",
+          "tier": "standard",
+          "rule": "default:discovery",
+          "choice": "preferred",
+          "route_kind": "external",
+          "route_reason": "native-failed:pending"
+        },
+        {
+          "harness": "claude",
+          "requested_model": null,
+          "tier": null,
+          "rule": "default:discovery",
+          "choice": "fallback:1",
+          "route_kind": "external",
+          "route_reason": "native-failed:pending"
+        }
+      ],
+      "route_kind": "native",
+      "route_reason": "native-first",
+      "attested_by": "top-level",
+      "attested_at": "2026-10-28T21:32:57.923416+00:00",
+      "session_id": "b2-scope-101",
+      "claim_token": "02ca2c7b3dc541a6beed17e874112464",
+      "claim_id": "c-d8936cdc578903016d1a",
+      "delegation_digest": "72e76288f79a0778404e8969dbc565a97bec749cd10f451509a408a78957a769",
+      "delegation_claim_id": "c-d8936cdc578903016d1a",
+      "status_provenance": {
+        "primary": "self_report",
+        "source": "top-level-attestation"
+      },
+      "fidelity": "reported",
+      "token_usage": null,
+      "evidence_location": null,
+      "result_summary": "native subagent stage attested by the top-level session",
+      "actual_model_evidence": "host-reported"
+    },
+    {
+      "kind": "native",
+      "identity": "specs/101-add-initials-and-squeeze-commands-t07-b2/stage:clarify",
+      "task_type": "discovery",
+      "run_id": "native-3795fae372a6",
+      "intent_id": "d92f1a49936c443d96436081a32c0cc9",
+      "status": "successful",
+      "started_at": "2026-10-28T21:37:00.580337+00:00",
+      "ended_at": "2026-10-28T21:37:00.580337+00:00",
+      "requested_harness": "claude",
+      "actual_harness": "claude",
+      "requested_model": "sonnet",
+      "actual_model": "claude-opus-5-5",
+      "model_observed": true,
+      "rule": "native",
+      "choice": "native",
+      "route_candidates": [
+        {
+          "harness": "claude",
+          "requested_model": "sonnet",
+          "tier": "standard",
+          "rule": "default:discovery",
+          "choice": "preferred",
+          "route_kind": "native",
+          "route_reason": "native-first"
+        },
+        {
+          "harness": "claude",
+          "requested_model": "sonnet",
+          "tier": "standard",
+          "rule": "default:discovery",
+          "choice": "preferred",
+          "route_kind": "external",
+          "route_reason": "native-failed:pending"
+        },
+        {
+          "harness": "claude",
+          "requested_model": null,
+          "tier": null,
+          "rule": "default:discovery",
+          "choice": "fallback:1",
+          "route_kind": "external",
+          "route_reason": "native-failed:pending"
+        }
+      ],
+      "route_kind": "native",
+      "route_reason": "native-first",
+      "attested_by": "top-level",
+      "attested_at": "2026-10-28T21:37:00.580337+00:00",
+      "session_id": "b2-continue-101",
+      "claim_token": "fabeb19efe8140779e638df2cad0996f",
+      "claim_id": "c-bf116043f61bf1a326ec",
+      "delegation_digest": "72e76288f79a0778404e8969dbc565a97bec749cd10f451509a408a78957a769",
+      "delegation_claim_id": "c-bf116043f61bf1a326ec",
+      "status_provenance": {
+        "primary": "self_report",
+        "source": "top-level-attestation"
+      },
+      "fidelity": "reported",
+      "token_usage": null,
+      "evidence_location": null,
+      "result_summary": "native subagent stage attested by the top-level session",
+      "actual_model_evidence": "host-reported"
+    },
+    {
+      "kind": "native",
+      "identity": "specs/101-add-initials-and-squeeze-commands-t07-b2/stage:plan",
+      "task_type": "discovery",
+      "run_id": "native-f33f1e29cd20",
+      "intent_id": "8b779367fa6e404a9b28331aa310acbe",
+      "status": "successful",
+      "started_at": "2026-10-28T21:37:59.020851+00:00",
+      "ended_at": "2026-10-28T21:37:59.020851+00:00",
+      "requested_harness": "claude",
+      "actual_harness": "claude",
+      "requested_model": "sonnet",
+      "actual_model": "claude-sonnet-5-5",
+      "model_observed": true,
+      "rule": "native",
+      "choice": "native",
+      "route_candidates": [
+        {
+          "harness": "claude",
+          "requested_model": "sonnet",
+          "tier": "standard",
+          "rule": "default:discovery",
+          "choice": "preferred",
+          "route_kind": "native",
+          "route_reason": "native-first"
+        },
+        {
+          "harness": "claude",
+          "requested_model": "sonnet",
+          "tier": "standard",
+          "rule": "default:discovery",
+          "choice": "preferred",
+          "route_kind": "external",
+          "route_reason": "native-failed:pending"
+        },
+        {
+          "harness": "claude",
+          "requested_model": null,
+          "tier": null,
+          "rule": "default:discovery",
+          "choice": "fallback:1",
+          "route_kind": "external",
+          "route_reason": "native-failed:pending"
+        }
+      ],
+      "route_kind": "native",
+      "route_reason": "native-first",
+      "attested_by": "top-level",
+      "attested_at": "2026-10-28T21:37:59.020851+00:00",
+      "session_id": "b2-continue-101",
+      "claim_token": "e53dcc9b352b4c35a13cd8103714258e",
+      "claim_id": "c-79d20507038551c642b3",
+      "delegation_digest": "72e76288f79a0778404e8969dbc565a97bec749cd10f451509a408a78957a769",
+      "delegation_claim_id": "c-79d20507038551c642b3",
+      "status_provenance": {
+        "primary": "self_report",
+        "source": "top-level-attestation"
+      },
+      "fidelity": "reported",
+      "token_usage": null,
+      "evidence_location": null,
+      "result_summary": "native subagent stage attested by the top-level session",
+      "actual_model_evidence": "host-reported"
+    },
+    {
+      "kind": "native",
+      "identity": "specs/101-add-initials-and-squeeze-commands-t07-b2/T001",
+      "task_type": "implementation",
+      "run_id": "native-499972e3c597",
+      "intent_id": "50b486367cca49599d3c57dab8c4d770",
+      "status": "successful",
+      "started_at": "2026-10-28T21:39:12.004697+00:00",
+      "ended_at": "2026-10-28T21:39:12.078945+00:00",
+      "requested_harness": "claude",
+      "actual_harness": "claude",
+      "requested_model": "sonnet",
+      "actual_model": "claude-sonnet-5-5",
+      "model_observed": true,
+      "actual_model_evidence": "worker Model line",
+      "rule": "default:implementation",
+      "choice": "native",
+      "route_candidates": [
+        {
+          "harness": "claude",
+          "requested_model": "sonnet",
+          "tier": "standard",
+          "rule": "default:implementation",
+          "choice": "preferred",
+          "route_kind": "native",
+          "route_reason": "native-first"
+        },
+        {
+          "harness": "claude",
+          "requested_model": "sonnet",
+          "tier": "standard",
+          "rule": "default:implementation",
+          "choice": "preferred",
+          "route_kind": "external",
+          "route_reason": "native-failed:pending"
+        },
+        {
+          "harness": "claude",
+          "requested_model": null,
+          "tier": null,
+          "rule": "default:implementation",
+          "choice": "fallback:1",
+          "route_kind": "external",
+          "route_reason": "native-failed:pending"
+        }
+      ],
+      "route_kind": "native",
+      "route_reason": "native-first",
+      "host_agent_id": "a88798b07e48ad21e",
+      "parent_agent_id": null,
+      "author_lineage": [
+        "a88798b07e48ad21e"
+      ],
+      "tools_granted": null,
+      "git_status_before": {
+        "source": "unavailable",
+        "porcelain": null,
+        "note": "the claim recorded no git status; only the status after the work is known"
+      },
+      "git_status_after": [
+        " M textkit/core.py",
+        "?? .specify/progress/",
+        "?? .specify/project-sync-state.json",
+        "?? .specify/scope/",
+        "?? specs/"
+      ],
+      "attested_by": "top-level",
+      "attested_at": "2026-10-28T21:39:12.078945+00:00",
+      "session_id": "b2-continue-101",
+      "claim_token": null,
+      "claim_id": null,
+      "execute_claim_id": "c-7954d31fa4cdbb7db3d7",
+      "task_line_sha256": "7208ccbca5fc69307b2ef67d20d4aa2666119c3eb56401b7815aa95a27466234",
+      "delegation_digest": "72e76288f79a0778404e8969dbc565a97bec749cd10f451509a408a78957a769",
+      "delegation_claim_id": "c-7954d31fa4cdbb7db3d7",
+      "status_provenance": {
+        "primary": "acceptance_check",
+        "source": "record-native"
+      },
+      "fidelity": "reported",
+      "token_usage": null,
+      "evidence_location": null,
+      "cwd": ".",
+      "timeout": 1800,
+      "owned_paths": [
+        "specs/101-add-initials-and-squeeze-commands-t07-b2"
+      ],
+      "command": "python -X utf8 -c \"import json;from textkit.core import initials as i;c=[(\\\"portable network graphics\\\",\\\"PNG\\\"),(\\\"  (big) 'apple' pie \\\",\\\"BAP\\\"),(\\\"route 66 ... now\\\",\\\"R6N\\\"),(\\\"\\\",\\\"\\\"),(\\\"   \\\",\\\"\\\"),(\\\"école normale\\\",\\\"ÉN\\\")];n=sum(i(a)==b for a,b in c);print(json.dumps({\\\"total\\\":len(c),\\\"passed\\\":n,\\\"failed\\\":len(c)-n}))\"",
+      "expect": "counts",
+      "exit_code": 0,
+      "timed_out": false,
+      "output_truncated": false,
+      "output": "{\"total\": 6, \"passed\": 6, \"failed\": 0}\r\n",
+      "result_summary": "native work recorded by the top-level session; acceptance check passed",
+      "accepted_evidence": {
+        "expect": "counts",
+        "source": "record-native",
+        "counts": {
+          "total": 6,
+          "passed": 6,
+          "failed": 0
+        }
+      },
+      "accepted_at": "2026-10-28T21:39:12.078945+00:00"
+    },
+    {
+      "kind": "native",
+      "identity": "specs/101-add-initials-and-squeeze-commands-t07-b2/T002",
+      "task_type": "implementation",
+      "run_id": "native-c50ec20f5b8a",
+      "intent_id": "350e01d5a93a4633b26806f119aa9de3",
+      "status": "successful",
+      "started_at": "2026-10-28T21:39:29.236443+00:00",
+      "ended_at": "2026-10-28T21:39:29.314769+00:00",
+      "requested_harness": "claude",
+      "actual_harness": "claude",
+      "requested_model": "sonnet",
+      "actual_model": "claude-sonnet-5-5",
+      "model_observed": true,
+      "actual_model_evidence": "worker Model line",
+      "rule": "default:implementation",
+      "choice": "native",
+      "route_candidates": [
+        {
+          "harness": "claude",
+          "requested_model": "sonnet",
+          "tier": "standard",
+          "rule": "default:implementation",
+          "choice": "preferred",
+          "route_kind": "native",
+          "route_reason": "native-first"
+        },
+        {
+          "harness": "claude",
+          "requested_model": "sonnet",
+          "tier": "standard",
+          "rule": "default:implementation",
+          "choice": "preferred",
+          "route_kind": "external",
+          "route_reason": "native-failed:pending"
+        },
+        {
+          "harness": "claude",
+          "requested_model": null,
+          "tier": null,
+          "rule": "default:implementation",
+          "choice": "fallback:1",
+          "route_kind": "external",
+          "route_reason": "native-failed:pending"
+        }
+      ],
+      "route_kind": "native",
+      "route_reason": "native-first",
+      "host_agent_id": "a1272d35560221bfd",
+      "parent_agent_id": null,
+      "author_lineage": [
+        "a1272d35560221bfd"
+      ],
+      "tools_granted": null,
+      "git_status_before": {
+        "source": "unavailable",
+        "porcelain": null,
+        "note": "the claim recorded no git status; only the status after the work is known"
+      },
+      "git_status_after": [
+        " M textkit/core.py",
+        "?? .specify/progress/",
+        "?? .specify/project-sync-state.json",
+        "?? .specify/scope/",
+        "?? specs/"
+      ],
+      "attested_by": "top-level",
+      "attested_at": "2026-10-28T21:39:29.314769+00:00",
+      "session_id": "b2-continue-101",
+      "claim_token": null,
+      "claim_id": null,
+      "execute_claim_id": "c-7954d31fa4cdbb7db3d7",
+      "task_line_sha256": "77401d20195f4f97703ed0cfa550493e088cb732d322a51cff92b0a0ae56a0af",
+      "delegation_digest": "72e76288f79a0778404e8969dbc565a97bec749cd10f451509a408a78957a769",
+      "delegation_claim_id": "c-7954d31fa4cdbb7db3d7",
+      "status_provenance": {
+        "primary": "acceptance_check",
+        "source": "record-native"
+      },
+      "fidelity": "reported",
+      "token_usage": null,
+      "evidence_location": null,
+      "cwd": ".",
+      "timeout": 1800,
+      "owned_paths": [
+        "specs/101-add-initials-and-squeeze-commands-t07-b2"
+      ],
+      "command": "python -c \"import json;from textkit.core import squeeze as s;c=[(\\\"  a \\t b\\n\\nc  \\\",\\\"a b c\\\"),(\\\"\\\",\\\"\\\"),(\\\" \\t\\n \\\",\\\"\\\")];n=sum(s(a)==b for a,b in c);print(json.dumps({\\\"total\\\":len(c),\\\"passed\\\":n,\\\"failed\\\":len(c)-n}))\"",
+      "expect": "counts",
+      "exit_code": 0,
+      "timed_out": false,
+      "output_truncated": false,
+      "output": "{\"total\": 3, \"passed\": 3, \"failed\": 0}\r\n",
+      "result_summary": "native work recorded by the top-level session; acceptance check passed",
+      "accepted_evidence": {
+        "expect": "counts",
+        "source": "record-native",
+        "counts": {
+          "total": 3,
+          "passed": 3,
+          "failed": 0
+        }
+      },
+      "accepted_at": "2026-10-28T21:39:29.314769+00:00"
+    },
+    {
+      "kind": "native",
+      "identity": "specs/101-add-initials-and-squeeze-commands-t07-b2/T003",
+      "task_type": "implementation",
+      "run_id": "native-07154591bbe2",
+      "intent_id": "2dc5e7b34eee4c1ba6652cf1adefc84f",
+      "status": "successful",
+      "started_at": "2026-10-28T21:40:05.729133+00:00",
+      "ended_at": "2026-10-28T21:40:05.846839+00:00",
+      "requested_harness": "claude",
+      "actual_harness": "claude",
+      "requested_model": "sonnet",
+      "actual_model": "claude-sonnet-5-5",
+      "model_observed": true,
+      "actual_model_evidence": "worker Model line",
+      "rule": "default:implementation",
+      "choice": "native",
+      "route_candidates": [
+        {
+          "harness": "claude",
+          "requested_model": "sonnet",
+          "tier": "standard",
+          "rule": "default:implementation",
+          "choice": "preferred",
+          "route_kind": "native",
+          "route_reason": "native-first"
+        },
+        {
+          "harness": "claude",
+          "requested_model": "sonnet",
+          "tier": "standard",
+          "rule": "default:implementation",
+          "choice": "preferred",
+          "route_kind": "external",
+          "route_reason": "native-failed:pending"
+        },
+        {
+          "harness": "claude",
+          "requested_model": null,
+          "tier": null,
+          "rule": "default:implementation",
+          "choice": "fallback:1",
+          "route_kind": "external",
+          "route_reason": "native-failed:pending"
+        }
+      ],
+      "route_kind": "native",
+      "route_reason": "native-first",
+      "host_agent_id": "a22b6ff80981fcb1e",
+      "parent_agent_id": null,
+      "author_lineage": [
+        "a22b6ff80981fcb1e"
+      ],
+      "tools_granted": null,
+      "git_status_before": {
+        "source": "unavailable",
+        "porcelain": null,
+        "note": "the claim recorded no git status; only the status after the work is known"
+      },
+      "git_status_after": [
+        " M tests/test_core.py",
+        " M textkit/cli.py",
+        "?? .specify/progress/",
+        "?? .specify/project-sync-state.json",
+        "?? .specify/scope/",
+        "?? specs/101-add-initials-and-squeeze-commands-t07-b2/evidence/",
+        "?? specs/101-add-initials-and-squeeze-commands-t07-b2/handoff.md",
+        "?? specs/101-add-initials-and-squeeze-commands-t07-b2/progress/",
+        "?? specs/101-add-initials-and-squeeze-commands-t07-b2/scope-analysis.json",
+        "?? specs/101-add-initials-and-squeeze-commands-t07-b2/scope-source.json",
+        "?? specs/101-add-initials-and-squeeze-commands-t07-b2/workflow/"
+      ],
+      "attested_by": "top-level",
+      "attested_at": "2026-10-28T21:40:05.846839+00:00",
+      "session_id": "b2-continue-101",
+      "claim_token": null,
+      "claim_id": null,
+      "execute_claim_id": "c-7954d31fa4cdbb7db3d7",
+      "task_line_sha256": "2bf125fac5464e87e1c56008ec489ecf97652c6d7b685ba7d944574a967c81f9",
+      "delegation_digest": "72e76288f79a0778404e8969dbc565a97bec749cd10f451509a408a78957a769",
+      "delegation_claim_id": "c-7954d31fa4cdbb7db3d7",
+      "status_provenance": {
+        "primary": "acceptance_check",
+        "source": "record-native"
+      },
+      "fidelity": "reported",
+      "token_usage": null,
+      "evidence_location": null,
+      "cwd": ".",
+      "timeout": 1800,
+      "owned_paths": [
+        "specs/101-add-initials-and-squeeze-commands-t07-b2"
+      ],
+      "command": "python -c \"import json,io,contextlib;from textkit.cli import main\ndef r(a):\n b=io.StringIO()\n with contextlib.redirect_stdout(b): c=main(a)\n return b.getvalue().strip(),c\nk=[(r([\\\"initials\\\",\\\"portable network graphics\\\"]),(\\\"PNG\\\",0)),(r([\\\"squeeze\\\",\\\"  a   b \\\"]),(\\\"a b\\\",0)),(r([\\\"slugify\\\",\\\"Hello World\\\"]),(\\\"hello-world\\\",0))];n=sum(x==y for x,y in k);print(json.dumps({\\\"total\\\":3,\\\"passed\\\":n,\\\"failed\\\":3-n}))\"",
+      "expect": "counts",
+      "exit_code": 0,
+      "timed_out": false,
+      "output_truncated": false,
+      "output": "{\"total\": 3, \"passed\": 3, \"failed\": 0}\r\n",
+      "result_summary": "native work recorded by the top-level session; acceptance check passed",
+      "accepted_evidence": {
+        "expect": "counts",
+        "source": "record-native",
+        "counts": {
+          "total": 3,
+          "passed": 3,
+          "failed": 0
+        }
+      },
+      "accepted_at": "2026-10-28T21:40:05.846839+00:00"
+    },
+    {
+      "kind": "native",
+      "identity": "specs/101-add-initials-and-squeeze-commands-t07-b2/T004",
+      "task_type": "qa_author",
+      "run_id": "native-2973cdbbb3a1",
+      "intent_id": "5bb923fbabb043ae968a8ddcff0a269e",
+      "status": "successful",
+      "started_at": "2026-10-28T21:40:09.913213+00:00",
+      "ended_at": "2026-10-28T21:40:10.043033+00:00",
+      "requested_harness": "claude",
+      "actual_harness": "claude",
+      "requested_model": "sonnet",
+      "actual_model": "claude-sonnet-5-5",
+      "model_observed": true,
+      "actual_model_evidence": "worker Model line",
+      "rule": "default:qa_author",
+      "choice": "native",
+      "route_candidates": [
+        {
+          "harness": "claude",
+          "requested_model": "sonnet",
+          "tier": "standard",
+          "rule": "default:qa_author",
+          "choice": "preferred",
+          "route_kind": "native",
+          "route_reason": "native-first"
+        },
+        {
+          "harness": "claude",
+          "requested_model": "sonnet",
+          "tier": "standard",
+          "rule": "default:qa_author",
+          "choice": "preferred",
+          "route_kind": "external",
+          "route_reason": "native-failed:pending"
+        },
+        {
+          "harness": "claude",
+          "requested_model": null,
+          "tier": null,
+          "rule": "default:qa_author",
+          "choice": "fallback:1",
+          "route_kind": "external",
+          "route_reason": "native-failed:pending"
+        }
+      ],
+      "route_kind": "native",
+      "route_reason": "native-first",
+      "host_agent_id": "a6ded0fa40410dc7e",
+      "parent_agent_id": null,
+      "author_lineage": [
+        "a6ded0fa40410dc7e"
+      ],
+      "tools_granted": null,
+      "git_status_before": {
+        "source": "unavailable",
+        "porcelain": null,
+        "note": "the claim recorded no git status; only the status after the work is known"
+      },
+      "git_status_after": [
+        " M tests/test_core.py",
+        " M textkit/cli.py",
+        "?? .specify/progress/",
+        "?? .specify/project-sync-state.json",
+        "?? .specify/scope/",
+        "?? specs/101-add-initials-and-squeeze-commands-t07-b2/evidence/",
+        "?? specs/101-add-initials-and-squeeze-commands-t07-b2/handoff.md",
+        "?? specs/101-add-initials-and-squeeze-commands-t07-b2/progress/",
+        "?? specs/101-add-initials-and-squeeze-commands-t07-b2/scope-analysis.json",
+        "?? specs/101-add-initials-and-squeeze-commands-t07-b2/scope-source.json",
+        "?? specs/101-add-initials-and-squeeze-commands-t07-b2/workflow/"
+      ],
+      "attested_by": "top-level",
+      "attested_at": "2026-10-28T21:40:10.043033+00:00",
+      "session_id": "b2-continue-101",
+      "claim_token": null,
+      "claim_id": null,
+      "execute_claim_id": "c-7954d31fa4cdbb7db3d7",
+      "task_line_sha256": "0545a20c4bb9c4b86d3ce6b63d93cccd9db5649cf3115dc0caaff9dd072c35c8",
+      "delegation_digest": "72e76288f79a0778404e8969dbc565a97bec749cd10f451509a408a78957a769",
+      "delegation_claim_id": "c-7954d31fa4cdbb7db3d7",
+      "status_provenance": {
+        "primary": "acceptance_check",
+        "source": "record-native"
+      },
+      "fidelity": "reported",
+      "token_usage": null,
+      "evidence_location": null,
+      "cwd": ".",
+      "timeout": 1800,
+      "owned_paths": [
+        "specs/101-add-initials-and-squeeze-commands-t07-b2"
+      ],
+      "command": "python -m unittest tests.test_core",
+      "expect": "counts",
+      "exit_code": 0,
+      "timed_out": false,
+      "output_truncated": false,
+      "output": "a-b\r\n\n--- stderr ---\n............\r\n----------------------------------------------------------------------\r\nRan 12 tests in 0.001s\r\n\r\nOK\r\n",
+      "result_summary": "native work recorded by the top-level session; acceptance check passed",
+      "accepted_evidence": {
+        "expect": "counts",
+        "source": "record-native",
+        "counts": {
+          "total": 12,
+          "passed": 12,
+          "failed": 0
+        }
+      },
+      "accepted_at": "2026-10-28T21:40:10.043033+00:00"
+    },
+    {
+      "kind": "native",
+      "identity": "specs/101-add-initials-and-squeeze-commands-t07-b2/T005",
+      "task_type": "implementation",
+      "run_id": "native-48ab1db84bb0",
+      "intent_id": "06a4b15ebfd34becb79d804e67f1c664",
+      "status": "successful",
+      "started_at": "2026-10-28T21:40:33.434066+00:00",
+      "ended_at": "2026-10-28T21:40:33.554843+00:00",
+      "requested_harness": "claude",
+      "actual_harness": "claude",
+      "requested_model": "sonnet",
+      "actual_model": "claude-sonnet-5-5",
+      "model_observed": true,
+      "actual_model_evidence": "worker Model line",
+      "rule": "default:implementation",
+      "choice": "native",
+      "route_candidates": [
+        {
+          "harness": "claude",
+          "requested_model": "sonnet",
+          "tier": "standard",
+          "rule": "default:implementation",
+          "choice": "preferred",
+          "route_kind": "native",
+          "route_reason": "native-first"
+        },
+        {
+          "harness": "claude",
+          "requested_model": "sonnet",
+          "tier": "standard",
+          "rule": "default:implementation",
+          "choice": "preferred",
+          "route_kind": "external",
+          "route_reason": "native-failed:pending"
+        },
+        {
+          "harness": "claude",
+          "requested_model": null,
+          "tier": null,
+          "rule": "default:implementation",
+          "choice": "fallback:1",
+          "route_kind": "external",
+          "route_reason": "native-failed:pending"
+        }
+      ],
+      "route_kind": "native",
+      "route_reason": "native-first",
+      "host_agent_id": "a42efacd2a2c94891",
+      "parent_agent_id": null,
+      "author_lineage": [
+        "a42efacd2a2c94891"
+      ],
+      "tools_granted": null,
+      "git_status_before": {
+        "source": "unavailable",
+        "porcelain": null,
+        "note": "the claim recorded no git status; only the status after the work is known"
+      },
+      "git_status_after": [
+        " M README.md",
+        " M specs/101-add-initials-and-squeeze-commands-t07-b2/tasks.md",
+        " M tests/test_core.py",
+        "?? .specify/progress/",
+        "?? .specify/project-sync-state.json",
+        "?? .specify/scope/",
+        "?? specs/101-add-initials-and-squeeze-commands-t07-b2/evidence/",
+        "?? specs/101-add-initials-and-squeeze-commands-t07-b2/handoff.md",
+        "?? specs/101-add-initials-and-squeeze-commands-t07-b2/progress/",
+        "?? specs/101-add-initials-and-squeeze-commands-t07-b2/scope-analysis.json",
+        "?? specs/101-add-initials-and-squeeze-commands-t07-b2/scope-source.json",
+        "?? specs/101-add-initials-and-squeeze-commands-t07-b2/workflow/",
+        "?? tests/test_cli.py"
+      ],
+      "attested_by": "top-level",
+      "attested_at": "2026-10-28T21:40:33.554843+00:00",
+      "session_id": "b2-continue-101",
+      "claim_token": null,
+      "claim_id": null,
+      "execute_claim_id": "c-7954d31fa4cdbb7db3d7",
+      "task_line_sha256": "ded47b3acb6454dfe4f8097389f743e929d1b30368a3fe4100b52dc9ff5f3f29",
+      "delegation_digest": "72e76288f79a0778404e8969dbc565a97bec749cd10f451509a408a78957a769",
+      "delegation_claim_id": "c-7954d31fa4cdbb7db3d7",
+      "status_provenance": {
+        "primary": "acceptance_check",
+        "source": "record-native"
+      },
+      "fidelity": "reported",
+      "token_usage": null,
+      "evidence_location": null,
+      "cwd": ".",
+      "timeout": 1800,
+      "owned_paths": [
+        "specs/101-add-initials-and-squeeze-commands-t07-b2"
+      ],
+      "command": "python -m unittest tests.test_cli",
+      "expect": "counts",
+      "exit_code": 0,
+      "timed_out": false,
+      "output_truncated": false,
+      "output": "\n--- stderr ---\n..\r\n----------------------------------------------------------------------\r\nRan 2 tests in 0.001s\r\n\r\nOK\r\n",
+      "result_summary": "native work recorded by the top-level session; acceptance check passed",
+      "accepted_evidence": {
+        "expect": "counts",
+        "source": "record-native",
+        "counts": {
+          "total": 2,
+          "passed": 2,
+          "failed": 0
+        }
+      },
+      "accepted_at": "2026-10-28T21:40:33.554843+00:00"
+    },
+    {
+      "kind": "native",
+      "identity": "specs/101-add-initials-and-squeeze-commands-t07-b2/T006",
+      "task_type": "implementation",
+      "run_id": "native-60c31be1e9bd",
+      "intent_id": "678732d866e844a5ac917e494869affc",
+      "status": "failed",
+      "started_at": "2026-10-28T21:40:38.033864+00:00",
+      "ended_at": "2026-10-28T21:40:38.096830+00:00",
+      "requested_harness": "claude",
+      "actual_harness": "claude",
+      "requested_model": "sonnet",
+      "actual_model": "claude-sonnet-5-5",
+      "model_observed": true,
+      "actual_model_evidence": "worker Model line",
+      "rule": "default:implementation",
+      "choice": "native",
+      "route_candidates": [
+        {
+          "harness": "claude",
+          "requested_model": "sonnet",
+          "tier": "standard",
+          "rule": "default:implementation",
+          "choice": "preferred",
+          "route_kind": "native",
+          "route_reason": "native-first"
+        },
+        {
+          "harness": "claude",
+          "requested_model": "sonnet",
+          "tier": "standard",
+          "rule": "default:implementation",
+          "choice": "preferred",
+          "route_kind": "external",
+          "route_reason": "native-failed:pending"
+        },
+        {
+          "harness": "claude",
+          "requested_model": null,
+          "tier": null,
+          "rule": "default:implementation",
+          "choice": "fallback:1",
+          "route_kind": "external",
+          "route_reason": "native-failed:pending"
+        }
+      ],
+      "route_kind": "native",
+      "route_reason": "native-first",
+      "host_agent_id": "a11892a9562b29e7d",
+      "parent_agent_id": null,
+      "author_lineage": [
+        "a11892a9562b29e7d"
+      ],
+      "tools_granted": null,
+      "git_status_before": {
+        "source": "unavailable",
+        "porcelain": null,
+        "note": "the claim recorded no git status; only the status after the work is known"
+      },
+      "git_status_after": [
+        " M README.md",
+        " M specs/101-add-initials-and-squeeze-commands-t07-b2/tasks.md",
+        " M tests/test_core.py",
+        "?? .specify/progress/",
+        "?? .specify/project-sync-state.json",
+        "?? .specify/scope/",
+        "?? specs/101-add-initials-and-squeeze-commands-t07-b2/evidence/",
+        "?? specs/101-add-initials-and-squeeze-commands-t07-b2/handoff.md",
+        "?? specs/101-add-initials-and-squeeze-commands-t07-b2/progress/",
+        "?? specs/101-add-initials-and-squeeze-commands-t07-b2/scope-analysis.json",
+        "?? specs/101-add-initials-and-squeeze-commands-t07-b2/scope-source.json",
+        "?? specs/101-add-initials-and-squeeze-commands-t07-b2/workflow/",
+        "?? tests/test_cli.py"
+      ],
+      "attested_by": "top-level",
+      "attested_at": "2026-10-28T21:40:38.096830+00:00",
+      "session_id": "b2-continue-101",
+      "claim_token": null,
+      "claim_id": null,
+      "execute_claim_id": "c-7954d31fa4cdbb7db3d7",
+      "task_line_sha256": "da7921726cab6dcfd12c07d02cbbd3907d8f3a5813b6ae5afaf5702ff54d7ebb",
+      "delegation_digest": "72e76288f79a0778404e8969dbc565a97bec749cd10f451509a408a78957a769",
+      "delegation_claim_id": "c-7954d31fa4cdbb7db3d7",
+      "status_provenance": {
+        "primary": "acceptance_check",
+        "source": "record-native"
+      },
+      "fidelity": "reported",
+      "token_usage": null,
+      "evidence_location": null,
+      "cwd": ".",
+      "timeout": 1800,
+      "owned_paths": [
+        "README.md"
+      ],
+      "command": "git grep -c -e \"textkit initials\" -e \"textkit squeeze\" -- README.md",
+      "expect": "files",
+      "exit_code": 0,
+      "timed_out": false,
+      "output_truncated": false,
+      "output": "README.md:2\n",
+      "result_summary": "native work recorded by the top-level session; acceptance check did not pass",
+      "failure_category": "acceptance-failed",
+      "replacement_run_id": "native-5a53d59ac112"
+    },
+    {
+      "kind": "native",
+      "identity": "specs/101-add-initials-and-squeeze-commands-t07-b2/T006",
+      "task_type": "implementation",
+      "run_id": "native-5a53d59ac112",
+      "intent_id": "6f37ece79f8e4c8e80579a5b0a916653",
+      "status": "failed",
+      "started_at": "2026-10-28T21:40:47.699579+00:00",
+      "ended_at": "2026-10-28T21:40:47.762474+00:00",
+      "requested_harness": "claude",
+      "actual_harness": "claude",
+      "requested_model": "sonnet",
+      "actual_model": "claude-sonnet-5-5",
+      "model_observed": true,
+      "actual_model_evidence": "worker Model line",
+      "rule": "default:implementation",
+      "choice": "native",
+      "route_candidates": [
+        {
+          "harness": "claude",
+          "requested_model": "sonnet",
+          "tier": "standard",
+          "rule": "default:implementation",
+          "choice": "preferred",
+          "route_kind": "native",
+          "route_reason": "native-first"
+        },
+        {
+          "harness": "claude",
+          "requested_model": "sonnet",
+          "tier": "standard",
+          "rule": "default:implementation",
+          "choice": "preferred",
+          "route_kind": "external",
+          "route_reason": "native-failed:pending"
+        },
+        {
+          "harness": "claude",
+          "requested_model": null,
+          "tier": null,
+          "rule": "default:implementation",
+          "choice": "fallback:1",
+          "route_kind": "external",
+          "route_reason": "native-failed:pending"
+        }
+      ],
+      "route_kind": "native",
+      "route_reason": "native-first",
+      "host_agent_id": "a11892a9562b29e7d",
+      "parent_agent_id": null,
+      "author_lineage": [
+        "a11892a9562b29e7d"
+      ],
+      "tools_granted": null,
+      "git_status_before": {
+        "source": "unavailable",
+        "porcelain": null,
+        "note": "the claim recorded no git status; only the status after the work is known"
+      },
+      "git_status_after": [
+        " M README.md",
+        " M specs/101-add-initials-and-squeeze-commands-t07-b2/tasks.md",
+        " M tests/test_core.py",
+        "?? .specify/progress/",
+        "?? .specify/project-sync-state.json",
+        "?? .specify/scope/",
+        "?? specs/101-add-initials-and-squeeze-commands-t07-b2/evidence/",
+        "?? specs/101-add-initials-and-squeeze-commands-t07-b2/handoff.md",
+        "?? specs/101-add-initials-and-squeeze-commands-t07-b2/progress/",
+        "?? specs/101-add-initials-and-squeeze-commands-t07-b2/scope-analysis.json",
+        "?? specs/101-add-initials-and-squeeze-commands-t07-b2/scope-source.json",
+        "?? specs/101-add-initials-and-squeeze-commands-t07-b2/workflow/",
+        "?? tests/test_cli.py"
+      ],
+      "attested_by": "top-level",
+      "attested_at": "2026-10-28T21:40:47.762474+00:00",
+      "session_id": "b2-continue-101",
+      "claim_token": null,
+      "claim_id": null,
+      "execute_claim_id": "c-7954d31fa4cdbb7db3d7",
+      "task_line_sha256": "da7921726cab6dcfd12c07d02cbbd3907d8f3a5813b6ae5afaf5702ff54d7ebb",
+      "delegation_digest": "72e76288f79a0778404e8969dbc565a97bec749cd10f451509a408a78957a769",
+      "delegation_claim_id": "c-7954d31fa4cdbb7db3d7",
+      "status_provenance": {
+        "primary": "acceptance_check",
+        "source": "record-native"
+      },
+      "fidelity": "reported",
+      "token_usage": null,
+      "evidence_location": null,
+      "cwd": ".",
+      "timeout": 1800,
+      "owned_paths": [
+        "README.md"
+      ],
+      "command": "python -c \"t=open(\\\"README.md\\\",encoding=\\\"utf-8\\\").read();assert \\\"python -m textkit initials\\\" in t and \\\"python -m textkit squeeze\\\" in t;print(\\\"README.md\\\")\"",
+      "expect": "files",
+      "exit_code": 0,
+      "timed_out": false,
+      "output_truncated": false,
+      "output": "README.md\r\n",
+      "result_summary": "native work recorded by the top-level session; acceptance check did not pass",
+      "failure_category": "acceptance-failed",
+      "parent_run_id": "native-60c31be1e9bd",
+      "replaces_run_id": "native-60c31be1e9bd",
+      "replacement_run_id": "native-da84ca0b5c1d"
+    },
+    {
+      "kind": "native",
+      "identity": "specs/101-add-initials-and-squeeze-commands-t07-b2/T006",
+      "task_type": "implementation",
+      "run_id": "native-da84ca0b5c1d",
+      "intent_id": "a97a485f89a84cd09c19226c9558a2bc",
+      "status": "successful",
+      "started_at": "2026-10-28T21:40:54.704593+00:00",
+      "ended_at": "2026-10-28T21:40:54.769948+00:00",
+      "requested_harness": "claude",
+      "actual_harness": "claude",
+      "requested_model": "sonnet",
+      "actual_model": "claude-sonnet-5-5",
+      "model_observed": true,
+      "actual_model_evidence": "worker Model line",
+      "rule": "default:implementation",
+      "choice": "native",
+      "route_candidates": [
+        {
+          "harness": "claude",
+          "requested_model": "sonnet",
+          "tier": "standard",
+          "rule": "default:implementation",
+          "choice": "preferred",
+          "route_kind": "native",
+          "route_reason": "native-first"
+        },
+        {
+          "harness": "claude",
+          "requested_model": "sonnet",
+          "tier": "standard",
+          "rule": "default:implementation",
+          "choice": "preferred",
+          "route_kind": "external",
+          "route_reason": "native-failed:pending"
+        },
+        {
+          "harness": "claude",
+          "requested_model": null,
+          "tier": null,
+          "rule": "default:implementation",
+          "choice": "fallback:1",
+          "route_kind": "external",
+          "route_reason": "native-failed:pending"
+        }
+      ],
+      "route_kind": "native",
+      "route_reason": "native-first",
+      "host_agent_id": "a11892a9562b29e7d",
+      "parent_agent_id": null,
+      "author_lineage": [
+        "a11892a9562b29e7d"
+      ],
+      "tools_granted": null,
+      "git_status_before": {
+        "source": "unavailable",
+        "porcelain": null,
+        "note": "the claim recorded no git status; only the status after the work is known"
+      },
+      "git_status_after": [
+        " M README.md",
+        " M specs/101-add-initials-and-squeeze-commands-t07-b2/tasks.md",
+        " M tests/test_core.py",
+        "?? .specify/progress/",
+        "?? .specify/project-sync-state.json",
+        "?? .specify/scope/",
+        "?? specs/101-add-initials-and-squeeze-commands-t07-b2/evidence/",
+        "?? specs/101-add-initials-and-squeeze-commands-t07-b2/handoff.md",
+        "?? specs/101-add-initials-and-squeeze-commands-t07-b2/progress/",
+        "?? specs/101-add-initials-and-squeeze-commands-t07-b2/scope-analysis.json",
+        "?? specs/101-add-initials-and-squeeze-commands-t07-b2/scope-source.json",
+        "?? specs/101-add-initials-and-squeeze-commands-t07-b2/workflow/",
+        "?? tests/test_cli.py"
+      ],
+      "attested_by": "top-level",
+      "attested_at": "2026-10-28T21:40:54.769948+00:00",
+      "session_id": "b2-continue-101",
+      "claim_token": null,
+      "claim_id": null,
+      "execute_claim_id": "c-7954d31fa4cdbb7db3d7",
+      "task_line_sha256": "da7921726cab6dcfd12c07d02cbbd3907d8f3a5813b6ae5afaf5702ff54d7ebb",
+      "delegation_digest": "72e76288f79a0778404e8969dbc565a97bec749cd10f451509a408a78957a769",
+      "delegation_claim_id": "c-7954d31fa4cdbb7db3d7",
+      "status_provenance": {
+        "primary": "acceptance_check",
+        "source": "record-native"
+      },
+      "fidelity": "reported",
+      "token_usage": null,
+      "evidence_location": null,
+      "cwd": ".",
+      "timeout": 1800,
+      "owned_paths": [
+        "README.md"
+      ],
+      "command": "python -c \"t=open(\\\"README.md\\\",encoding=\\\"utf-8\\\").read();assert \\\"python -m textkit initials\\\" in t and \\\"python -m textkit squeeze\\\" in t;print(\\\"FILE: README.md\\\")\"",
+      "expect": "files",
+      "exit_code": 0,
+      "timed_out": false,
+      "output_truncated": false,
+      "output": "FILE: README.md\r\n",
+      "result_summary": "native work recorded by the top-level session; acceptance check passed",
+      "accepted_evidence": {
+        "expect": "files",
+        "source": "record-native",
+        "files": [
+          {
+            "path": "README.md",
+            "sha256": "ec9369e1095d1fcb0ba1a76e69a6f4a928c1089422080e129adedcefa9ec5cf7",
+            "size": 352
+          }
+        ]
+      },
+      "accepted_at": "2026-10-28T21:40:54.769948+00:00",
+      "parent_run_id": "native-5a53d59ac112",
+      "replaces_run_id": "native-5a53d59ac112"
+    },
+    {
+      "kind": "native",
+      "identity": "specs/101-add-initials-and-squeeze-commands-t07-b2/T007",
+      "task_type": "implementation",
+      "run_id": "native-032aa544d4d4",
+      "intent_id": "78754d5a6ef2430a90be9ca26313cd10",
+      "status": "successful",
+      "started_at": "2026-10-28T21:41:12.685685+00:00",
+      "ended_at": "2026-10-28T21:41:12.804110+00:00",
+      "requested_harness": "claude",
+      "actual_harness": "claude",
+      "requested_model": "sonnet",
+      "actual_model": "claude-sonnet-5-5",
+      "model_observed": true,
+      "actual_model_evidence": "worker Model line",
+      "rule": "default:implementation",
+      "choice": "native",
+      "route_candidates": [
+        {
+          "harness": "claude",
+          "requested_model": "sonnet",
+          "tier": "standard",
+          "rule": "default:implementation",
+          "choice": "preferred",
+          "route_kind": "native",
+          "route_reason": "native-first"
+        },
+        {
+          "harness": "claude",
+          "requested_model": "sonnet",
+          "tier": "standard",
+          "rule": "default:implementation",
+          "choice": "preferred",
+          "route_kind": "external",
+          "route_reason": "native-failed:pending"
+        },
+        {
+          "harness": "claude",
+          "requested_model": null,
+          "tier": null,
+          "rule": "default:implementation",
+          "choice": "fallback:1",
+          "route_kind": "external",
+          "route_reason": "native-failed:pending"
+        }
+      ],
+      "route_kind": "native",
+      "route_reason": "native-first",
+      "host_agent_id": "a994325a1b0c76922",
+      "parent_agent_id": null,
+      "author_lineage": [
+        "a994325a1b0c76922"
+      ],
+      "tools_granted": null,
+      "git_status_before": {
+        "source": "unavailable",
+        "porcelain": null,
+        "note": "the claim recorded no git status; only the status after the work is known"
+      },
+      "git_status_after": [
+        " M README.md",
+        " M specs/101-add-initials-and-squeeze-commands-t07-b2/tasks.md",
+        " M tests/test_core.py",
+        "?? .specify/progress/",
+        "?? .specify/project-sync-state.json",
+        "?? .specify/scope/",
+        "?? specs/101-add-initials-and-squeeze-commands-t07-b2/evidence/",
+        "?? specs/101-add-initials-and-squeeze-commands-t07-b2/handoff.md",
+        "?? specs/101-add-initials-and-squeeze-commands-t07-b2/progress/",
+        "?? specs/101-add-initials-and-squeeze-commands-t07-b2/scope-analysis.json",
+        "?? specs/101-add-initials-and-squeeze-commands-t07-b2/scope-source.json",
+        "?? specs/101-add-initials-and-squeeze-commands-t07-b2/workflow/",
+        "?? tests/test_cli.py"
+      ],
+      "attested_by": "top-level",
+      "attested_at": "2026-10-28T21:41:12.804110+00:00",
+      "session_id": "b2-continue-101",
+      "claim_token": null,
+      "claim_id": null,
+      "execute_claim_id": "c-7954d31fa4cdbb7db3d7",
+      "task_line_sha256": "e4b739e5ea2cd614e58dff587f1060fbcf958689434af954c88592636d3770fa",
+      "delegation_digest": "72e76288f79a0778404e8969dbc565a97bec749cd10f451509a408a78957a769",
+      "delegation_claim_id": "c-7954d31fa4cdbb7db3d7",
+      "status_provenance": {
+        "primary": "acceptance_check",
+        "source": "record-native"
+      },
+      "fidelity": "reported",
+      "token_usage": null,
+      "evidence_location": null,
+      "cwd": ".",
+      "timeout": 1800,
+      "owned_paths": [
+        "specs/101-add-initials-and-squeeze-commands-t07-b2"
+      ],
+      "command": "python -m unittest discover -s tests",
+      "expect": "counts",
+      "exit_code": 0,
+      "timed_out": false,
+      "output_truncated": false,
+      "output": "a-b\r\n\n--- stderr ---\n..............\r\n----------------------------------------------------------------------\r\nRan 14 tests in 0.001s\r\n\r\nOK\r\n",
+      "result_summary": "native work recorded by the top-level session; acceptance check passed",
+      "accepted_evidence": {
+        "expect": "counts",
+        "source": "record-native",
+        "counts": {
+          "total": 14,
+          "passed": 14,
+          "failed": 0
+        }
+      },
+      "accepted_at": "2026-10-28T21:41:12.804110+00:00"
+    },
+    {
+      "kind": "native",
+      "identity": "specs/101-add-initials-and-squeeze-commands-t07-b2/stage:verify",
+      "task_type": "qa_author",
+      "run_id": "native-35dd04a1e3b6",
+      "intent_id": "72a0c6cca4724bb8b88aa266e32ccdc6",
+      "status": "successful",
+      "started_at": "2026-10-28T21:41:56.487607+00:00",
+      "ended_at": "2026-10-28T21:41:56.487607+00:00",
+      "requested_harness": "claude",
+      "actual_harness": "claude",
+      "requested_model": "sonnet",
+      "actual_model": "claude-sonnet-5-5",
+      "model_observed": true,
+      "rule": "native",
+      "choice": "native",
+      "route_candidates": [
+        {
+          "harness": "claude",
+          "requested_model": "sonnet",
+          "tier": "standard",
+          "rule": "default:qa_author",
+          "choice": "preferred",
+          "route_kind": "native",
+          "route_reason": "native-first"
+        },
+        {
+          "harness": "claude",
+          "requested_model": "sonnet",
+          "tier": "standard",
+          "rule": "default:qa_author",
+          "choice": "preferred",
+          "route_kind": "external",
+          "route_reason": "native-failed:pending"
+        },
+        {
+          "harness": "claude",
+          "requested_model": null,
+          "tier": null,
+          "rule": "default:qa_author",
+          "choice": "fallback:1",
+          "route_kind": "external",
+          "route_reason": "native-failed:pending"
+        }
+      ],
+      "route_kind": "native",
+      "route_reason": "native-first",
+      "attested_by": "top-level",
+      "attested_at": "2026-10-28T21:41:56.487607+00:00",
+      "session_id": "b2-continue-101",
+      "claim_token": "655dfc3a29664b039f384d3774be8e17",
+      "claim_id": "c-ce1172fcbfe129c47255",
+      "delegation_digest": "72e76288f79a0778404e8969dbc565a97bec749cd10f451509a408a78957a769",
+      "delegation_claim_id": "c-ce1172fcbfe129c47255",
+      "status_provenance": {
+        "primary": "self_report",
+        "source": "top-level-attestation"
+      },
+      "fidelity": "reported",
+      "token_usage": null,
+      "evidence_location": null,
+      "result_summary": "native subagent stage attested by the top-level session",
+      "actual_model_evidence": "host-reported"
+    }
+  ],
+  "route_decisions": [
+    {
+      "at": "2026-10-28T21:32:21.075491+00:00",
+      "identity": "specs/101-add-initials-and-squeeze-commands-t07-b2/stage:scope",
+      "requested": {
+        "harness": "claude",
+        "requested_model": "sonnet",
+        "tier": "standard",
+        "rule": "default:discovery",
+        "choice": "preferred",
+        "route_kind": "native",
+        "route_reason": "native-first"
+      },
+      "decision": "native-attested",
+      "run_id": "native-0b3be4924c65",
+      "reason": "the top-level session attested a native subagent run"
+    },
+    {
+      "at": "2026-10-28T21:32:57.923416+00:00",
+      "identity": "specs/101-add-initials-and-squeeze-commands-t07-b2/stage:specify",
+      "requested": {
+        "harness": "claude",
+        "requested_model": "sonnet",
+        "tier": "standard",
+        "rule": "default:discovery",
+        "choice": "preferred",
+        "route_kind": "native",
+        "route_reason": "native-first"
+      },
+      "decision": "native-attested",
+      "run_id": "native-15ee6db57aec",
+      "reason": "the top-level session attested a native subagent run"
+    },
+    {
+      "at": "2026-10-28T21:37:00.580337+00:00",
+      "identity": "specs/101-add-initials-and-squeeze-commands-t07-b2/stage:clarify",
+      "requested": {
+        "harness": "claude",
+        "requested_model": "sonnet",
+        "tier": "standard",
+        "rule": "default:discovery",
+        "choice": "preferred",
+        "route_kind": "native",
+        "route_reason": "native-first"
+      },
+      "decision": "native-attested",
+      "run_id": "native-3795fae372a6",
+      "reason": "the top-level session attested a native subagent run"
+    },
+    {
+      "at": "2026-10-28T21:37:59.020851+00:00",
+      "identity": "specs/101-add-initials-and-squeeze-commands-t07-b2/stage:plan",
+      "requested": {
+        "harness": "claude",
+        "requested_model": "sonnet",
+        "tier": "standard",
+        "rule": "default:discovery",
+        "choice": "preferred",
+        "route_kind": "native",
+        "route_reason": "native-first"
+      },
+      "decision": "native-attested",
+      "run_id": "native-f33f1e29cd20",
+      "reason": "the top-level session attested a native subagent run"
+    },
+    {
+      "at": "2026-10-28T21:39:12.078945+00:00",
+      "identity": "specs/101-add-initials-and-squeeze-commands-t07-b2/T001",
+      "requested": {
+        "harness": "claude",
+        "requested_model": "sonnet",
+        "tier": "standard",
+        "rule": "default:implementation",
+        "choice": "preferred",
+        "route_kind": "native",
+        "route_reason": "native-first"
+      },
+      "decision": "native-recorded",
+      "run_id": "native-499972e3c597",
+      "reason": "acceptance check passed"
+    },
+    {
+      "at": "2026-10-28T21:39:29.314769+00:00",
+      "identity": "specs/101-add-initials-and-squeeze-commands-t07-b2/T002",
+      "requested": {
+        "harness": "claude",
+        "requested_model": "sonnet",
+        "tier": "standard",
+        "rule": "default:implementation",
+        "choice": "preferred",
+        "route_kind": "native",
+        "route_reason": "native-first"
+      },
+      "decision": "native-recorded",
+      "run_id": "native-c50ec20f5b8a",
+      "reason": "acceptance check passed"
+    },
+    {
+      "at": "2026-10-28T21:40:05.846839+00:00",
+      "identity": "specs/101-add-initials-and-squeeze-commands-t07-b2/T003",
+      "requested": {
+        "harness": "claude",
+        "requested_model": "sonnet",
+        "tier": "standard",
+        "rule": "default:implementation",
+        "choice": "preferred",
+        "route_kind": "native",
+        "route_reason": "native-first"
+      },
+      "decision": "native-recorded",
+      "run_id": "native-07154591bbe2",
+      "reason": "acceptance check passed"
+    },
+    {
+      "at": "2026-10-28T21:40:10.043033+00:00",
+      "identity": "specs/101-add-initials-and-squeeze-commands-t07-b2/T004",
+      "requested": {
+        "harness": "claude",
+        "requested_model": "sonnet",
+        "tier": "standard",
+        "rule": "default:qa_author",
+        "choice": "preferred",
+        "route_kind": "native",
+        "route_reason": "native-first"
+      },
+      "decision": "native-recorded",
+      "run_id": "native-2973cdbbb3a1",
+      "reason": "acceptance check passed"
+    },
+    {
+      "at": "2026-10-28T21:40:33.554843+00:00",
+      "identity": "specs/101-add-initials-and-squeeze-commands-t07-b2/T005",
+      "requested": {
+        "harness": "claude",
+        "requested_model": "sonnet",
+        "tier": "standard",
+        "rule": "default:implementation",
+        "choice": "preferred",
+        "route_kind": "native",
+        "route_reason": "native-first"
+      },
+      "decision": "native-recorded",
+      "run_id": "native-48ab1db84bb0",
+      "reason": "acceptance check passed"
+    },
+    {
+      "at": "2026-10-28T21:40:38.096830+00:00",
+      "identity": "specs/101-add-initials-and-squeeze-commands-t07-b2/T006",
+      "requested": {
+        "harness": "claude",
+        "requested_model": "sonnet",
+        "tier": "standard",
+        "rule": "default:implementation",
+        "choice": "preferred",
+        "route_kind": "native",
+        "route_reason": "native-first"
+      },
+      "decision": "native-recorded",
+      "run_id": "native-60c31be1e9bd",
+      "reason": "acceptance check failed"
+    },
+    {
+      "at": "2026-10-28T21:40:47.762474+00:00",
+      "identity": "specs/101-add-initials-and-squeeze-commands-t07-b2/T006",
+      "requested": {
+        "harness": "claude",
+        "requested_model": "sonnet",
+        "tier": "standard",
+        "rule": "default:implementation",
+        "choice": "preferred",
+        "route_kind": "native",
+        "route_reason": "native-first"
+      },
+      "decision": "native-recorded",
+      "run_id": "native-5a53d59ac112",
+      "reason": "acceptance check failed"
+    },
+    {
+      "at": "2026-10-28T21:40:54.769948+00:00",
+      "identity": "specs/101-add-initials-and-squeeze-commands-t07-b2/T006",
+      "requested": {
+        "harness": "claude",
+        "requested_model": "sonnet",
+        "tier": "standard",
+        "rule": "default:implementation",
+        "choice": "preferred",
+        "route_kind": "native",
+        "route_reason": "native-first"
+      },
+      "decision": "native-recorded",
+      "run_id": "native-da84ca0b5c1d",
+      "reason": "acceptance check passed"
+    },
+    {
+      "at": "2026-10-28T21:41:12.804110+00:00",
+      "identity": "specs/101-add-initials-and-squeeze-commands-t07-b2/T007",
+      "requested": {
+        "harness": "claude",
+        "requested_model": "sonnet",
+        "tier": "standard",
+        "rule": "default:implementation",
+        "choice": "preferred",
+        "route_kind": "native",
+        "route_reason": "native-first"
+      },
+      "decision": "native-recorded",
+      "run_id": "native-032aa544d4d4",
+      "reason": "acceptance check passed"
+    },
+    {
+      "at": "2026-10-28T21:41:56.487607+00:00",
+      "identity": "specs/101-add-initials-and-squeeze-commands-t07-b2/stage:verify",
+      "requested": {
+        "harness": "claude",
+        "requested_model": "sonnet",
+        "tier": "standard",
+        "rule": "default:qa_author",
+        "choice": "preferred",
+        "route_kind": "native",
+        "route_reason": "native-first"
+      },
+      "decision": "native-attested",
+      "run_id": "native-35dd04a1e3b6",
+      "reason": "the top-level session attested a native subagent run"
+    }
+  ]
+}

@@ -9,6 +9,8 @@ that installs or upgrades the packages and runs their test suites. A **live run*
 managed run of a real issue by an agent host, from scope to an open pull request. A clean install is
 not a live run.
 
+Workflow 2.0.2 (PH-05-T07): eight managed live runs on the released 2.0.2, seven on Claude Code and one on Codex, lite tier, with delegation off, native and external tasks; all eight valid, every PR passed its own tests and the held-out tests ([evidence](../evidence/benchmarks/native-routing-2026-10.md)).
+
 Workflow 1.19.2 hotfix: focused reconciler, rollback and packaged CLI checks passed with Spec Kit 1.1.3, plus an existing Windows consumer upgrade and project doctor. No new full managed live run was recorded for either host for this patch; the older live runs below retain their stated versions.
 Workflow 2.0.0 train (PH-06): every suite passed on Windows with Spec Kit 1.1.3 on the merged tree, and a real consumer project upgraded from Workflow 1.18.2 with Spec Kit 1.1.3 kept every receipt of its 12 features in progress (`doctor --project` passed). No new managed live run was recorded for this train.
 
@@ -20,8 +22,8 @@ Workflow 1.20.0 and Scope 1.11.1 (PH-02): every suite passed on Windows with Spe
 
 | Product | Codex | Claude Code | Claude Desktop | Live run (date, versions, host) |
 | --- | --- | --- | --- | --- |
-| Workflow, with the dependencies its installer adds | Install tested in CI (Ubuntu, core and SuperSpec). End to end: **Tested** (one live run, [PH-04](../evidence/ph04-live-run-codex.md)) | Install tested in CI (Ubuntu, core and SuperSpec). End to end: **Tested** (live runs) | Unsupported | Round 4, 2026-10-21: the round-4 builds released as Workflow 1.17.0, Spec Kit 1.0.11, Claude Code 2.1.306. Round 5, 2026-10-21: Workflow 1.17.1, Scope 1.10.1, Spec Kit 1.1.4.dev0, Claude Code 2.1.306. [PH-04](../evidence/ph04-live-run-claude.md), 2026-10-28: Workflow 1.21.0, Scope 1.12.0, Spec Kit 1.1.3, Claude Code 2.1.312 and [Codex CLI 0.163.0](../evidence/ph04-live-run-codex.md), QA and User Manual on, advisory gate, standard tier, PR opened on each host; host switch and Bridge route exercised. The CI gate did not run (its workflow file did not load, fixed in Workflow 1.22.1); the gate passed locally |
-| Scope | Through Workflow only. **Tested** (PH-04 live run) | Through Workflow only. **Tested** (live runs) | Unsupported | Rounds 4 and 5, and PH-04 (Claude Code and Codex), as Workflow |
+| Workflow, with the dependencies its installer adds | Install tested in CI (Ubuntu, core and SuperSpec). End to end: **Tested** (live runs, [PH-04](../evidence/ph04-live-run-codex.md) and the [PH-05-T07](../evidence/benchmarks/native-routing-2026-10.md) fixture with one native and one external task) | Install tested in CI (Ubuntu, core and SuperSpec). End to end: **Tested** (live runs, including [PH-05-T07](../evidence/benchmarks/native-routing-2026-10.md) with in-session, native and external tasks) | Unsupported | Round 4, 2026-10-21: the round-4 builds released as Workflow 1.17.0, Spec Kit 1.0.11, Claude Code 2.1.306. Round 5, 2026-10-21: Workflow 1.17.1, Scope 1.10.1, Spec Kit 1.1.4.dev0, Claude Code 2.1.306. [PH-04](../evidence/ph04-live-run-claude.md), 2026-10-28: Workflow 1.21.0, Scope 1.12.0, Spec Kit 1.1.3, Claude Code 2.1.312 and [Codex CLI 0.163.0](../evidence/ph04-live-run-codex.md), QA and User Manual on, advisory gate, standard tier, PR opened on each host; host switch and Bridge route exercised. The CI gate did not run (its workflow file did not load, fixed in Workflow 1.22.1); the gate passed locally. [PH-05-T07](../evidence/benchmarks/native-routing-2026-10.md), 2026-10-28: Workflow 2.0.2, Spec Kit 1.1.3 (the Codex fixture's host switch ran 1.2.3), Claude Code 2.1.312 (seven runs) and Codex CLI 0.163.0 (one run), QA and User Manual selected, advisory gate, lite tier, delegation off or on; native and external tasks on both hosts, PR opened on each, not merged |
+| Scope | Through Workflow only. **Tested** (PH-04 and PH-05-T07 live runs) | Through Workflow only. **Tested** (live runs) | Unsupported | Rounds 4 and 5, PH-04 and PH-05-T07 (Claude Code and Codex), as Workflow |
 | Memory | Untested | **Tested** through Workflow (live run) | Unsupported | Round 4 run 4 (the build released as Memory 2.5.0) and round 5 (Memory 2.5.0), 2026-10-21, Claude Code 2.1.306 |
 | Progress | Untested | **Tested** through Workflow (live run, native hooks) | Unsupported | Round 5, 2026-10-21: Progress 1.5.0, Claude Code 2.1.306 |
 | Project | Untested | **Tested** through Workflow (live run) | Unsupported | Round 4 (the build released as Project 2.5.0) and round 5 (Project 2.5.1), 2026-10-21, Claude Code 2.1.306 |
@@ -32,10 +34,11 @@ Workflow 1.20.0 and Scope 1.11.1 (PH-02): every suite passed on Windows with Spe
 
 Evidence records, in this repository: [round 4](../evidence/round-4-live-run.md),
 [round 5](../evidence/round-5-live-run.md) and PH-04 on [Claude Code](../evidence/ph04-live-run-claude.md) and
-[Codex](../evidence/ph04-live-run-codex.md), with its [findings](../evidence/ph04-live-run-findings.md). All ran
+[Codex](../evidence/ph04-live-run-codex.md), with its [findings](../evidence/ph04-live-run-findings.md), and the
+PH-05-T07 [native and external routing runs](../evidence/benchmarks/native-routing-2026-10.md). All ran
 in a private sandbox repository on the maintainer's Windows machine. The PH-04 redacted bundles are assets of the
-[Workflow 1.21.0 release](https://github.com/samykabu/sanduq/releases/tag/workflow-v1.21.0). Codex has one
-end-to-end live run (PH-04); Memory and Progress on Codex are untested.
+[Workflow 1.21.0 release](https://github.com/samykabu/sanduq/releases/tag/workflow-v1.21.0). Codex has two
+end-to-end live runs (PH-04 and the PH-05-T07 fixture); Memory and Progress on Codex are untested.
 
 opencode is deferred. Copilot is outside the supported hosts. Delegate Task can start Codex, Claude
 Code, opencode, Copilot and Pi as [harnesses](glossary.md#harness); that is not host support.
@@ -44,7 +47,7 @@ Code, opencode, Copilot and Pi as [harnesses](glossary.md#harness); that is not 
 
 | Platform | CI | Live run | Status |
 | --- | --- | --- | --- |
-| Windows | Regression suites, Memory installation and Project init on `windows-latest` | Rounds 4 and 5 (Claude Code); PH-04 (Claude Code and Codex) | **Tested** |
+| Windows | Regression suites, Memory installation and Project init on `windows-latest` | Rounds 4 and 5 (Claude Code); PH-04 and PH-05-T07 (Claude Code and Codex) | **Tested** |
 | Linux | Every CI job on the home-office runner, including installation and upgrade | None | **Tested** (CI only) |
 | macOS | None | None | **Untested** |
 

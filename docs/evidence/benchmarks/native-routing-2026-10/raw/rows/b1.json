@@ -1,0 +1,228 @@
+{
+ "run": "b1",
+ "arm": "native",
+ "issue": 100,
+ "feature": "specs/100-add-initials-and-squeeze-commands-t07-b1",
+ "sessions": 2,
+ "usd_host": 3.51,
+ "usd_external": 0,
+ "usd_total": 3.51,
+ "model_s": 625,
+ "elapsed_s": 630,
+ "tool_calls": 94,
+ "attempts": 10,
+ "attempts_by_kind": {
+  "native / native / native-first / successful": 10
+ },
+ "native_attempts": [
+  {
+   "identity": "specs/100-add-initials-and-squeeze-commands-t07-b1/stage:scope",
+   "status": "successful",
+   "agent": null,
+   "requested_model": "sonnet",
+   "actual_model": null,
+   "route_reason": "native-first"
+  },
+  {
+   "identity": "specs/100-add-initials-and-squeeze-commands-t07-b1/stage:specify",
+   "status": "successful",
+   "agent": null,
+   "requested_model": "sonnet",
+   "actual_model": null,
+   "route_reason": "native-first"
+  },
+  {
+   "identity": "specs/100-add-initials-and-squeeze-commands-t07-b1/stage:clarify",
+   "status": "successful",
+   "agent": null,
+   "requested_model": "sonnet",
+   "actual_model": null,
+   "route_reason": "native-first"
+  },
+  {
+   "identity": "specs/100-add-initials-and-squeeze-commands-t07-b1/stage:plan",
+   "status": "successful",
+   "agent": null,
+   "requested_model": "sonnet",
+   "actual_model": "sonnet",
+   "route_reason": "native-first"
+  },
+  {
+   "identity": "specs/100-add-initials-and-squeeze-commands-t07-b1/T001",
+   "status": "successful",
+   "agent": "a2beb63004c679048",
+   "requested_model": "sonnet",
+   "actual_model": "claude-sonnet-5-5",
+   "route_reason": "native-first",
+   "tokens": {
+    "fresh_input": 8,
+    "cache_read": 32079,
+    "cache_write": 13462,
+    "output": 2177,
+    "reasoning": null,
+    "model": "claude-sonnet-5-5",
+    "harness": "claude"
+   }
+  },
+  {
+   "identity": "specs/100-add-initials-and-squeeze-commands-t07-b1/T002",
+   "status": "successful",
+   "agent": "a2beb63004c679048",
+   "requested_model": "sonnet",
+   "actual_model": "claude-sonnet-5-5",
+   "route_reason": "native-first",
+   "tokens": {
+    "fresh_input": 8,
+    "cache_read": 32079,
+    "cache_write": 13462,
+    "output": 2177,
+    "reasoning": null,
+    "model": "claude-sonnet-5-5",
+    "harness": "claude"
+   }
+  },
+  {
+   "identity": "specs/100-add-initials-and-squeeze-commands-t07-b1/T003",
+   "status": "successful",
+   "agent": "a2beb63004c679048",
+   "requested_model": "sonnet",
+   "actual_model": "claude-sonnet-5-5",
+   "route_reason": "native-first",
+   "tokens": {
+    "fresh_input": 8,
+    "cache_read": 32079,
+    "cache_write": 13462,
+    "output": 2177,
+    "reasoning": null,
+    "model": "claude-sonnet-5-5",
+    "harness": "claude"
+   }
+  },
+  {
+   "identity": "specs/100-add-initials-and-squeeze-commands-t07-b1/T004",
+   "status": "successful",
+   "agent": "a2beb63004c679048",
+   "requested_model": "sonnet",
+   "actual_model": "claude-sonnet-5-5",
+   "route_reason": "native-first",
+   "tokens": {
+    "fresh_input": 8,
+    "cache_read": 32079,
+    "cache_write": 13462,
+    "output": 2177,
+    "reasoning": null,
+    "model": "claude-sonnet-5-5",
+    "harness": "claude"
+   }
+  },
+  {
+   "identity": "specs/100-add-initials-and-squeeze-commands-t07-b1/T005",
+   "status": "successful",
+   "agent": "a7a7230a992e781ce",
+   "requested_model": "sonnet",
+   "actual_model": "claude-sonnet-5-5",
+   "route_reason": "native-first",
+   "tokens": {
+    "fresh_input": 6,
+    "cache_read": 23354,
+    "cache_write": 5222,
+    "output": 602,
+    "reasoning": null,
+    "model": "claude-sonnet-5-5",
+    "harness": "claude"
+   }
+  },
+  {
+   "identity": "specs/100-add-initials-and-squeeze-commands-t07-b1/stage:verify",
+   "status": "successful",
+   "agent": "aa715b8a82ffc4675",
+   "requested_model": "sonnet",
+   "actual_model": null,
+   "route_reason": "native-first",
+   "tokens": {
+    "fresh_input": 8,
+    "cache_read": 109261,
+    "cache_write": 23910,
+    "output": 2097,
+    "reasoning": null,
+    "model": "claude-sonnet-5-5",
+    "harness": "claude"
+   }
+  }
+ ],
+ "external_attempts": [],
+ "external_tokens": {},
+ "rejected_completions": 1,
+ "sessions_detail": [
+  {
+   "name": "b1-a-scope",
+   "host": "claude",
+   "start": "2026-10-28T20:44:10+00:00",
+   "end": "2026-10-28T20:46:21+00:00",
+   "exit": "0",
+   "usd": 0.9069252000000001,
+   "model_s": 129,
+   "tool_calls": 19,
+   "tokens": [
+    38,
+    58819,
+    933106,
+    12480
+   ],
+   "model_usage": {
+    "claude-opus-5-5": {
+     "inputTokens": 38,
+     "outputTokens": 12480,
+     "cacheReadInputTokens": 933106,
+     "cacheCreationInputTokens": 58819,
+     "costUSD": 0.9069252000000001
+    }
+   },
+   "is_error": false
+  },
+  {
+   "name": "b1-b-continue",
+   "host": "claude",
+   "start": "2026-10-28T20:46:22+00:00",
+   "end": "2026-10-28T20:54:40+00:00",
+   "exit": "0",
+   "usd": 2.5998183000000004,
+   "model_s": 496,
+   "tool_calls": 75,
+   "tokens": [
+    112,
+    109917,
+    4744179,
+    22693
+   ],
+   "model_usage": {
+    "claude-opus-5-5": {
+     "inputTokens": 112,
+     "outputTokens": 22693,
+     "cacheReadInputTokens": 4744179,
+     "cacheCreationInputTokens": 109917,
+     "costUSD": 2.2824798000000004
+    },
+    "claude-sonnet-5-5": {
+     "inputTokens": 32,
+     "outputTokens": 7268,
+     "cacheReadInputTokens": 312945,
+     "cacheCreationInputTokens": 85320,
+     "costUSD": 0.3173385000000001
+    }
+   },
+   "is_error": false
+  }
+ ],
+ "validity": {
+  "valid": true,
+  "arm": "native",
+  "host": "claude",
+  "setup_commit": "24b575864aa7",
+  "task_attempts": 5,
+  "task_route_kinds": {
+   "native": 5
+  },
+  "reasons": []
+ }
+}
