@@ -52,7 +52,7 @@ from packaging.version import Version
 from wf_core import (SCHEMA, CHECKPOINT_SCHEMA, CHECKPOINT_SCHEMAS, RANGES, BASE_STAGES, COMMANDS, CORE_INPUTS,
                      INPUT_ROLES, RECEIPT_POLICY_KEYS, AMENDMENT_ASSESSMENTS, AMENDMENT_DEPENDENTS,
                      RUNTIME_RECEIPT_FIELDS, SOURCE_STAGES, EFFORT_SCORES, TIERS, DEFAULT_PROFILES, LITE_SKIPPED,
-                     LITE_OPTIONAL_INPUTS, LINT_COMMAND, ARTIFACT_BUDGETS, ARTIFACT_ENFORCE, PROJECT_SYNC_PHASES,
+                     LITE_FOLDED, LITE_OPTIONAL_INPUTS, LINT_COMMAND, ARTIFACT_BUDGETS, ARTIFACT_ENFORCE, PROJECT_SYNC_PHASES,
                      PROJECT_SYNC_POINTS, PROJECT_SYNC_SCRIPT, PROJECT_SYNC_STEPS, DEFAULT_SYNC_STATE,
                      SYNC_BINDING_PREFIX, SYNC_ADMINISTRATIVE, TASK_ISSUE_MODES, PROJECT_SYNC_MODES,
                      MINIMAL_SYNC_PHASES, SIDE_EFFECTS, RENDER_MARKER,
@@ -63,15 +63,16 @@ from wf_core import (SCHEMA, CHECKPOINT_SCHEMA, CHECKPOINT_SCHEMAS, RANGES, BASE
                      git_ok, git, OPERATIONAL_DIRS, operation, _memo, _wrote, default_actor,
                      require_not_delegated_context, RUNTIME_DECLARATION, ensure_local_excludes, locked, ERRORS,
                      explain, GIT, W, INSTALL_SCRIPT)
-from wf_identity import (github_repository, previous_branch, normalized_remote, origin_url, root_commit_sha,
+from wf_identity import (github_repository, previous_branch, target_branch, normalized_remote, origin_url, root_commit_sha,
                          is_shallow_clone, repo_identity, current_identity, root_commit_still_reachable, same_remote,
                          identity_matches, legacy_history_signal, verify_checkpoint_identity, root_history_changed,
                          require_issue_repository_binding, issue_identity, prepare_issue, require_shared_history,
-                         feature_for_issue)
+                         feature_for_issue, git_lines)
 from wf_fingerprints import (sync_state_label, sync_entry, sync_projection, sync_binding,
                              normalized_text, text_fingerprints, fingerprint_files,
                              git_text_attributes, prefetch_attributes, source_fingerprints, inventory_label,
-                             store_source_inventory, source_fingerprints_of)
+                             store_source_inventory, source_fingerprints_of, DECISION_RECORDS_PREFIX, DECISION_LEDGER,
+                             decision_projection, recorded_decision_ids)
 from wf_policy import (default_policy, select_gate, validate_policy, _positive, validate_front_half_policy, tier,
                        state_tier, feature_tier, skipped_stages, project_sync, task_issue_mode, side_effects,
                        matches_side_effect, load_policy, stages, OPERATIONAL_SUBKEYS, policy_cutoff, POLICY_KEYS,
@@ -169,6 +170,16 @@ def other_feature_command(relative, active):
             ' --reason "<why that claim is abandoned>"')
 
 
+MANUAL_INIT_NEXT = ('User Manual is selected but User-Manual/manual.yml does not exist. Run $speckit-user-manual-init '
+                    'once on the target branch, approve its module map and commit User-Manual/ there; every feature '
+                    'then updates that one manual')
+
+
+def manual_missing(root, policy):
+    """F4: the manual is selected but not initialised, so each feature would propose and create its own."""
+    return policy['processes']['user_manual'] and not (Path(root) / 'User-Manual/manual.yml').is_file()
+
+
 class Run:
     def __init__(self, root, feature):
         self.root = root.resolve()
@@ -202,8 +213,9 @@ class Run:
         if task_issue_mode(self.policy) == 'off':
             if 'taskstoissues' not in state['receipts']:
                 skipped.setdefault('taskstoissues', 'issue_sync.taskstoissues: off')
-        elif 'taskstoissues' in skipped and not any(
+        elif skipped.get('taskstoissues') == 'issue_sync.taskstoissues: off' and not any(
                 BASE_STAGES.index(stage) > BASE_STAGES.index('taskstoissues') for stage in state['receipts']):
+            # Only the board-mode skip follows the policy; the lite tier's skip is fixed with the tier.
             del skipped['taskstoissues']
         self.record_skipped(state, skipped)
 
@@ -842,6 +854,9 @@ class Run:
                             'recovery': recovery_recipe(self.relative, stage, {'reason': 'marked-stale',
                                                         'stale': receipt['stale']}, self.policy, receipt),
                             'next': self.next(state)}
+                checks = self.folded_ready_checks(state)
+                if checks is not None:
+                    record['checks'] = receipt['ready_checks'] = checks
                 receipt['ci_evidence'] = evidence
                 if lean_policy.enabled(self.policy, tier):
                     selected_plan = lean_policy.settings(self.policy).get('verification_plan')
@@ -989,13 +1004,14 @@ class Run:
                 require(state['issue'] == issue, 'ISSUE_BINDING_CONFLICT')
                 return state
             commands = resolve_commands(self.root, self.policy)
+            target, corrected = target_branch(self.root)
             state = {'schema_version': CHECKPOINT_SCHEMA, 'run_id': uuid.uuid4().hex,
                      'repo_identity': repo_identity(self.root),
                      'branch': git(self.root, 'branch', '--show-current'), 'feature': self.relative,
                      'issue': issue, 'policy_digest_version': POLICY_DIGEST_VERSION,
                      'policy_digest': delivery_digest(self.policy),
                      'ci_policy_digest': digest(self.policy['ci']), 'commands': commands,
-                     'policy': copy.deepcopy(self.policy), 'target_branch': previous_branch(self.root),
+                     'policy': copy.deepcopy(self.policy), 'target_branch': target,
                      # REQ-21: frozen per feature here, outside the policy cutoff; a later policy edit changes
                      # only features started after it.
                      'clarification_transport': self.policy['clarification'].get('transport', 'github-comments'),
@@ -1003,7 +1019,10 @@ class Run:
             state['dependency_digest'] = package_digest(self.root)
             self.record_skipped(state, skipped_stages(self.policy, None))
             self.save(state)
-            return state
+            warnings = [corrected] if corrected else []
+            if manual_missing(self.root, self.policy):
+                warnings.append('MANUAL_NOT_INITIALIZED: ' + MANUAL_INIT_NEXT)
+            return {**state, 'warnings': warnings} if warnings else state
 
     def record_skipped(self, state, skipped):
         """Record the stages this feature does not run (the tier's, the board mode's), once each in the log."""
@@ -1476,10 +1495,34 @@ class Run:
                 'RECEIPT_FIELD_RESERVED: ' + ', '.join(f for f in RUNTIME_RECEIPT_FIELDS if f in receipt))
         receipt = canonical_receipt(self.root, receipt)
         validate_input_roles(self.root, self.relative, stage, receipt, self.policy, tier)
+        if BASE_STAGES.index(stage) < BASE_STAGES.index('execute'):
+            # F10: a file tasks.md hands to Execute is context before Execute, whichever host wrote the receipt;
+            # as an undeclared dependency it would refuse Execute's completion.
+            tasks = self.feature / 'tasks.md'
+            text = tasks.read_text(encoding='utf-8-sig') if tasks.is_file() else ''
+            roles = receipt.get('input_roles') or {}
+            protected = set(receipt['evidence']) | set(required_inputs(self.root, self.relative, stage, tier))
+            targets = [path for path in receipt['inputs'] if path not in roles and path not in protected
+                       and not role_exempt(self.relative, path) and portable_label(path) in text]
+            if targets:
+                receipt['input_roles'] = {**roles, **{path: {'role': 'consulted', 'because': 'tasks.md assigns '
+                                                             'this file to Execute'} for path in targets}}
         for path in receipt['evidence']:
             require(inside(self.root, path).is_file(), 'EVIDENCE_MISSING: ' + path)
         validate_evidence_snapshots(self.root, receipt)
         return receipt
+
+    def folded_ready_checks(self, state):
+        """A lite feature folds Ready into Verify: Verify's completion and revalidation run the Ready checks (tasks,
+        task links, selected documentation) and record what ran. None when the feature runs its own Ready."""
+        if 'ready' not in (state.get('skipped') or {}):
+            return None
+        try:
+            return ready_checks(self.root, self.relative, self.policy, state, state.get('target_branch'))
+        except Exception as exc:  # the task parser raises the importing module's error class
+            if type(exc).__name__ != 'WorkflowError':
+                raise
+            raise WorkflowError('READY_CHECKS_FAILED: ' + str(exc)) from exc
 
     def receipt_template(self, state, stage):
         """The receipt skeleton `claim` prints: the fields `_check_receipt` and `_check_stage_rules` require for this
@@ -1541,6 +1584,17 @@ class Run:
             require(self.relative + '/tasks.md' in receipt['inputs'], 'MERGED_TASKS_REQUIRED: on the ' +
                     state_tier(state) + ' tier Plan also writes tasks.md; list ' + self.relative +
                     '/tasks.md in the receipt inputs')
+        if stage == 'plan' and 'analyze' in (state.get('skipped') or {}):
+            # Lite folds Analyze into Plan: the deterministic lint runs here, and a gap only a model Analyze could
+            # judge is fixed in the artifacts, since there is no Analyze stage to escalate to.
+            import lint  # imports this module; loaded only on this path
+            result = lint.run(self.root, self.relative, self.policy, self.tier_of(state))
+            require(result['ok'] and not result['needs_model_analyze'],
+                    'PLAN_LINT_FAILED: on this tier Plan completion runs workflow:lint (there is no Analyze stage); '
+                    'fix the owning artifact, then complete again: ' + '; '.join(
+                        f['severity'] + ' ' + f['code'] + ' ' + f['path'] + ': ' + f['message']
+                        for f in result['findings'] if f['severity'] != 'info')[:2000])
+            receipt['lint'] = {'ok': True, 'findings': len(result['findings'])}
         if stage == 'analyze' and state['commands'].get(stage) == LINT_COMMAND \
                 and receipt.get('command') != COMMANDS['analyze']:
             lint = receipt.get('lint')
@@ -1625,6 +1679,7 @@ class Run:
         self._check_stage_rules(state, stage, receipt, token, active.get('session_id'))
         if stage in SOURCE_STAGES:
             require(receipt.get('blocking_findings') == 0, 'BLOCKING_FINDINGS_REMAIN')
+        folded_ready = self.folded_ready_checks(state) if stage == 'verify' else None
         if stage == 'pr':
             require(receipt.get('images_verified') is True and receipt.get('pr_url', '').startswith('https://github.com/' + state['issue'].split('#')[0] + '/pull/'), 'PR_EVIDENCE_INCOMPLETE')
             if lean:
@@ -1686,7 +1741,33 @@ class Run:
                         inventories.append((prior, name, inventory, claim_id))
                     elif hits:
                         prior['source_fingerprints'] = inventory
+        if stage in ('qa_document', 'manual_update'):
+            # F9: this stage's declared outputs (its evidence and side effects) are not inputs of the earlier
+            # Verify and Review; their source inventories take the new hashes instead of going stale.
+            declared = {portable_label(path) for path in receipt.get('evidence', [])}
+            current = source_fingerprints(self.root)
+            outputs = {path: value for path, value in current.items()
+                       if path in declared or matches_side_effect(path, permitted)}
+            for name, prior in state['receipts'].items():
+                if name not in SOURCE_STAGES or not outputs:
+                    continue
+                pending = next((entry[2] for entry in inventories if entry[0] is prior), None)
+                inventory = pending if pending is not None else source_fingerprints_of(self.root, prior, self.relative)
+                hits = sorted(path for path, value in outputs.items() if inventory.get(path) != value)
+                if not hits:
+                    continue
+                inventory.update({path: outputs[path] for path in hits})
+                state.setdefault('lineage', []).append({'stage': stage, 'outputs_not_inputs': {
+                    name: hits}, 'at': now()})
+                if pending is not None:
+                    continue  # the side file queued above now carries these hashes too
+                if prior.get('source_inventory'):
+                    inventories.append((prior, name, inventory, claim_id))
+                else:
+                    prior['source_fingerprints'] = inventory
         stored = copy.deepcopy(receipt)
+        if folded_ready is not None:
+            stored['ready_checks'] = folded_ready
         if stage == 'pr' and lean:
             stored['pr_lint_binding'] = binding
         if stage == 'verify' and lean:
@@ -1991,6 +2072,8 @@ def run_command(args):
                                          'migrate': WORKFLOW_SCRIPT + ' migrate --feature ' + feature + ' --reason "<why>"'})
                 result['affected_features'] = affected
             result['doctor'] = doctor(root, policy)
+            if manual_missing(root, policy):
+                result['next'] = MANUAL_INIT_NEXT
         elif args.action == 'ci':
             policy = load_policy(root)
             ci = policy['ci']
@@ -2005,6 +2088,17 @@ def run_command(args):
                 for key, value in (('system_packages', args.system_packages), ('python', args.python),
                                    ('python_version', args.python_version)):
                     if value: ci['capabilities'][key] = value
+                dropped = []
+                if ci['policy'] == 'self-hosted-required':
+                    # F7: a hosted default the command did not name and no exception covers is dropped, so the
+                    # selection is one the installer can apply.
+                    documented = {entry.get('platform') for entry in ci.get('exceptions', [])}
+                    for platform, labels in list(ci['runners'].items()):
+                        if getattr(args, platform) is None and sanduq_ci.hosted(labels) and platform not in documented:
+                            require(platform != 'linux', 'CI_HOSTED_RUNNER_UNDOCUMENTED: linux runs on '
+                                    + ', '.join(labels) + '; pass --linux self-hosted,<label>')
+                            dropped.append(platform)
+                            ci['runners'].pop(platform)
                 select_gate(ci, args.gate_mode, args.gate_scope, args.gate_rule,
                             {'affected_command': args.affected_command,
                              'verification_check': args.verification_check,
@@ -2015,6 +2109,8 @@ def run_command(args):
             # The recorded selection is not live until the installer re-renders
             # each managed workflow file from it.
             result = {'ci': ci, 'saved': not args.show, 'doctor': doctor(root, policy)}
+            if not args.show and dropped:
+                result['dropped_hosted_platforms'] = dropped
         elif args.action == 'decisions':
             policy = load_policy(root)
             config = policy.setdefault('decisions', default_policy(False, False)['decisions'])
@@ -2055,6 +2151,9 @@ def run_command(args):
                 state = run.load(allow_branch_change=True)
                 result = native_run_status(root, run.relative, state, args.runs)
                 result['lean_execution'] = lean_policy.describe(run.policy, state_tier(state))
+                if state.get('active'):
+                    # A session resuming a held claim needs the receipt shape without re-claiming.
+                    result['receipt_template'] = run.receipt_template(state, state['active']['stage'])
             elif args.action == 'claim':
                 result = run.claim(read(args.usage), args.finalize, args.verbose,
                                    confirm_invalidation=args.confirm_invalidation)

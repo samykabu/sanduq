@@ -36,12 +36,27 @@ def error_rule(error):
     return next((rule for rule, codes in RULE_ERRORS.items() if code in codes), None)
 
 
-def authorized(comment, pr, policy):
+def refusal(comment, pr, policy):
+    """Why this commenter may not waive, or None when they may.
+
+    A PR author may waive only when the base branch policy lists them under
+    `decisions.self_waivers` (a one-person setup; see delivery-policy.md)."""
     user = comment.get('user') or {}
     login = str(user.get('login', '')).casefold()
-    selected = {name.casefold() for name in policy.get('decisions', {}).get('authorized_users', [])}
-    return bool(login) and user.get('type') != 'Bot' and login != pr['user']['login'].casefold() and (
-        login in selected or comment.get('author_association') in ('OWNER', 'MEMBER', 'COLLABORATOR'))
+    decisions = policy.get('decisions', {})
+    selected = {name.casefold() for name in decisions.get('authorized_users', [])}
+    if not login:
+        return 'the comment has no author'
+    if user.get('type') == 'Bot':
+        return 'written by a bot'
+    if login == pr['user']['login'].casefold():
+        if login in {name.casefold() for name in decisions.get('self_waivers', [])}:
+            return None
+        return ('written by the PR author; ask another authorized user, or in a one-person setup list '
+                'this login under decisions.self_waivers on the target branch')
+    if login in selected or comment.get('author_association') in ('OWNER', 'MEMBER', 'COLLABORATOR'):
+        return None
+    return 'not a decisions.authorized_users entry, or a repository owner, member or collaborator'
 
 
 def verify(root, pr_number, feature, rule, policy, gh=None, *, today=None):
@@ -89,9 +104,9 @@ def verify(root, pr_number, feature, rule, policy, gh=None, *, today=None):
         if expires < today:
             rejected.append(where + ': expired on ' + str(expires))
             continue
-        if not authorized(comment, pr, policy):
-            rejected.append(where + ': ' + str((comment.get('user') or {}).get('login')) + ' may not waive '
-                            '(the PR author, a bot, or not an authorized user, owner, member or collaborator)')
+        why = refusal(comment, pr, policy)
+        if why:
+            rejected.append(where + ': ' + str((comment.get('user') or {}).get('login')) + ' may not waive: ' + why)
             continue
         matches.append({'rule': rule, 'feature': feature, 'pr': int(pr_number),
                         'head_sha': head, 'reason': item['reason'],

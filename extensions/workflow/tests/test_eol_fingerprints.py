@@ -84,6 +84,29 @@ class EolFingerprintTests(unittest.TestCase):
     def test_source_inventory_matches_a_clean_lf_checkout(self):
         self.assertEqual(w.source_fingerprints(self.root), w.source_fingerprints(self.clean))
 
+    def test_inventory_side_file_and_decision_evidence_survive_an_autocrlf_checkout(self):
+        import decisions
+        import wf_fingerprints
+        feature = self.root / 'specs/1-x'
+        reference = wf_fingerprints.store_source_inventory(self.root, 'specs/1-x', 'workflow/inventory/v.json',
+                                                           {'a.py': 'f' * 64})
+        target = feature / reference['path']
+        target.write_bytes(target.read_bytes().replace(b'\n', b'\r\n'))  # what autocrlf checks out
+        self.assertEqual(wf_fingerprints.source_fingerprints_of(self.root, {'source_inventory': reference},
+                                                                'specs/1-x'), {'a.py': 'f' * 64})
+        self.assertEqual(decisions.portable_sha256(self.root, 'notes.md'), sha(b'one\ntwo\n'))
+
+    def test_decision_evidence_of_a_minus_text_file_stays_byte_exact(self):
+        import decisions
+        (self.root / '.gitattributes').write_bytes(b'raw.md -text\n')
+        (self.root / 'raw.md').write_bytes(b'one\r\ntwo\r\n')
+        git(self.root, 'add', '.gitattributes', 'raw.md')
+        git(self.root, 'commit', '-qm', 'raw')
+        recorded = decisions.portable_sha256(self.root, 'raw.md')
+        self.assertEqual(recorded, sha(b'one\r\ntwo\r\n'))
+        (self.root / 'raw.md').write_bytes(b'one\ntwo\n')  # a real byte change for a -text file
+        self.assertNotIn(decisions.portable_sha256(self.root, 'raw.md'), (recorded, sha(b'one\r\ntwo\r\n')))
+
     def test_genuinely_modified_sql_still_changes_the_fingerprint(self):
         edited = CRLF.replace(b'id int', b'id bigint')
         (self.root / 'db/schema.sql').write_bytes(edited)

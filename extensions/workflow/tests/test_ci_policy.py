@@ -456,6 +456,10 @@ class PolicyIntegrationTests(unittest.TestCase):
         reloaded = w.load_policy(self.root)['ci']
         self.assertEqual(reloaded['policy'], 'self-hosted-required')
         self.assertEqual(reloaded['capabilities']['python'], 'preinstalled')
+        # F7: the hosted windows-latest default the command did not name is dropped, not left to fail install.
+        self.assertNotIn('windows', reloaded['runners'])
+        self.assertEqual(json.loads(result.stdout)['dropped_hosted_platforms'], ['windows'])
+        self.assertEqual(w.ci_errors(self.root, w.load_policy(self.root)), [])
 
     def test_the_cli_refuses_a_selection_it_could_not_render(self):
         script = EXTENSIONS / 'workflow/scripts/workflow.py'

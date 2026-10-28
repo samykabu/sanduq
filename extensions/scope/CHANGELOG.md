@@ -1,5 +1,9 @@
 # Changelog
 
+## [1.13.1] - 2026-10-28
+
+- The gate accepts a resolved analysis whose decision evidence Workflow 1.23 recorded line-ending independent (CRLF read as LF, computed by Workflow's own evidence hash so a `-text` file stays byte exact), so a Windows checkout no longer fails with `SCOPE_RESOLVED_ANALYSIS_EVIDENCE_MISMATCH`; a raw-byte hash from an older ledger still matches.
+
 ## [1.13.0] - 2026-10-28
 
 - Python 3.11 is the declared floor (`>=3.11`, was `>=3.10`), the same in every Sanduq extension (SAMY-11).

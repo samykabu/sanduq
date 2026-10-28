@@ -194,7 +194,10 @@ CODEOWNERS and review. The `ci.gate.affected_command` hook runs from the head ch
 
 UTF-8 text fingerprints normalize CRLF across checkout platforms. Explicit Git
 `-text`, SQL, NUL-bearing and non-UTF-8 files remain byte exact; lone CR is not
-normalized. Shared QA/manual hashing follows the same contract. Generated graph
+normalized. Shared QA/manual hashing follows the same contract, and so do a
+receipt's source inventory side file (`workflow/inventory/*.json`) and decision
+evidence (`decisions.py apply --evidence`), so a `core.autocrlf=true` checkout passes
+the gate exactly as an LF checkout does. Generated graph
 files are excluded from implicit documentation input discovery but remain checked
 when explicitly declared as outputs. Revalidate affected historical receipts after
 adopting this changed contract; do not relabel old evidence.

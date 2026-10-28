@@ -52,7 +52,8 @@ AMENDMENT_DEPENDENTS = ('verify', 'review', 'ready')
 # Receipt fields only the runtime writes; a submitted receipt may not carry them.
 RUNTIME_RECEIPT_FIELDS = ('amendments', 'stale', 'head', 'source_key', 'ci_evidence', 'diff_reviewed',
                           'revalidations', 'delegation_ledger_trust', 'verification_snapshot', 'pr_lint_binding',
-                          'source_inventory', 'text_fingerprints', 'revalidated_upstream', 'self_attested')
+                          'source_inventory', 'text_fingerprints', 'revalidated_upstream', 'self_attested',
+                          'ready_checks')
 # Stages whose receipts also inventory source (`source_inventory`) and record `head` and `source_key`.
 SOURCE_STAGES = ('verify', 'review', 'ready')
 # Effort scores a Scope receipt may carry (`effort_score`), and the tier bands they map to.
@@ -61,6 +62,13 @@ TIERS = ('lite', 'standard', 'full')
 DEFAULT_PROFILES = {'lite': {'max_score': 3}, 'standard': {'max_score': 8}}
 # Stages a lite feature skips; `tasks` is merged into `plan` on lite and standard.
 LITE_SKIPPED = ('qa_analyze', 'manual_analyze', 'qa_document', 'manual_update')
+# Stages a lite feature folds into a neighbour (Workflow 1.23): recorded in `skipped` when the tier is fixed, so a
+# feature fixed earlier keeps its own list. Plan's completion runs the lint Analyze ran; Verify's completion runs
+# the Ready checks; Verify also reviews the diff; no task sub-issues.
+LITE_FOLDED = {'analyze': 'lite tier: lint runs at Plan completion',
+               'taskstoissues': 'lite tier: no task sub-issues',
+               'review': 'lite tier: Verify reviews the diff',
+               'ready': 'lite tier: Ready checks run at Verify completion'}
 LITE_OPTIONAL_INPUTS = ('research.md', 'data-model.md', 'quickstart.md')
 LINT_COMMAND = 'workflow:lint'
 ARTIFACT_BUDGETS = ('spec_kb', 'plan_kb', 'research_kb', 'tasks_detail_lines')
@@ -133,6 +141,7 @@ ERRORS = {
     'DELEGATION_NONCE_REQUIRED': ('accept, adopt, reassign or trust-reset was run without the dispatcher nonce, or with a wrong one.', "The nonce is kept outside every worker's checkout, so a worker using only what it was given cannot grade work.", 'Pass --nonce with the dispatcher_nonce a start result returned, or the contents of the file the message names'),
     'DELEGATION_SELECTION_EXISTS': ('init was given --delegate but the policy already records a different choice.', 'init never silently flips a recorded selection.', W + ' init --qa <on|off> --manual <on|off> --delegate <on|off> --replace'),
     'DELEGATION_WORKER_CONTEXT': ('A repository-identity command was run inside a delegated process tree.', 'A worker must never rebind or relocate the project it works in.', 'Run the command in the top-level session, outside any delegated run'),
+    'MANUAL_NOT_INITIALIZED': ('User Manual is selected but the project has no User-Manual/manual.yml.', 'Each feature would propose its own module map and create its own manual, and their PRs would conflict.', 'Run $speckit-user-manual-init once on the target branch, approve the module map, commit User-Manual/, then start the feature'),
     'NATIVE_ATTESTATION_FORBIDDEN': ('delegate_dispatch.py attest-native was run from a delegated worker, a subagent or a delegated orchestrator.', 'The attestation is the top-level session\'s own word; a subagent never attests itself.', 'Report the stage result to the top-level session, which runs python .specify/extensions/workflow/scripts/delegate_dispatch.py attest-native --feature <feature> --id stage:<stage> --claim-token <token> --requested-model <m> itself'),
     'NATIVE_ATTESTATION_NOT_NEEDED': ('The active claim recorded no delegation route (delegation is off, or a review-kind stage runs natively under the PH-01 interim).', 'complete accepts such a stage without any ledger attempt, so an attestation would record nothing it checks.', W + ' complete --feature <feature> --token <token> --receipt <file>'),
     'DEPENDENCY_CHANGED': ('The installed packages changed since this checkpoint was written.', 'A package change can change what stage evidence means, so it needs a reviewed migration.', W + ' migrate --feature <feature> --reason "<text>" (preview with --preview); an incomplete upgrade is finished with upgrade.py --version <v> --apply'),
@@ -191,6 +200,7 @@ ERRORS = {
     'PR_CLOSING_REFERENCE_REJECTED': ("The PR body's closing references do not match the bound issue and its prerequisites.", 'The merged PR must close exactly its own issue.', 'Fix the body, regenerate the lint file, then complete the pr stage again'),
     'PR_LINT_BODY_UNREADABLE': ('The PR body file named by the pr receipt cannot be read as UTF-8.', 'Lint recomputes from the exact sent body.', 'Save the body file as UTF-8 at the path the receipt names'),
     'PR_LINT_EVIDENCE_REQUIRED': ('The pr receipt must list distinct pr_body_file and pr_lint_file paths in its evidence.', 'The lint is verified against the body.', "Add both files to the receipt's evidence and the two fields"),
+    'PLAN_LINT_FAILED': ('On a tier without an Analyze stage, the lint that Plan completion runs reported an error or a gap only a model Analyze could judge.', 'The lite tier folds Analyze into Plan, so the artifacts must pass lint before Plan is recorded.', 'python .specify/extensions/workflow/scripts/lint.py --feature <feature>, fix each finding in the owning artifact, then complete Plan again'),
     'PR_LINT_RECEIPT_MISMATCH': ('The recorded lint file differs from the lint recomputed for the body.', 'A lint result is accepted only for the exact body sent.', 'Regenerate the lint file for the body, then complete again'),
     'PR_LINT_REPOSITORY_MISMATCH': ('The bound issue names another repository than origin.', 'PR lint is checked against this repository.', 'git remote -v; relocate the feature if the repository moved'),
     'PR_LINT_SCOPE_BINDING_MISMATCH': ('scope-source.json is bound to another issue than the checkpoint.', "Prerequisites come from Scope's binding.", 'Run Scope again for the bound issue'),
@@ -213,6 +223,7 @@ ERRORS = {
     'STAGE_ALREADY_ACTIVE': ('The feature already has an active claim.', 'One session works a stage at a time.', W + ' status --feature <feature>; recover the claim if its owner stopped'),
     'STATUS_TARGET_REQUIRED': ('status was given neither --feature nor --issue.', 'It needs one feature to report on.', W + ' status --feature specs/<slug>, or ' + W + ' status --issue <n>'),
     'STALE_RECEIPT': ("A recorded stage's inputs changed after its receipt was written.", 'Evidence must match the inputs it was produced from.', 'python .specify/extensions/workflow/scripts/gate_explain.py --feature <feature> for the exact amend or redo recipe'),
+    'TARGET_BRANCH_CORRECTED': ('start recorded the default branch of origin as the target, not the branch this one was created from.', 'Origin does not have that branch, so a PR could not target it (a clone of an empty repository sits on a local master).', 'Nothing when the default branch is meant; otherwise push the intended branch and start the feature again'),
     'WORKFLOW_BUSY': ('Another process holds the runtime lock; the message names its pid and host.', 'Two commands must not write the same checkpoint at once.', 'Wait for that process, or delete the lock once you have checked the process is gone'),
     'WORKFLOW_DOWNGRADE_UNSUPPORTED': ('upgrade.py was given a version older than the installed one.', 'Downgrades are not supported.', 'python .specify/extensions/workflow/scripts/upgrade.py --version <installed or newer> --apply'),
     'WORKFLOW_INIT_REQUIRED': ('.specify/workflow.yml does not exist.', 'Every command reads the policy.', W + ' init --qa <on|off> --manual <on|off>'),
@@ -340,7 +351,7 @@ def _no_link_below(root, parts):
 
 
 GIT_READS = ('rev-parse', 'branch', 'ls-files', 'config', 'rev-list', 'merge-base', 'check-ref-format', 'show-ref',
-             'show')
+             'show', 'symbolic-ref', 'for-each-ref')
 
 
 def run_git(root, *args, **options):

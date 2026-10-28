@@ -226,6 +226,33 @@ $speckit-memory-enable Review the renewed archiving policy and approve it.
 | Project owner type | A config from an older Init for an organization board says `ownerType: user` | Rerun `$speckit-project-init`, or set `"ownerType": "org"` |
 | Scope's `scope-gate` preset changed | A managed Specify claim is no longer told to chain Clarify | Unmanaged projects run `specify preset add` again for `scope-gate`; the Workflow installer re-adds it |
 
+## Live-run fixes and lean lite (Workflow 1.23.0)
+
+Workflow 1.23.0 fixes what the PH-04 live runs found (F2 to F10 and the low-severity findings) and makes the
+lite tier leaner. A feature whose tier is fixed as `lite` after the upgrade runs seven stages instead of eleven:
+Scope, Specify, Clarify, Plan, Execute, Verify and PR. Upgrade as usual:
+
+```bash
+python .specify/extensions/workflow/scripts/upgrade.py --version 1.23.0 --apply
+python .specify/extensions/workflow/scripts/workflow.py doctor --project
+```
+
+| Change | What you see | What to do |
+| --- | --- | --- |
+| Lite runs seven stages | `status` lists Scope, Specify, Clarify, Plan, Execute, Verify, PR; Analyze, Review, Ready and Tasks-to-Issues are under `skipped` with the reason naming where their work went | Nothing; standard and full are unchanged |
+| Lite Plan runs the lint | Plan's `complete` runs `workflow:lint` and the Plan receipt carries `lint`; an error finding or a requirement without a task is `PLAN_LINT_FAILED` | Run `lint.py --feature specs/<f>` before completing Plan and fix findings in the owning artifact |
+| Lite Verify runs the Ready checks | Verify's receipt carries the runtime-owned `ready_checks`; an unchecked task is `READY_CHECKS_FAILED: INCOMPLETE_TASKS`; after Verify, `next` says `ready_to_finalize` | Check every task before Verify, read the diff against the spec in the Verify pass, then finalize |
+| Lite has no task sub-issues | No Tasks-to-Issues stage; `task_issues.py` refuses with `TASK_ISSUES_SKIPPED`; the Ready check reports `task_links:skipped (lite tier: no task sub-issues)` | Nothing; the parent issue is the only issue |
+| Lite has no independent reviewer | The Review stage and its separate reviewer are gone on lite; Verify reviews the diff itself | Pick `standard` or `full` for a feature that needs an independent review |
+| Features whose tier was fixed earlier | A feature in flight keeps the stage list its tier was fixed with, including Review, Ready and its task sub-issues | Nothing |
+| Lite documentation and the gate | The gate's `documentation` rule reports `documentation:<script>:skipped (lite tier)` for a lite feature; a hand-added `skipped` entry on a standard or full feature relaxes nothing | Nothing |
+| Waivers by the PR author | A waiver comment by the PR author is rejected with the reason `written by the PR author`; the guard hook refuses a `gh`, `curl` or `wget` command carrying a `sanduq-gate-waiver` marker | In a one-person setup, list the owner under `decisions.self_waivers` in a policy-only PR to the base branch |
+| Late decisions | Recording a decision late (for example the User Manual module map SD1) no longer stales earlier receipts or fails Execute with `UPSTREAM_INPUT_CHANGED_DURING_STAGE`; a changed answer to a decision a receipt saw still stales it | Nothing |
+| User Manual not initialised | With User Manual selected and no `User-Manual/manual.yml`, `init` names `$speckit-user-manual-init` and `start` warns `MANUAL_NOT_INITIALIZED` | Run the manual init once on the target branch, approve the module map and commit `User-Manual/` |
+| Target branch corrected | When origin lacks the branch the feature was created from, `start` records origin's default branch and warns `TARGET_BRANCH_CORRECTED` | Check the recorded target; push the branch first if you meant it |
+| Self-hosted `ci` command | Under `policy: self-hosted-required`, `workflow.py ci` drops each GitHub-hosted runner set the command did not name and lists it in `dropped_hosted_platforms`; an unnamed hosted Linux set is `CI_HOSTED_RUNNER_UNDOCUMENTED` | Name every platform you run, or add a `ci.exceptions` entry |
+| `status` shows a held claim's receipt template | `status` prints `receipt_template` while a claim is active | Use it to finish a claim resumed in a new session |
+
 ## PH-04 train (Workflow 1.22.0)
 
 The train ships Workflow 1.22.0, Scope 1.13.0, Assure 2.7.0, Memory 2.6.1, Illustrate 2.7.3, PR 4.7.1,

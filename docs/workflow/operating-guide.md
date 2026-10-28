@@ -127,7 +127,8 @@ scope:
 
 - `profiles`: the Scope receipt's `effort_score` picks `lite`, `standard` or `full` when Plan is
   first claimed. Lite and standard merge Tasks into Plan and run Analyze as `workflow:lint`;
-  lite also skips the QA and manual stages. See [profiles and tiers](stages.md#profiles-and-tiers).
+  lite runs seven stages (Analyze folded into Plan, Review and Ready into Verify, no task
+  sub-issues, no QA or manual stages). See [profiles and tiers](stages.md#profiles-and-tiers).
 - `clarification.max_questions_per_round`: questions may carry a `priority` (1 is most
   important); a larger round fails with `CLARIFICATION_TOO_MANY_QUESTIONS` naming the keys to
   defer.

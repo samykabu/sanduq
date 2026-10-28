@@ -283,6 +283,9 @@ changed.
   undeclared role for any input outside `specs/<feature>/` and
   `.specify/memory/`. Changing it is a policy change that invalidates no
   completed receipt; run `migrate` once to record the new policy digest.
+  Before Execute, `complete` records an input without a role as consulted
+  when the feature's `tasks.md` names it (a file Execute will change), so
+  Execute is not refused whichever host wrote the earlier receipt.
 - **Assessed amendments.** `workflow.py amend --feature specs/<feature> --stage
   <stage> --evidence <path> --reason "<why>" --assessment unchanged|changed`
   re-hashes that one evidence entry of that receipt and appends

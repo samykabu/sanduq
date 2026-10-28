@@ -222,6 +222,9 @@ class Bench:
         """Claim the next stage and complete it; returns the claimed stage or None."""
         usage = self.file('usage.json', USAGE)
         claim = self.cli(phase, 'claim', '--usage', usage, *(['--finalize'] if finalize else []))
+        if not finalize and claim.get('status') == 'ready_to_finalize':
+            # A tier without a Ready stage (lite since Workflow 1.23) reaches finalize straight from Verify.
+            claim = self.cli(phase, 'claim', '--usage', usage, '--finalize')
         stage = claim.get('stage')
         self.commands[-1]['stage'] = stage
         if not stage:

@@ -244,7 +244,7 @@ class TierTests(Base):
         error, _ = self.plan_claim_with_scope_source({'repo': 'acme/app', 'issue': 10}, ['bug'])
         self.assertIn('EFFORT_SCORE_UNVERIFIED: acme/app#10 carries 0 effort:<n> labels', str(error))
 
-    def test_lite_freezes_profile_merges_tasks_skips_stages_and_runs_lint(self):
+    def test_lite_freezes_profile_merges_tasks_and_folds_analyze_into_plan(self):
         self.profiles()
         run = self.run_object()
         self.advance(run, 'clarify', {'scope': self.scope_receipt(2)})
@@ -253,28 +253,54 @@ class TierTests(Base):
         self.assertEqual((claim['stage'], claim['merged']), ('plan', ['tasks']))
         state = run.load()
         self.assertEqual((state['profile']['tier'], state['profile']['score']), ('lite', 2))
-        self.assertEqual(set(state['skipped']), {'tasks', 'qa_analyze', 'manual_analyze', 'qa_document', 'manual_update'})
-        self.assertEqual(state['commands']['analyze'], w.LINT_COMMAND)
+        self.assertEqual(set(state['skipped']), {'tasks', 'qa_analyze', 'manual_analyze', 'qa_document', 'manual_update',
+                                                 'analyze', 'taskstoissues', 'review', 'ready'})
+        self.assertEqual(state['skipped']['ready'], 'lite tier: Ready checks run at Verify completion')
         self.assertIn('environment', claim)  # lean execution defaults on for lite
         skipped = [e['stage'] for e in self.events(run) if e['event'] == 'skipped']
         self.assertEqual(set(skipped), set(state['skipped']))
         with self.assertRaisesRegex(w.WorkflowError, 'MERGED_TASKS_REQUIRED'):
             run.complete(claim['token'], self.receipt('plan'))
         result = run.complete(claim['token'], self.merged_plan_receipt())
-        self.assertEqual((result['stage'], result['command']), ('analyze', w.LINT_COMMAND))
+        # No Analyze stage: Plan's completion ran the lint and recorded it.
+        self.assertEqual((result['stage'], result['command']), ('execute', 'speckit.implement'))
         self.assertEqual(result['skipped'], state['skipped'])
-        # Lite: research.md is optional, so it is not a required input of later stages.
-        self.assertNotIn(self.feature + '/research.md', w.required_inputs(self.root, self.feature, 'analyze'))
-        self.assertIn(self.feature + '/research.md', w.required_inputs(self.root, self.feature, 'analyze', 'full'))
-        claim = run.claim(self.usage())
-        with self.assertRaisesRegex(w.WorkflowError, 'LINT_RECEIPT_REQUIRED'):
-            run.complete(claim['token'], self.receipt('analyze'))
-        run.complete(claim['token'], self.lint_receipt())
         state = run.load()
-        self.assertEqual(state['receipts']['analyze']['command'], w.LINT_COMMAND)
-        self.assertEqual(state['stage_plan']['stages'], w.stages(self.policy, 'lite'))
-        self.assertEqual(run.next(state)['stage'], 'taskstoissues')
+        self.assertEqual(state['receipts']['plan']['lint'], {'ok': True, 'findings': 1})  # one warning, non-blocking
+        # Lite: research.md is optional, so it is not a required input of later stages.
+        self.assertNotIn(self.feature + '/research.md', w.required_inputs(self.root, self.feature, 'execute'))
+        self.assertIn(self.feature + '/research.md', w.required_inputs(self.root, self.feature, 'execute', 'full'))
+        self.assertEqual(state['stage_plan']['stages'], ['scope', 'specify', 'clarify', 'plan', 'execute', 'verify', 'pr'])
+        self.assertEqual(state['stage_plan']['stages'], w.stages(self.policy, 'lite', state['skipped']))
         checkpoint_validator().validate(state)
+
+    def test_lite_plan_completion_refuses_a_failing_lint(self):
+        self.profiles()
+        self.write(self.feature + '/spec.md', '# Spec\n\n- **FR-001**: The parser accepts input.\n- **FR-002**: It rejects '
+                                              'empty input.\n')
+        run = self.run_object()
+        self.advance(run, 'clarify', {'scope': self.scope_receipt(2)})
+        claim = run.claim(self.usage())
+        self.write(self.feature + '/tasks.md', '## Phase 1\n- [ ] T001 Implement FR-001 parser input\n')
+        receipt = self.receipt('plan')
+        receipt['inputs'] += [self.feature + '/tasks.md']
+        with self.assertRaisesRegex(w.WorkflowError, r'^PLAN_LINT_FAILED: .*FR-002'):
+            run.complete(claim['token'], receipt)
+        self.write(self.feature + '/tasks.md', '## Phase 1\n- [ ] T001 Implement FR-001 and FR-002 parser input\n')
+        self.assertEqual(run.complete(claim['token'], receipt)['stage'], 'execute')
+
+    def test_standard_keeps_its_analyze_stage(self):
+        self.profiles()
+        run = self.run_object()
+        self.advance(run, 'clarify', {'scope': self.scope_receipt(5)})
+        claim = run.claim(self.usage())
+        run.complete(claim['token'], self.merged_plan_receipt())
+        state = run.load()
+        self.assertNotIn('lint', state['receipts']['plan'])
+        self.assertEqual(set(state['skipped']), {'tasks'})
+        self.assertIn('analyze', state['stage_plan']['stages'])
+        self.assertIn('review', state['stage_plan']['stages'])
+        self.assertIn('ready', state['stage_plan']['stages'])
 
     def test_lint_resolved_analyze_also_accepts_a_model_analyze(self):
         self.profiles()
@@ -985,17 +1011,19 @@ class BindOnlyAndLazyIssueTests(Base):
 
 
 class LintRecordEndToEndTests(Base):
-    def test_lint_record_completes_analyze_on_a_lite_feature(self):
+    def test_lint_record_completes_analyze_on_a_standard_feature(self):
+        # Lite folds Analyze into Plan; standard records it through lint.py --record.
         self.profiles()
         self.write(self.feature + '/spec.md', '# Spec\n\n## Requirements\n\n- **FR-001**: The parser accepts input.\n')
         run = self.run_object()
-        self.advance(run, 'clarify', {'scope': self.scope_receipt(2)})
+        self.advance(run, 'clarify', {'scope': self.scope_receipt(5)})
         claim = run.claim(self.usage())
         self.assertEqual((claim['stage'], claim['merged']), ('plan', ['tasks']))
         self.write(self.feature + '/tasks.md', '# Tasks\n\n## Phase 1: Setup\n\n- [x] T001 Implement FR-001 parser input\n')
         receipt = self.receipt('plan')
         receipt['inputs'] = receipt['inputs'] + [self.feature + '/tasks.md']
         run.complete(claim['token'], receipt)
+        self.advance_fresh(run, 'manual_analyze')
         claim = run.claim(self.usage())
         self.assertEqual((claim['stage'], claim['command']), ('analyze', w.LINT_COMMAND))
         done = subprocess.run([sys.executable, str(SCRIPT.parent / 'lint.py'), '--root', str(self.root), '--feature',
@@ -1105,3 +1133,77 @@ class LocalTransportTests(Base):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class LeanLiteTests(Base):
+    """Workflow 1.23: lite folds Review and Ready into Verify and has no task sub-issues."""
+
+    def lite_through_execute(self):
+        self.profiles()
+        run = self.run_object()
+        self.advance(run, 'clarify', {'scope': self.scope_receipt(2)})
+        claim = run.claim(self.usage())
+        run.complete(claim['token'], self.merged_plan_receipt())
+        self.advance_fresh(run, 'execute')
+        return run
+
+    def test_verify_completion_runs_the_ready_checks_then_finalizes(self):
+        run = self.lite_through_execute()
+        claim = run.claim(self.usage())
+        self.assertEqual(claim['stage'], 'verify')
+        self.write(self.feature + '/tasks.md', '## Phase 1\n- [ ] T001 Done behavior\n')
+        with self.assertRaisesRegex(w.WorkflowError, '^READY_CHECKS_FAILED: INCOMPLETE_TASKS'):
+            run.complete(claim['token'], self.receipt('verify'))
+        self.write(self.feature + '/tasks.md', '## Phase 1\n- [x] T001 Done behavior\n')
+        result = run.complete(claim['token'], self.receipt('verify'))
+        self.assertEqual(result['status'], 'ready_to_finalize')
+        checks = run.load()['receipts']['verify']['ready_checks']
+        self.assertEqual(checks, ['tasks', 'task_links:skipped (lite tier: no task sub-issues)',
+                                  'documentation:assure_state:skipped (lite tier)',
+                                  'documentation:manual_state:skipped (lite tier)'])
+        claim = run.claim(self.usage(), finalize=True)
+        self.assertEqual(claim['stage'], 'pr')
+
+    def test_ready_checks_is_a_runtime_field(self):
+        run = self.lite_through_execute()
+        claim = run.claim(self.usage())
+        receipt = self.receipt('verify')
+        receipt['ready_checks'] = ['tasks']
+        with self.assertRaisesRegex(w.WorkflowError, 'RECEIPT_FIELD_RESERVED: ready_checks'):
+            run.complete(claim['token'], receipt)
+
+    def test_documentation_checks_still_run_where_the_tier_does_not_skip_the_stage(self):
+        rules = {'tasks': False, 'task_links': False, 'documentation': True}
+        hand_added = {'qa_document': 'lite tier', 'manual_update': 'lite tier'}
+        for state in ({'skipped': {}}, {'profile': {'tier': 'standard'}, 'skipped': hand_added}):
+            with self.assertRaisesRegex(w.WorkflowError, 'SELECTED_PROCESS_MISSING'):
+                w.ready_checks(self.root, self.feature, self.policy, state, rules=rules)
+        state = {'profile': {'tier': 'lite'}, 'skipped': hand_added}
+        self.assertEqual(w.ready_checks(self.root, self.feature, self.policy, state,
+                                        rules={'tasks': False, 'task_links': False, 'documentation': True}),
+                         ['documentation:assure_state:skipped (lite tier)', 'documentation:manual_state:skipped (lite tier)'])
+
+    def test_the_lite_task_issue_skip_survives_the_board_policy(self):
+        run = self.lite_through_execute()
+        self.assertEqual(run.load()['skipped']['taskstoissues'], 'lite tier: no task sub-issues')
+        self.policy['issue_sync']['taskstoissues'] = 'off'
+        self.configure()
+        self.assertEqual(w.Run(self.root, self.feature).load()['skipped']['taskstoissues'], 'lite tier: no task sub-issues')
+
+    def test_task_issues_refuses_a_feature_that_skips_tasks_to_issues(self):
+        self.lite_through_execute()
+        done = subprocess.run([sys.executable, str(SCRIPT.parent / 'task_issues.py'), '--root', str(self.root),
+                               '--feature', self.feature, '--parent', '10', '--sync-states', '--summary'],
+                              capture_output=True, text=True, encoding='utf-8', env=clean_env())
+        self.assertEqual(done.returncode, 1, done.stdout + done.stderr)
+        self.assertIn('TASK_ISSUES_SKIPPED: ' + self.feature + ' skips Tasks-to-Issues (lite tier: no task sub-issues)',
+                      done.stdout)
+
+    def test_status_prints_the_receipt_template_of_a_held_claim(self):
+        self.profiles()
+        run = self.run_object()
+        run.claim(self.usage())
+        code, result = self.cli('status', '--feature', self.feature)
+        self.assertEqual(code, 0, result)
+        self.assertEqual(result['receipt_template']['stage'], 'scope')
+        self.assertIn('effort_score', result['receipt_template'])

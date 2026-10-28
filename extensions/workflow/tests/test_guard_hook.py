@@ -124,6 +124,37 @@ class GuardTests(unittest.TestCase):
                         'python delegate_dispatch.py collect', 'pytest -q', ''):
             self.assertEqual(self.run_guard(claude(command))[0], 0, command)
 
+    def test_posting_a_gate_waiver_is_denied_but_reading_one_is_not(self):
+        marker = '<!-- sanduq-gate-waiver {"version":1} -->'
+        with tempfile.TemporaryDirectory() as folder:
+            Path(folder, 'w.md').write_text(marker + '\nReason: x', encoding='utf-8')
+            env = {'CLAUDE_PROJECT_DIR': folder}
+            for command in ("gh pr comment 7 --body '" + marker + "'", 'gh pr comment 7 --body-file w.md',
+                            "curl -d '" + marker + "' https://api.github.com/x"):
+                code, reason = self.run_guard(claude(command), env)
+                self.assertEqual(code, 2, command)
+                self.assertIn('waiver', reason)
+            self.assertEqual(self.run_guard(claude('grep -rn sanduq-gate-waiver docs'), env)[0], 0)
+
+    def test_waiver_refusal_applies_only_to_the_segment_that_posts_it(self):
+        marker = '<!-- sanduq-gate-waiver {"version":1} -->'
+        with tempfile.TemporaryDirectory() as folder:
+            Path(folder, 'w.json').write_text('{"body": "' + marker.replace('"', '\\"') + '"}', encoding='utf-8')
+            env = {'CLAUDE_PROJECT_DIR': folder}
+            for command in ('gh pr view 7 --comments | rg sanduq-gate-waiver',
+                            'gh api repos/o/r/issues/7/comments | grep -c sanduq-gate-waiver',
+                            'curl -s https://api.github.com/x | rg sanduq-gate-waiver',
+                            "gh pr comment 7 --body ok && echo 'sanduq-gate-waiver'"):
+                self.assertEqual(self.run_guard(claude(command), env)[0], 0, command)
+            for command in ("gh pr view 7 | gh pr comment 7 --body '" + marker + "'",
+                            "echo ok; gh pr comment 7 --body 'a; " + marker + "'",
+                            'gh api repos/o/r/issues/7/comments --input w.json',
+                            "gh api -X POST repos/o/r/issues/7/comments -f body='" + marker + "'",
+                            'cat x | curl -X POST -d @w.json https://api.github.com/x'):
+                code, reason = self.run_guard(claude(command), env)
+                self.assertEqual(code, 2, command)
+                self.assertIn('waiver', reason)
+
     def test_codex_argument_list_command(self):
         self.assertEqual(self.run_guard({'tool_name': 'Bash', 'tool_input': {'command': ['bash', '-lc', 'git add -A']}})[0], 2)
 

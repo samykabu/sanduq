@@ -39,7 +39,7 @@ describe their shape.
 | `artifacts` | Optional. `budgets` (`spec_kb`, `plan_kb`, `research_kb`, `tasks_detail_lines`) checked by `workflow:lint`, and `enforce` (`lite-standard`, `all` or `warn`). |
 | `project_sync.points` | Optional list of stages at which Project Sync runs: `specify`, `plan`, `analyze`, `taskstoissues`, `execute`, `pr`. Absent means all six. |
 | `scope.board_cache_seconds` | Optional Scope board cache TTL in seconds (default 300, 0 disables). |
-| `decisions` | Optional. Stage-neutral GitHub issue decisions: `transport` (`github-issue`), `authorized_users`, `project_field`, and optional `lifecycle_status` (boolean, default true). Omitted in older policies. |
+| `decisions` | Optional. Stage-neutral GitHub issue decisions: `transport` (`github-issue`), `authorized_users`, `project_field`, optional `lifecycle_status` (boolean, default true), and optional `self_waivers` (logins whose CI gate waiver is accepted on a PR they authored; a one-person setup, see delivery-policy.md). Omitted in older policies. |
 | `context` | `mode` (`strict`, `measured-only` or `measured-with-estimated-fallback`), `max_fraction`, `checkpoint_fraction`, `reserve_fraction`. See [Context](stages.md#context). |
 | `finalize` | Fixed: `{"create_pr": true, "merge": false}`. The dispatcher opens a PR and never merges. |
 | `delegation` | Optional. See below and [delegation](delegation.md). Absent legacy policies default to disabled. |
@@ -89,7 +89,7 @@ checkpoint. Scope reads both.
 | --- | --- |
 | `repo_identity` | Portable repository identity (1.8.0+): `remote`, `root_commit` and `shallow`. See [Checkpoint identity](state-files.md#checkpoint-identity-and-relocating-a-repository-180). |
 | `repo_path` | Version 1 only: the legacy absolute root. Never compared by 1.8.0+; `relocate` records a pre-1.8.0 value as `old_identity.legacy_repo_path`. |
-| `branch`, `target_branch` | The bound feature branch and its target. |
+| `branch`, `target_branch` | The bound feature branch and its target: the branch it was created from, or origin's default branch when origin does not have that one (`start` then warns `TARGET_BRANCH_CORRECTED`, for example after cloning an empty repository onto a local `master` and pushing `main`). |
 | `issue` | The bound GitHub issue. |
 | `policy_digest`, `dependency_digest` | Fingerprints compared on load. A changed dependency digest makes `claim` refuse with `DEPENDENCY_CHANGED` until you run `migrate`. |
 | `commands` | Map of stage to the resolved command selected for it. |
@@ -119,7 +119,8 @@ or `pr`.
 Stage-specific fields include `unresolved`, `answers_applied`, `blocking_findings`,
 `native_links_verified`, `parent_issue`, `images_verified`, `pr_url`, `effort_score` (Scope; one of
 1, 2, 3, 5, 8, 13, 21, required when profiles are enabled), `lint` (`{ok, findings}`, Analyze
-recorded as `workflow:lint`) and `lazy` (Tasks-to-Issues under `phase-lazy`).
+recorded as `workflow:lint`, or Plan on the lite tier, where the runtime writes it) and `lazy`
+(Tasks-to-Issues under `phase-lazy`).
 
 Optional fields added in 1.6.0 and later (all backward-compatible):
 
@@ -136,6 +137,7 @@ Optional fields added in 1.6.0 and later (all backward-compatible):
 | `ci_evidence` | Written only by `revalidate --stage verify --check-run`: `run_id`, `attempt`, `head`, `source_key`, `tier`, `lanes`, `required_lanes`, `lane_gap`, `conclusion` (`success`), and run metadata. |
 | `diff_reviewed` | Written only by `revalidate --stage review --diff-reviewed`: `evidence`, `base`, `head`, `hash`, `diff_sha256`, `reviewer`, `at`. |
 | `revalidations[]` | Checked revalidations after source drift. |
+| `ready_checks` | Runtime only. Lite Verify: the Ready checks its completion or `revalidate --stage verify` ran (`tasks`, `task_links:skipped (...)`, `documentation:<script>[:skipped (...)]`). |
 | `delegation_ledger_trust` | `trusted` or `unverified-local`, recorded when a delegated stage completes. |
 
 The rules behind these fields are in [Receipt contract](state-files.md#receipt-contract-160) and

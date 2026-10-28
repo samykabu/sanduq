@@ -10,8 +10,8 @@ import lean_policy
 import verification_plan
 import yaml
 from pathlib import Path
-from wf_core import (SCHEMA, BASE_STAGES, RECEIPT_POLICY_KEYS, DEFAULT_PROFILES, LITE_SKIPPED, ARTIFACT_BUDGETS,
-                     ARTIFACT_ENFORCE, PROJECT_SYNC_PHASES, PROJECT_SYNC_POINTS, DEFAULT_SYNC_STATE, TASK_ISSUE_MODES,
+from wf_core import (SCHEMA, BASE_STAGES, RECEIPT_POLICY_KEYS, DEFAULT_PROFILES, LITE_SKIPPED, LITE_FOLDED,
+                     ARTIFACT_BUDGETS, ARTIFACT_ENFORCE, PROJECT_SYNC_PHASES, PROJECT_SYNC_POINTS, DEFAULT_SYNC_STATE, TASK_ISSUE_MODES,
                      PROJECT_SYNC_MODES, MINIMAL_SYNC_PHASES, SIDE_EFFECTS, WORKFLOW_SCRIPT, WorkflowError, require,
                      portable_label)
 from wf_fingerprints import sync_state_label
@@ -91,7 +91,7 @@ POLICY_KEYS = {
     'providers': ('clarification', 'tasks'),
     'issue_sync': ('taskstoissues', 'parent_link'),
     'clarification': ('transport', 'resume_on_reinvoke', 'max_questions_per_round', 'in_session_first_round'),
-    'decisions': ('transport', 'authorized_users', 'project_field', 'lifecycle_status'),
+    'decisions': ('transport', 'authorized_users', 'project_field', 'lifecycle_status', 'self_waivers'),
     'context': ('mode', 'max_fraction', 'checkpoint_fraction', 'reserve_fraction'),
     'finalize': ('create_pr', 'merge'),
     'updates': ('policy',),
@@ -178,9 +178,10 @@ def validate_policy(policy, root=None):
     if decisions is not None:
         require(isinstance(decisions, dict) and decisions.get('transport') == 'github-issue',
                 'DECISION_POLICY_INVALID')
-        users = decisions.get('authorized_users')
-        require(isinstance(users, list) and all(isinstance(user, str) and user.strip() for user in users)
-                and len({user.casefold() for user in users}) == len(users), 'DECISION_AUTHORITY_INVALID')
+        for key in ('authorized_users', 'self_waivers'):
+            users = decisions.get(key, [] if key == 'self_waivers' else None)
+            require(isinstance(users, list) and all(isinstance(user, str) and user.strip() for user in users)
+                    and len({user.casefold() for user in users}) == len(users), 'DECISION_AUTHORITY_INVALID: ' + key)
         require(isinstance(decisions.get('project_field'), str) and decisions['project_field'].strip(),
                 'DECISION_FIELD_INVALID')
         require(type(decisions.get('lifecycle_status', True)) is bool, 'DECISION_LIFECYCLE_INVALID')
@@ -317,6 +318,7 @@ def skipped_stages(policy, tier_name):
         skipped['tasks'] = 'merged into plan (' + tier_name + ' tier)'
     if tier_name == 'lite':
         skipped.update({stage: 'lite tier' for stage in LITE_SKIPPED if stage in stages(policy)})
+        skipped.update(LITE_FOLDED)  # the tier's reason wins over the board's, so it survives a board switch
     return skipped
 
 

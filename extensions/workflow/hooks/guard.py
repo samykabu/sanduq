@@ -18,6 +18,10 @@
   (no lint receipt can cover it); `gh pr create` is refused when its head
   (`--head`, else the current branch) is the repository default branch (`origin/HEAD`), in every
   project. An unresolvable branch allows.
+- A `gh`/`curl`/`wget` command that posts content (a comment, review, PR/issue body, `gh api` fields or input,
+  a curl/wget request body or a POST/PATCH/PUT) and carries a `sanduq-gate-waiver` marker in its own arguments or
+  in a file it names (`--body-file`, `-F`, `--input`, `@file`) is refused in every session: a waiver is the
+  owner's word, never the agent's (delivery-policy.md). Reading or grepping for the marker stays allowed.
 
 Reads the hook payload (JSON) on stdin. Both hosts send ``tool_name`` and
 ``tool_input.command``; Codex may send the command as an argument list. Exit 2
@@ -38,6 +42,10 @@ DISPATCHER_ONLY = {'trust-reset', 'accept', 'reassign', 'adopt'}
 TOP_LEVEL_ONLY = {'attest-native'}
 # Read-only stash subcommands hide nothing.
 STASH_READ_ONLY = {'list', 'show'}
+WAIVER_MARKER = 'sanduq-gate-waiver'
+SEND_METHODS = {'POST', 'PATCH', 'PUT'}
+WAIVER_REASON = ('a CI gate waiver is the owner decision; an agent may not post one. Ask the owner to post '
+                 'it (docs/workflow/delivery-policy.md, One-off rule waiver)')
 BY_NAME = 'stage your owned paths by name (git add -- <path>...)'
 SEPARATORS = re.compile(r'&&|\|\||[;|&\n]')
 
@@ -130,9 +138,70 @@ def git_args(tokens):
     return rest
 
 
+def shell_segments(command):
+    """Token lists of each pipeline/sequence segment, splitting only on separators outside quotes."""
+    try:
+        lexer = shlex.shlex(command, posix=True, punctuation_chars=';&|()\n')
+        lexer.whitespace, lexer.whitespace_split = ' \t\r', True
+        tokens = list(lexer)
+    except ValueError:
+        return [words(segment.strip()) for segment in SEPARATORS.split(command)]
+    segments, current = [], []
+    for token in tokens:
+        if token and set(token) <= set(';&|()\n'):
+            segments.append(current)
+            current = []
+        else:
+            current.append(token)
+    return segments + [current]
+
+
+def method_sends(args):
+    """True when ``-X``/``--method``/``--request`` (``-XPOST`` too) names POST, PATCH or PUT."""
+    method = option(args, '-X', '--method', '--request')
+    method = method or next((a[2:] for a in args if a.startswith('-X') and len(a) > 2), None)
+    return (method or '').upper() in SEND_METHODS
+
+
+def posts_waiver(tokens, root):
+    """True when this segment is a gh/curl/wget call that sends content carrying the waiver marker."""
+    while tokens and re.fullmatch(r'[A-Za-z_][A-Za-z0-9_]*=.*', tokens[0]):
+        tokens = tokens[1:]  # VAR=value prefixes
+    name = re.sub(r'\.exe$', '', os.path.basename(tokens[0]).lower()) if tokens else ''
+    args = tokens[1:]
+    if name == 'gh':
+        sends = (args[:2] in (['pr', 'comment'], ['issue', 'comment'], ['pr', 'review'], ['pr', 'create'],
+                              ['pr', 'edit'], ['issue', 'create'], ['issue', 'edit']) or
+                 args[:1] == ['api'] and (method_sends(args) or any(
+                     a in ('-f', '-F', '--field', '--raw-field', '--input') or
+                     a.startswith(('--field=', '--raw-field=', '--input=')) for a in args)))
+    elif name in ('curl', 'wget'):
+        sends = method_sends(args) or any(
+            a in ('-d', '-F', '-T', '--form', '--upload-file') or re.match(r'-[dF].|--(data|form|post-|body-)', a)
+            for a in args)
+    else:
+        return False
+    if not sends:
+        return False
+    if any(WAIVER_MARKER in a for a in args):
+        return True
+    files = [option(args, '--body-file', '-F', '--input', '--upload-file', '-T', '--post-file')]
+    files += [m.group(1) for m in (re.match(r'(?:-d|[^@]*=)?@(.+)', a) for a in args) if m]  # @f, -d@f, k=@f
+    for path in filter(None, files):
+        try:
+            with open(os.path.join(root, path), encoding='utf-8', errors='replace') as stream:
+                if WAIVER_MARKER in stream.read():
+                    return True
+        except OSError:
+            pass
+    return False
+
+
 def findings(command, root='.'):
-    """(kind, reason) for each guarded command in ``command``; kind is 'git', 'ledger', 'fallback' or 'pr'."""
+    """(kind, reason) for each guarded command in ``command``; kind is 'git', 'ledger', 'fallback', 'pr' or 'waiver'."""
     found = []
+    if any(posts_waiver(tokens, root) for tokens in shell_segments(command)):
+        found.append(('waiver', WAIVER_REASON))
     for segment in SEPARATORS.split(command):
         tokens = words(segment.strip())
         found += pr_findings(tokens, root)
@@ -184,7 +253,7 @@ def main(stdin=sys.stdin, environ=os.environ):
         if kind == 'ledger' and worker_context(payload, environ):
             sys.stderr.write('Sanduq guard: ' + text + '.\n')
             return 2
-        if kind == 'pr':
+        if kind in ('pr', 'waiver'):
             sys.stderr.write('Sanduq guard: ' + text + '.\n')
             return 2
     return 0

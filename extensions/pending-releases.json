@@ -1,6 +1,9 @@
 {
   "schema_version": 1,
-  "versions": {},
-  "status": "released",
-  "note": "Workflow 1.22.1 hotfix: the consumer evidence gate workflow loads again (no arithmetic in its checkout step). Found by the PH-04 live run; policy and gate tests passed locally. Release remains gated by successful CI on the exact main commit."
+  "versions": {
+    "workflow": "1.23.0",
+    "scope": "1.13.1"
+  },
+  "status": "ready",
+  "note": "Workflow 1.23.0 and Scope 1.13.1: fixes for the PH-04 live-run findings F2 to F10 (plus seven low ones) and the lean lite tier (7 stages). Every suite passed on the merged tree locally. Release remains gated by successful CI on the exact main commit."
 }

@@ -21,6 +21,10 @@ documentation tasks are done (`sync_states()` already walks every task in
 `tasks.md`). Never infer human-review completion from generated evidence: a
 human-review task's issue closes only on the human's own signal.
 
+A feature that skips Tasks-to-Issues (`status` lists it under `skipped`: the lite tier, or
+`issue_sync.taskstoissues: off`) has no task issues: make no `task_issues.py` call
+(`TASK_ISSUES_SKIPPED`, `TASK_ISSUES_OFF`).
+
 With `issue_sync.taskstoissues: phase-lazy`, publish each phase's task issues at its start:
 `task_issues.py --feature ... --parent ... --phase "<Phase heading>"` dry run, then the same with
 `--apply --summary`. While a later phase has no issues yet, `--sync-states` refuses with

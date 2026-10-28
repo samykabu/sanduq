@@ -196,7 +196,10 @@ them. A failed install rolls them back.
   (`SANDUQ_DELEGATED_RUN` set) or `SANDUQ_ROLE=worker`. Your top-level session runs them as before.
   The installer merges its one entry into the hook file and keeps your other settings and hooks.
   Codex runs project hooks only in a trusted project after you approve them: open Codex in the
-  project, run `/hooks` and approve the Sanduq guard. The installer writes `python` on Windows and
+  project, run `/hooks` and approve the Sanduq guard. A headless `codex exec` cannot approve hooks;
+  automation runs it with `--dangerously-bypass-hook-trust`, and doctor keeps warning
+  `GUARD_HOOK_UNAPPROVED`. Codex also loads user-global plugins and skills (`~/.codex`), which can
+  change a managed run; use a clean `CODEX_HOME` for reproducible runs. The installer writes `python` on Windows and
   `python3` elsewhere into the hook command, so that name must be on `PATH`; without the installed
   guard script the hook allows everything. The guard is advisory: it sees only the host's shell
   tools, so a script, an alias or another tool bypasses it. See

@@ -23,6 +23,9 @@ required artifacts always are). Without it every input is a dependency. A change
 stales the receipt (`UPSTREAM_INPUT_CHANGED_DURING_STAGE` later); a changed consulted input is
 `advisory_drift` to reread. `receipts.require_input_roles: true` requires a role for inputs
 outside `specs/<feature>/` and `.specify/memory/`.
+Before Execute, a source file that Execute will change is never a dependency: leave it out of
+`inputs` or give it the consulted role. The runtime records an input without a role as consulted
+when the feature's tasks.md names it, on every host.
 
 ## Side effects
 
@@ -31,3 +34,6 @@ them (Clarify: `spec.md`, the configured Project Sync state file, `checklists/*.
 lineage records each change. Changing any other upstream input during the claim refuses the
 completion. The state file counts as changed only when the bound feature's binding changes, never
 for a status write ([dispatcher-operations.md](dispatcher-operations.md#project-sync-and-task-issue-sync)).
+QA Document and Manual Update outputs (the receipt's `evidence` and the stage's side effects, such as
+`qa/*.html` and `.github/memory/project-memory.md`) are not inputs of the earlier Verify and Review:
+their source inventories take the new hashes (lineage `outputs_not_inputs`) instead of going stale.

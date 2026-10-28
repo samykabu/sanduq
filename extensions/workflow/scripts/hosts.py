@@ -586,6 +586,9 @@ def switch(root, target, preview=False, runner=None, package_root=None, replace_
                       'dependency_digest': {'before': digest_before, 'after': digest_after,
                                             'changed': digest_after != digest_before},
                       'checkpoints_to_migrate': migrations(root, digest_after, False, reason, digest_before)}
+            if result['checkpoints_to_migrate']:  # F11: name the step a user would otherwise skip
+                result['next'] = ('Migrate each feature in checkpoints_to_migrate before continuing it, for example: '
+                                  + '; '.join(result['checkpoints_to_migrate'][0]['commands']))
             write(backup / 'result.json', {'ok': True, 'commands': log})
             result['backups'] = prune_backups(root)
             clear_in_progress(root)

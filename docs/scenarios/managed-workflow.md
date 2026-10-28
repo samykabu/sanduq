@@ -47,8 +47,8 @@ Follow these in order. Each step links to its detail.
    count varies); answer `y`. Then register the Sanduq catalog at priority 1
    ([set up Spec Kit](../start/install-speckit.md)).
 4. Create a GitHub Project (v2) and link it to the repository:
-   `gh project create --owner <owner> --title "<name>"` prints the board URL, whose last number is
-   the board number; then `gh project link <number> --owner <owner> --repo <owner>/<name>`. Do not
+   `gh project create --owner <owner> --title "<name>" --format json --jq .number` prints the board
+   number (without `--format json` a non-terminal shell prints nothing); then `gh project link <number> --owner <owner> --repo <owner>/<name>`. Do not
    add the Status options by hand: `gh` cannot edit them, and step 7 creates the seven statuses.
 5. Run `specify extension add workflow`.
 6. Run `$speckit-workflow-init` with your choices (see [install](#install)). The host command runs
@@ -114,6 +114,12 @@ has run. The first `install.py` call previews. The second backs up, applies, and
 failure. If your board is not configured yet, run `$speckit-project-init`. You are ready when
 `doctor --project` passes.
 
+With User Manual selected, initialise the manual once on the target branch before the first
+feature: run `$speckit-user-manual-init`, approve its module map and commit `User-Manual/` there.
+The script `init` names this step in `next`, and `start` warns `MANUAL_NOT_INITIALIZED` while
+`User-Manual/manual.yml` is missing. Without it, each feature stops at Manual Update or Execute
+for its own module-map decision and creates its own manual, and those PRs conflict.
+
 The installed evidence gate, `.github/workflows/sanduq-workflow-gates.yml`, runs on GitHub-hosted
 runners by default: the CI selection in `.specify/workflow.yml` starts as `policy: hosted-allowed`
 with `linux: [ubuntu-latest]`, so the rendered job has `runs-on: ubuntu-latest`. To run it on your
@@ -122,6 +128,10 @@ own runners, record the selection before `install.py --apply` (or reinstall afte
 ```bash
 python .specify/extensions/workflow/scripts/workflow.py ci --policy self-hosted-required --linux self-hosted,<label> --system-packages preinstalled --python preinstalled
 ```
+
+Under `self-hosted-required` the command drops each GitHub-hosted platform you did not name (the
+default `windows: [windows-latest]`) and lists it under `dropped_hosted_platforms`; add
+`--windows self-hosted,<label>` to keep a Windows job on your own runner.
 
 Never edit the rendered workflow file by hand. The selection and `self-hosted-required`'s recorded
 exceptions are in [where your CI actually runs](../workflow/operations.md#where-your-ci-actually-runs).

@@ -51,6 +51,13 @@ class WaiverTests(unittest.TestCase):
         self.assertIn('waiver is for head ' + 'b' * 40 + ', the PR head is now ' + 'a' * 40, message)
         self.assertIn('issuecomment-9', message)
 
+    def test_author_waiver_names_the_reason_and_needs_self_waivers(self):
+        with self.assertRaises(waivers.WorkflowError) as caught:
+            self.run_verify(self.comment(login='author', association='OWNER'))
+        self.assertIn('author may not waive: written by the PR author', str(caught.exception))
+        self.policy['decisions']['self_waivers'] = ['Author']
+        self.assertEqual(self.run_verify(self.comment(login='author'))['reviewer'], 'author')
+
     def test_rules_map_to_exact_error(self):
         self.assertEqual(waivers.error_rule('INCOMPLETE_TASKS'), 'tasks')
         self.assertIsNone(waivers.error_rule('CHECKPOINT_MISSING_OR_WRONG_FEATURE'))

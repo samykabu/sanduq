@@ -50,12 +50,24 @@ With `profiles.enabled: true` in `.specify/workflow.yml`, the Scope receipt's `e
 
 | Tier | Score (default) | Stage changes |
 | --- | --- | --- |
-| `lite` | up to `profiles.lite.max_score` (3) | Tasks merged into Plan, Analyze runs as `workflow:lint`, QA analysis, manual analysis, QA document and manual update skipped, research, data model, quickstart and contracts optional |
+| `lite` | up to `profiles.lite.max_score` (3) | Seven stages: Scope, Specify, Clarify, Plan, Execute, Verify, PR. Tasks merged into Plan and Plan's completion runs `workflow:lint` (no Analyze stage); Verify also reviews the diff and its completion runs the Ready checks (no Review or Ready stage); no Tasks-to-Issues (no task sub-issues); QA analysis, manual analysis, QA document and manual update skipped; research, data model, quickstart and contracts optional |
 | `standard` | up to `profiles.standard.max_score` (8) | Tasks merged into Plan, Analyze runs as `workflow:lint`, task issues may be `phase-lazy` |
 | `full` | above | the full stage list |
 
 Without `profiles`, every feature runs the full list. `next` and `status` show skipped stages,
-and `lifecycle.jsonl` records a `skipped` event for each. Lean execution defaults to on for the
+and `lifecycle.jsonl` records a `skipped` event for each. Each lite skip names where its work went:
+
+| Skipped on lite | Reason recorded | Where the work goes |
+| --- | --- | --- |
+| `analyze` | `lite tier: lint runs at Plan completion` | Plan's `complete` runs `workflow:lint` and stores `lint` on the Plan receipt; an error or a requirement without a task is `PLAN_LINT_FAILED` |
+| `review` | `lite tier: Verify reviews the diff` | The Verify pass reads the diff against the spec; `blocking_findings: 0` is still required |
+| `ready` | `lite tier: Ready checks run at Verify completion` | Verify's `complete` (and `revalidate --stage verify`) runs the Ready checks and stores `ready_checks` on the Verify receipt; a failure is `READY_CHECKS_FAILED`. `next` then reports `ready_to_finalize` |
+| `taskstoissues` | `lite tier: no task sub-issues` | Nothing: the Ready task-link check reports `task_links:skipped`, and `task_issues.py` refuses with `TASK_ISSUES_SKIPPED` |
+| `qa_*`, `manual_*` | `lite tier` | Nothing: the gate's `documentation` rule reports those processes as skipped for the feature |
+
+The skips are fixed with the tier at the first Plan claim, so a feature whose tier was fixed by an
+older release keeps the stage list it was given. The evidence gate requires receipts only for the
+stages a feature runs. Lean execution defaults to on for the
 lite and standard tiers unless the policy sets `lean_execution.enabled: false`.
 
 `workflow:lint` runs `scripts/lint.py`: requirement coverage, task ids and dependencies, task

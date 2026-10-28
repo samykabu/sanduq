@@ -241,6 +241,10 @@ changing a runner stays a supported upgrade instead of a fork. The files rendere
 `sanduq-workflow-gates.yml`, `documentation-gates.yml`, `user-manual-preview.yml` and
 `user-manual-release.yml`.
 
+A repository-scoped self-hosted runner set serves only the repository it is registered to.
+Register one for each new repository (or use an organization-level runner group), or its jobs
+stay queued.
+
 `capabilities` matters as much as the labels. A runner without `sudo` cannot `apt-get install`
 the `age` and Pango packages the User Manual jobs use, and a container image that already carries
 Python does not want `actions/setup-python`. Setting either to `preinstalled` removes those steps

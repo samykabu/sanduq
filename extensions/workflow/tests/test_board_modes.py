@@ -120,6 +120,15 @@ class BoardModeTests(Base):
         ran = w.ready_checks(self.root, self.feature, self.policy, run.load(), rules={'tasks': True, 'task_links': True})
         self.assertEqual(ran, ['tasks', 'task_links:skipped (issue_sync.taskstoissues off)'])
 
+    def test_a_lite_tier_skips_the_documentation_rule_it_never_writes(self):
+        policy = copy.deepcopy(self.policy)
+        policy['processes'].update(qa=True, user_manual=True)
+        ran = w.ready_checks(self.root, self.feature, policy, {'profile': {'tier': 'lite'}}, rules={'documentation': True})
+        self.assertEqual(ran, ['documentation:assure_state:skipped (lite tier)',
+                               'documentation:manual_state:skipped (lite tier)'])
+        with self.assertRaisesRegex(w.WorkflowError, 'SELECTED_PROCESS_MISSING'):  # standard still checks (F5)
+            w.ready_checks(self.root, self.feature, policy, {'profile': {'tier': 'standard'}}, rules={'documentation': True})
+
     def test_full_mode_is_unchanged(self):
         run = self.run_object()
         claims = self.advance(run, 'execute')
@@ -215,6 +224,17 @@ class PolicyLoadingAndInitTests(Base):
         self.assertEqual((self.root / result['backup']).read_bytes(), original)
         policy = w.load_policy(self.root)
         self.assertEqual((policy['project_sync']['mode'], policy['issue_sync']['taskstoissues']), ('full', 'required'))
+
+    def test_an_uninitialised_manual_is_named_at_init_and_start(self):
+        code, result = self.cli('init', '--qa', 'on', '--manual', 'on')
+        self.assertIn('$speckit-user-manual-init once on the target branch', result['next'])  # F4
+        self.policy['processes']['user_manual'] = True
+        self.configure()
+        state = w.Run(self.root, self.feature).start('acme/app#10')
+        self.assertTrue(any(line.startswith('MANUAL_NOT_INITIALIZED') for line in state['warnings']))
+        (self.root / 'User-Manual').mkdir()
+        (self.root / 'User-Manual/manual.yml').write_text('modules: []', encoding='utf-8')
+        self.assertNotIn('next', self.cli('init', '--qa', 'on', '--manual', 'on')[1])
 
     def test_init_replace_lists_the_features_it_invalidates(self):
         run = self.run_object()

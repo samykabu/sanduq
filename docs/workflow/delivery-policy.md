@@ -30,6 +30,9 @@ Rule names for repeated `--gate-rule NAME=on|off` selections:
 `decisions`. A fresh policy selects receipts, decisions, documentation,
 portability, and live answers. Existing policies without a `ci.gate` section
 retain the prior required, all-PR evidence behavior until deliberately changed.
+The `documentation` rule checks only the documentation the feature's tier
+writes: a lite feature runs neither QA Document nor Manual Update, so its
+selected QA and User Manual checks are reported as `skipped (lite tier)`.
 
 ## Greenfield project
 
@@ -143,7 +146,11 @@ of being ignored.
 Conflicting answers, edits, missing application evidence, or a failed GitHub
 read block a passed stage. The agent applies the chosen answer to actual
 artifacts and records their hashes in `workflow/decisions.json`; future changes
-reopen the check. `decisions.py sync --project-field` refreshes the issue record
+reopen the check. Each receipt depends only on the decisions that existed when
+it was recorded, so a decision raised late (for example the User Manual module
+map at Execute) stales no earlier stage; a changed answer to a decision a stage
+already saw still does. Receipts recorded before this rule keep a byte hash of
+the whole ledger until their stage is recorded again. `decisions.py sync --project-field` refreshes the issue record
 and its separate Project Decision field. While a decision is pending or in
 conflict, an issue in mapped Backlog or Feature Specification status moves to the mapped
 Need Clarifications status. When nothing is pending it moves back only if
@@ -268,3 +275,36 @@ Identity and issue binding checks cannot be waived. A new commit changes the
 head SHA and requires fresh approval. Ordinary non-managed PRs need no waiver.
 When no waiver is accepted, `WAIVER_NOT_VERIFIED` lists each rejected waiver
 comment and why, for example `waiver is for head <old>, the PR head is now <new>`.
+A comment by the PR author is rejected with `written by the PR author`.
+
+#### Waivers in a one-person setup
+
+When you work alone, the agent opens every PR with your GitHub token, so you
+are always the PR author and the author rule refuses every waiver you post. To
+waive your own PRs, list your login on the target branch:
+
+```yaml
+decisions:
+  self_waivers: [your-login]
+```
+
+The gate then accepts a waiver comment from a listed login on a PR that login
+authored. All other checks still apply: exact PR, feature, rule, current head
+and expiry.
+
+Threat model. GitHub cannot tell you from an agent that uses your token, so
+this opt-in trusts every waiver comment written under your login. Sanduq keeps
+the agent from using it in three ways:
+
+- The gate reads `self_waivers` from the base branch policy (`--trusted-root`),
+  so a PR cannot add its author to the list. You add it in a change you merge
+  yourself.
+- The guard hook refuses any `gh`, `curl` or `wget` command that carries a
+  `sanduq-gate-waiver` marker, inline or in a `gh --body-file`, in every
+  session. Post waivers yourself in the GitHub web page.
+- A waiver binds the current head SHA, so any later commit needs a new one.
+
+The guard is advisory: it sees only the host's shell tools, so a script the
+agent writes and runs another way is not covered. If that risk matters, leave
+`self_waivers` empty and give waivers from a second account (a reviewer or a
+bot identity that the agent's token cannot use).

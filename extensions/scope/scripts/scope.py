@@ -613,7 +613,11 @@ class Scope:
                         and artifact.is_file() and read_analysis(artifact) == analysis,
                         'SCOPE_RESOLVED_ANALYSIS_EVIDENCE_MISMATCH')
                 artifact_sha = hashlib.sha256(artifact.read_bytes()).hexdigest()
-                require(fresh['decision_evidence'].get(artifact.relative_to(self.root).as_posix()) == artifact_sha,
+                name = artifact.relative_to(self.root).as_posix()
+                # Workflow 1.23 records evidence line-ending independent (F6) with the git text attribute
+                # (a `-text` file stays byte exact); ask Workflow's own hash. Older ledgers hold the raw bytes' hash.
+                portable_sha = workflow_policy._decisions_module().portable_sha256(self.root, name)
+                require(fresh['decision_evidence'].get(name) in (artifact_sha, portable_sha),
                         'SCOPE_RESOLVED_ANALYSIS_EVIDENCE_MISMATCH')
             result.update(feature=fresh['feature'], decision_sha256=fresh['decision_sha256'],
                           published_prompt=receipt['prompt'], prompt=analysis['tree']['specify_prompt'] if revised else receipt['prompt'],

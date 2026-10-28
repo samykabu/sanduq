@@ -260,6 +260,7 @@ class SwitchTests(HostTests):
         self.assertFalse(entry['already_stale'])
         self.assertIn('.specify/extensions/workflow/scripts/workflow.py migrate --feature specs/001-example --reason '
                       '"Host switched from codex to claude"', entry['commands'][-1])
+        self.assertIn(entry['commands'][-1], result['next'])
         self.assertEqual(w.read(self.root / '.specify/workflow/install-lock.json')['host'], 'claude')
         # A later install accepts what the switch left behind.
         self.install()

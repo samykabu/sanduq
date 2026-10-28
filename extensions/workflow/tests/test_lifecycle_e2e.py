@@ -111,16 +111,18 @@ def drive(tier, out, defect=None):
 
 
 FIRST_PASS = {
-    'lite': ['scope', 'specify', 'clarify', 'plan', 'analyze', 'taskstoissues', 'execute'],
+    'lite': ['scope', 'specify', 'clarify', 'plan', 'execute'],
     'standard': ['scope', 'specify', 'clarify', 'plan', 'qa_analyze', 'manual_analyze', 'analyze', 'taskstoissues',
                  'execute'],
     'full': ['scope', 'specify', 'clarify', 'plan', 'tasks', 'qa_analyze', 'manual_analyze', 'analyze',
              'taskstoissues', 'execute'],
 }
-FINISH = {'lite': ['verify', 'review', 'ready', 'pr'],
+FINISH = {'lite': ['verify', 'pr'],
           'standard': ['verify', 'review', 'qa_document', 'manual_update', 'ready', 'pr'],
           'full': ['verify', 'review', 'qa_document', 'manual_update', 'ready', 'pr']}
-SKIPPED = {'lite': {'tasks', 'qa_analyze', 'manual_analyze', 'qa_document', 'manual_update'},
+# Lite folds Analyze into Plan and Review and Ready into Verify, and has no task sub-issues (Workflow 1.23).
+SKIPPED = {'lite': {'tasks', 'qa_analyze', 'manual_analyze', 'qa_document', 'manual_update', 'analyze',
+                    'taskstoissues', 'review', 'ready'},
            'standard': {'tasks'}, 'full': set()}
 # Lean execution (on by default for lite and standard) binds the PR receipt to the recomputed body lint.
 LEAN = {'lite': True, 'standard': True, 'full': False}
@@ -183,6 +185,13 @@ class LifecycleToPrTests(unittest.TestCase):
                 self.assertEqual('https://github.com/acme/app/pull/11', pr['pr_url'])
                 self.assertEqual('speckit.pr.generate', pr['command'])
                 self.assertEqual(LEAN[tier], 'pr_lint_binding' in pr)
+                # Lite records the folded work on the receipts that absorbed it.
+                self.assertEqual(tier == 'lite', state['receipts']['plan'].get('lint', {}).get('ok') is True)
+                self.assertEqual(tier == 'lite', 'ready_checks' in state['receipts']['verify'])
+                if tier == 'lite':
+                    self.assertIn('tasks', state['receipts']['verify']['ready_checks'])
+                    self.assertIn('task_links:skipped (lite tier: no task sub-issues)',
+                                  state['receipts']['verify']['ready_checks'])
                 if LEAN[tier]:
                     self.assertEqual({'repo': 'acme/app', 'issue': 10}, pr['pr_lint_binding']['bound'])
                     self.assertEqual([], pr['pr_lint_binding']['prerequisites'])
