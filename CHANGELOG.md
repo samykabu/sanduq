@@ -4,7 +4,7 @@ All notable changes to sanduq extensions/plugins are recorded here.
 Format: [Keep a Changelog](https://keepachangelog.com/). Extensions are versioned
 independently via `<extension>-vX.Y.Z` tags.
 
-## 2026-10-28 — Workflow 2.0.2 (pending release)
+## 2026-10-28 — Workflow 2.0.2
 
 - Hotfix from the PH-05-T07 live measurement: a claim now pins its delegation routes. `start`, `record-native`, `adopt` and `attest-native` refuse with `DELEGATION_POLICY_CHANGED_IN_CLAIM` once `.specify/workflow.yml`'s `delegation` section changes mid-claim, Ready refuses a task attempt recorded under another policy, and `NATIVE_ROUTE_DISALLOWED` no longer suggests editing the policy. Task annotations show each task's `route_kind` and `route_reason`. Claims from before 2.0.2 are not checked.
 
