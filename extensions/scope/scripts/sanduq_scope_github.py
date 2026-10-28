@@ -71,12 +71,16 @@ class GitHub:
             if is_project and error.returncode != sanduq_gh.GH_MISSING and self.graphql_exhausted(error.stderr, args):
                 return self._project_rest(args)
             raise GitHubError(f'GitHub request failed ({" ".join(args[:3])}): {error.stderr.strip()[:700]}') from None
+        data = json.loads(out) if out.strip() else None
+        # A comment Scope posts is Sanduq's own, never a human answer to a decision.
+        if args[:1] == ['api'] and '--method' in args and args[args.index('--method') + 1] == 'POST'                 and isinstance(data, dict) and data.get('id') and sanduq_gh._ISSUE_COMMENTS.search(args[1]):
+            sanduq_gh._record_posted_comment(None, args[1], data)
         if is_project:
             if self._rest_until:
                 self._rest_until = 0.0
                 print('[scope] GraphQL budget recovered; Project operations use GraphQL again.', file=sys.stderr)
             self.transports.add('graphql')
-        return json.loads(out) if out.strip() else None
+        return data
 
     def _project_rest(self, args):
         if self._rest is None:

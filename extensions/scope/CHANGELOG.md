@@ -1,5 +1,9 @@
 # Changelog
 
+## [1.14.1] - 2026-10-28
+
+- Comments Scope posts (the Clarify questions and ready notes) are recorded in `.specify/workflow/runtime/posted-comments.jsonl` like every other Sanduq comment, so Workflow never reads them as a human answer or mention of a decision (PH-05-T07 Codex live run).
+
 ## [1.14.0] - 2026-10-28
 
 - The `requirements` format is documented where the agent looks: analysis-contract.md says it is a list of strings, each a stable coverage ID and its text (`"REV-1: ..."`), repeated exactly in `tree.covers`, and the refusal `List the source requirements as stable coverage IDs` now gives that format. Both lite re-measure runs wrote objects, were refused, and grepped `scope.py` for the rule (R4).

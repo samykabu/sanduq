@@ -197,5 +197,24 @@ class ClarificationCalls(unittest.TestCase):
         self.assertLessEqual(gh.total(), 23)  # 27 before
 
 
+
+class PostedComments(unittest.TestCase):
+    def test_a_comment_scope_posts_is_recorded_as_sanduqs_own(self):
+        import os, tempfile
+        from pathlib import Path
+        import sanduq_gh
+        import sanduq_scope_github
+        with tempfile.TemporaryDirectory() as tmp:
+            (Path(tmp) / '.specify').mkdir()
+            cwd = os.getcwd()
+            os.chdir(tmp)
+            try:
+                with patch.object(sanduq_gh, 'run_gh', return_value='{"id": 91}'):
+                    sanduq_scope_github.GitHub().api('repos/acme/app/issues/7/comments', 'POST', {'body': 'SD1 note'})
+                    sanduq_scope_github.GitHub().api('repos/acme/app/issues/7', 'PATCH', {'body': 'x'})
+                self.assertEqual(sanduq_gh.posted_comment_ids(tmp), {91})
+            finally:
+                os.chdir(cwd)
+
 if __name__ == '__main__':
     unittest.main()
