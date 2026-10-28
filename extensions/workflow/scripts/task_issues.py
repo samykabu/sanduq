@@ -287,6 +287,10 @@ def main():
         require(configured_mode(args.root) != 'off', 'TASK_ISSUES_OFF: issue_sync.taskstoissues is off in '
                 '.specify/workflow.yml, so no task issues are created or synced; set it to required or phase-lazy '
                 'to use this adapter')
+        reason = ((read(inside(args.root.resolve(), args.feature) / 'workflow/checkpoint.json', {}) or {})
+                  .get('skipped') or {}).get('taskstoissues')
+        require(not reason, 'TASK_ISSUES_SKIPPED: ' + args.feature + ' skips Tasks-to-Issues (' + str(reason) +
+                '), so it has no task issues to create or sync')
         if args.sync_states:
             result = sync_states(args.root, args.feature, args.parent, args.apply,
                                  allow_unpublished=args.allow_unpublished or phase_lazy(args.root))

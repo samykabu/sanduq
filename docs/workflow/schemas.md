@@ -119,7 +119,8 @@ or `pr`.
 Stage-specific fields include `unresolved`, `answers_applied`, `blocking_findings`,
 `native_links_verified`, `parent_issue`, `images_verified`, `pr_url`, `effort_score` (Scope; one of
 1, 2, 3, 5, 8, 13, 21, required when profiles are enabled), `lint` (`{ok, findings}`, Analyze
-recorded as `workflow:lint`) and `lazy` (Tasks-to-Issues under `phase-lazy`).
+recorded as `workflow:lint`, or Plan on the lite tier, where the runtime writes it) and `lazy`
+(Tasks-to-Issues under `phase-lazy`).
 
 Optional fields added in 1.6.0 and later (all backward-compatible):
 
@@ -136,6 +137,7 @@ Optional fields added in 1.6.0 and later (all backward-compatible):
 | `ci_evidence` | Written only by `revalidate --stage verify --check-run`: `run_id`, `attempt`, `head`, `source_key`, `tier`, `lanes`, `required_lanes`, `lane_gap`, `conclusion` (`success`), and run metadata. |
 | `diff_reviewed` | Written only by `revalidate --stage review --diff-reviewed`: `evidence`, `base`, `head`, `hash`, `diff_sha256`, `reviewer`, `at`. |
 | `revalidations[]` | Checked revalidations after source drift. |
+| `ready_checks` | Runtime only. Lite Verify: the Ready checks its completion or `revalidate --stage verify` ran (`tasks`, `task_links:skipped (...)`, `documentation:<script>[:skipped (...)]`). |
 | `delegation_ledger_trust` | `trusted` or `unverified-local`, recorded when a delegated stage completes. |
 
 The rules behind these fields are in [Receipt contract](state-files.md#receipt-contract-160) and

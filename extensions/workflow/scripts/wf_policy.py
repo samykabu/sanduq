@@ -10,8 +10,8 @@ import lean_policy
 import verification_plan
 import yaml
 from pathlib import Path
-from wf_core import (SCHEMA, BASE_STAGES, RECEIPT_POLICY_KEYS, DEFAULT_PROFILES, LITE_SKIPPED, ARTIFACT_BUDGETS,
-                     ARTIFACT_ENFORCE, PROJECT_SYNC_PHASES, PROJECT_SYNC_POINTS, DEFAULT_SYNC_STATE, TASK_ISSUE_MODES,
+from wf_core import (SCHEMA, BASE_STAGES, RECEIPT_POLICY_KEYS, DEFAULT_PROFILES, LITE_SKIPPED, LITE_FOLDED,
+                     ARTIFACT_BUDGETS, ARTIFACT_ENFORCE, PROJECT_SYNC_PHASES, PROJECT_SYNC_POINTS, DEFAULT_SYNC_STATE, TASK_ISSUE_MODES,
                      PROJECT_SYNC_MODES, MINIMAL_SYNC_PHASES, SIDE_EFFECTS, WORKFLOW_SCRIPT, WorkflowError, require,
                      portable_label)
 from wf_fingerprints import sync_state_label
@@ -318,6 +318,7 @@ def skipped_stages(policy, tier_name):
         skipped['tasks'] = 'merged into plan (' + tier_name + ' tier)'
     if tier_name == 'lite':
         skipped.update({stage: 'lite tier' for stage in LITE_SKIPPED if stage in stages(policy)})
+        skipped.update(LITE_FOLDED)  # the tier's reason wins over the board's, so it survives a board switch
     return skipped
 
 

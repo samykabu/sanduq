@@ -32,8 +32,9 @@ $speckit-workflow-finalize Finish current checks and documentation; create or up
 
 You use four entry points: Scope, Clarify, Continue and Finalize. The dispatcher owns every stage
 between them. With [profiles](../workflow/stages.md#profiles-and-tiers) enabled, small features run
-a shorter chain: Tasks merges into Plan, Analyze becomes a deterministic lint, and the lite tier
-skips the QA and manual stages. With [Memory](memory.md) installed, the claim also runs Memory's session
+a shorter chain: Tasks merges into Plan and Analyze becomes a deterministic lint; the lite tier
+runs seven stages, folding Analyze into Plan and Review and Ready into Verify, with no task
+sub-issues and no QA or manual stages. With [Memory](memory.md) installed, the claim also runs Memory's session
 check and can return `memory_blocked` or `memory_dispatch` instead of a stage. The dispatcher skill is named `speckit-workflow`. [Editable diagram](../diagrams/extension-workflow.html).
 
 ## Limits

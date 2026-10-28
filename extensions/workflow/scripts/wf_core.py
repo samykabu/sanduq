@@ -52,7 +52,8 @@ AMENDMENT_DEPENDENTS = ('verify', 'review', 'ready')
 # Receipt fields only the runtime writes; a submitted receipt may not carry them.
 RUNTIME_RECEIPT_FIELDS = ('amendments', 'stale', 'head', 'source_key', 'ci_evidence', 'diff_reviewed',
                           'revalidations', 'delegation_ledger_trust', 'verification_snapshot', 'pr_lint_binding',
-                          'source_inventory', 'text_fingerprints', 'revalidated_upstream', 'self_attested')
+                          'source_inventory', 'text_fingerprints', 'revalidated_upstream', 'self_attested',
+                          'ready_checks')
 # Stages whose receipts also inventory source (`source_inventory`) and record `head` and `source_key`.
 SOURCE_STAGES = ('verify', 'review', 'ready')
 # Effort scores a Scope receipt may carry (`effort_score`), and the tier bands they map to.
@@ -61,6 +62,13 @@ TIERS = ('lite', 'standard', 'full')
 DEFAULT_PROFILES = {'lite': {'max_score': 3}, 'standard': {'max_score': 8}}
 # Stages a lite feature skips; `tasks` is merged into `plan` on lite and standard.
 LITE_SKIPPED = ('qa_analyze', 'manual_analyze', 'qa_document', 'manual_update')
+# Stages a lite feature folds into a neighbour (Workflow 1.23): recorded in `skipped` when the tier is fixed, so a
+# feature fixed earlier keeps its own list. Plan's completion runs the lint Analyze ran; Verify's completion runs
+# the Ready checks; Verify also reviews the diff; no task sub-issues.
+LITE_FOLDED = {'analyze': 'lite tier: lint runs at Plan completion',
+               'taskstoissues': 'lite tier: no task sub-issues',
+               'review': 'lite tier: Verify reviews the diff',
+               'ready': 'lite tier: Ready checks run at Verify completion'}
 LITE_OPTIONAL_INPUTS = ('research.md', 'data-model.md', 'quickstart.md')
 LINT_COMMAND = 'workflow:lint'
 ARTIFACT_BUDGETS = ('spec_kb', 'plan_kb', 'research_kb', 'tasks_detail_lines')
@@ -192,6 +200,7 @@ ERRORS = {
     'PR_CLOSING_REFERENCE_REJECTED': ("The PR body's closing references do not match the bound issue and its prerequisites.", 'The merged PR must close exactly its own issue.', 'Fix the body, regenerate the lint file, then complete the pr stage again'),
     'PR_LINT_BODY_UNREADABLE': ('The PR body file named by the pr receipt cannot be read as UTF-8.', 'Lint recomputes from the exact sent body.', 'Save the body file as UTF-8 at the path the receipt names'),
     'PR_LINT_EVIDENCE_REQUIRED': ('The pr receipt must list distinct pr_body_file and pr_lint_file paths in its evidence.', 'The lint is verified against the body.', "Add both files to the receipt's evidence and the two fields"),
+    'PLAN_LINT_FAILED': ('On a tier without an Analyze stage, the lint that Plan completion runs reported an error or a gap only a model Analyze could judge.', 'The lite tier folds Analyze into Plan, so the artifacts must pass lint before Plan is recorded.', 'python .specify/extensions/workflow/scripts/lint.py --feature <feature>, fix each finding in the owning artifact, then complete Plan again'),
     'PR_LINT_RECEIPT_MISMATCH': ('The recorded lint file differs from the lint recomputed for the body.', 'A lint result is accepted only for the exact body sent.', 'Regenerate the lint file for the body, then complete again'),
     'PR_LINT_REPOSITORY_MISMATCH': ('The bound issue names another repository than origin.', 'PR lint is checked against this repository.', 'git remote -v; relocate the feature if the repository moved'),
     'PR_LINT_SCOPE_BINDING_MISMATCH': ('scope-source.json is bound to another issue than the checkpoint.', "Prerequisites come from Scope's binding.", 'Run Scope again for the bound issue'),

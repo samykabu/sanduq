@@ -12,7 +12,7 @@ assume a missing response means its remote write failed. `status` shows the clai
 (`alive`, `dead` or `unknown`) and its `last_activity`; `recover` refuses `CLAIM_OWNER_ALIVE`
 while the owner's pid runs on this host or its last activity is under 15 minutes old. Pass
 `--force-live-owner "<how you know it stopped>"` only after confirming that session stopped. Resume the earliest unfinished or
-invalid stage. `CHECKPOINT_IDENTITY_MISMATCH` on a genuinely relocated project is `relocate`'s
+invalid stage. To finish a held claim, use the `receipt_template` that `status` prints for it. `CHECKPOINT_IDENTITY_MISMATCH` on a genuinely relocated project is `relocate`'s
 error, not `recover`'s or `migrate`'s.
 
 ## status, doctor, reconcile

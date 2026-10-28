@@ -37,6 +37,7 @@
     "pr_body_sha256": {"$ref": "#/$defs/hash"},
     "pr_lint_binding": {"type": "object", "description": "Runtime-owned recomputed exact-body lint binding to native Scope prerequisites."},
     "verification_snapshot": {"type": "object", "description": "Runtime-owned selected exact-input verification snapshot."},
+    "ready_checks": {"type": "array", "items": {"type": "string"}, "description": "Runtime-owned. The Ready checks a lite Verify completion or revalidation ran (Ready folded into Verify)."},
     "pr_url": {"type": "string", "pattern": "^https://github\\.com/[^/]+/[^/]+/pull/[1-9][0-9]*$"},
     "input_roles": {
       "description": "Optional declared role per input path; every key is listed in inputs. A receipt without it is read as all-dependency.",
