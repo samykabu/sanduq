@@ -1686,6 +1686,30 @@ class Run:
                         inventories.append((prior, name, inventory, claim_id))
                     elif hits:
                         prior['source_fingerprints'] = inventory
+        if stage in ('qa_document', 'manual_update'):
+            # F9: this stage's declared outputs (its evidence and side effects) are not inputs of the earlier
+            # Verify and Review; their source inventories take the new hashes instead of going stale.
+            declared = {portable_label(path) for path in receipt.get('evidence', [])}
+            current = source_fingerprints(self.root)
+            outputs = {path: value for path, value in current.items()
+                       if path in declared or matches_side_effect(path, permitted)}
+            for name, prior in state['receipts'].items():
+                if name not in SOURCE_STAGES or not outputs:
+                    continue
+                pending = next((entry[2] for entry in inventories if entry[0] is prior), None)
+                inventory = pending if pending is not None else source_fingerprints_of(self.root, prior, self.relative)
+                hits = sorted(path for path, value in outputs.items() if inventory.get(path) != value)
+                if not hits:
+                    continue
+                inventory.update({path: outputs[path] for path in hits})
+                state.setdefault('lineage', []).append({'stage': stage, 'outputs_not_inputs': {
+                    name: hits}, 'at': now()})
+                if pending is not None:
+                    continue  # the side file queued above now carries these hashes too
+                if prior.get('source_inventory'):
+                    inventories.append((prior, name, inventory, claim_id))
+                else:
+                    prior['source_fingerprints'] = inventory
         stored = copy.deepcopy(receipt)
         if stage == 'pr' and lean:
             stored['pr_lint_binding'] = binding

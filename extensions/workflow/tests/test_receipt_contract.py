@@ -405,9 +405,10 @@ class SemanticTransformationTests(Harness):
         self.write(self.memory, 'refreshed context')
         run.complete(claim['token'], self.receipt('qa_document'))
         after = run.load()
-        self.assertEqual(after['receipts'], {**before['receipts'], 'qa_document': after['receipts']['qa_document']})
-        lineage = after['lineage'][-1]
-        self.assertTrue(lineage['advisory'])
+        # Fingerprints stay; only Verify/Review inventories take the generated memory as an output (F9).
+        self.assertEqual({stage: r['fingerprints'] for stage, r in after['receipts'].items() if stage in before['receipts']},
+                         {stage: r['fingerprints'] for stage, r in before['receipts'].items()})
+        lineage = next(item for item in after['lineage'] if item.get('advisory'))
         self.assertEqual(lineage['consulted'], {self.memory: {
             'before': before['active']['baseline'][self.memory],
             'after': w.fingerprint_files(self.root, [self.memory])[self.memory]}})
@@ -436,6 +437,22 @@ class SemanticTransformationTests(Harness):
                              inventories[stage][source])
             self.assertFalse(w.receipt_current(self.root, self.feature, stage, after['receipts'][stage]))
         self.assertEqual(set(after['lineage'][-1]['changes']), {self.memory})
+
+    def test_qa_document_outputs_do_not_stale_verify_or_review(self):
+        source = self.write('src/unlisted.py', 'original source')
+        run, claim = self.claim_with_dependencies('qa_document', [])
+        self.write('qa/report.html', '<p>QA</p>')  # a declared output, new to the source inventory
+        self.write(self.memory, 'generated inventory')  # a side effect no receipt depends on
+        receipt = self.receipt('qa_document')
+        receipt['evidence'].append('qa/report.html')
+        self.assertEqual(run.complete(claim['token'], receipt)['stage'], 'manual_update')
+        after = run.load()
+        for stage in ('verify', 'review'):
+            self.assertTrue(w.receipt_current(self.root, self.feature, stage, after['receipts'][stage]), stage)
+        self.assertEqual(after['lineage'][-1]['outputs_not_inputs']['review'], ['.github/memory/project-memory.md',
+                                                                               'qa/report.html'])
+        self.write(source, 'changed source')  # any other source change still stales Verify
+        self.assertFalse(w.receipt_current(self.root, self.feature, 'verify', run.load()['receipts']['verify']))
 
     def test_qa_document_rejects_other_dependency_changes_atomically(self):
         targets = ['src/service.py', self.feature + '/spec.md', self.feature + '/tasks.md',

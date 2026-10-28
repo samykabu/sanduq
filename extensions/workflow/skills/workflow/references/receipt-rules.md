@@ -31,3 +31,6 @@ them (Clarify: `spec.md`, the configured Project Sync state file, `checklists/*.
 lineage records each change. Changing any other upstream input during the claim refuses the
 completion. The state file counts as changed only when the bound feature's binding changes, never
 for a status write ([dispatcher-operations.md](dispatcher-operations.md#project-sync-and-task-issue-sync)).
+QA Document and Manual Update outputs (the receipt's `evidence` and the stage's side effects, such as
+`qa/*.html` and `.github/memory/project-memory.md`) are not inputs of the earlier Verify and Review:
+their source inventories take the new hashes (lineage `outputs_not_inputs`) instead of going stale.
