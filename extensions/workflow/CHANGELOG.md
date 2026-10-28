@@ -1,5 +1,10 @@
 # Changelog
 
+## [Unreleased]
+
+- `claim`'s `confirm_invalidation` result adds `invalidation`: every receipt the claim would remove, the claimed stage's own included, with `completed_at` and why: `stale: <reason>` and its changed `paths` (or `rule`, `lanes`, `detail`), `current; removed only because it follows <stage>`, or `policy-changed`. It is computed before anything is written (#112).
+- Retain-on-unused-claim: a claim keeps the receipts it removes in `active.retained` with a digest of the source inventory and every recorded dependency, and a confirmed claim prints them as `invalidated`. `recover` restores them unchanged when the claim did no work, decided only from state the runtime wrote: no delegated or native ledger attempt bound to the claim, the same policy and the same digest (a rejected completion that changed no file leaves nothing to undo). A restored receipt is re-evaluated, so a stale one stays stale and is never reported missing; otherwise they stay as history in `recoveries[].claim.retained`. `recover` and `recoveries[]` report `retained` (`restored`, or `kept_as_history` with `because`) (#109, #112, #114).
+
 ## [1.25.0] - 2026-10-28
 
 - Native-first routing: when delegation is on and the route's preferred candidate is a tier on the selected host, the route starts with a native candidate (`route_kind: native`, `route_reason: native-first`) on that tier's model, and the configured candidates follow as external fallbacks. An external candidate always says why: `native-failed:<category>` (`start` fills in the latest native attempt's failure category, or `not-attempted`), `native-unsupported:<capability>` (`delegation-disabled`, `work-type-disabled`, `cross-vendor-route`, `model-pin` when the preferred tier has no role file to pin its model: only `standard` and `review` do) or `external:cross-vendor` for a candidate that names the other vendor. The claim's `delegation` shows the candidates and `route_kind`, and a native-first claim records `git_status_at_claim`. `start` launches only the external candidates.

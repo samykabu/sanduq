@@ -23,6 +23,11 @@ Closure alone is insufficient. Native or legacy ownership without trusted termin
 evidence returns `OTHER_FEATURE_OWNERSHIP_RECOVERY_REQUIRED`; inspect it and use the recorded
 token with `recover`. Releases preserve receipts and record the original claim, actor, reason,
 time, branch and terminal evidence in `recoveries[]` and a `recovered` lifecycle event.
+A claim keeps the receipts it removed in its checkpoint entry (`active.retained`). `recover` puts them
+back, unchanged and re-evaluated, when the claim did no work: no delegated or native run bound to it,
+the same policy and the same bytes for every source file and recorded
+dependency as at the claim. Otherwise they stay in `recoveries[].claim.retained` as history, and
+`recoveries[].retained` and the `recover` output say which way it went and why.
 
 A migration backs up the checkpoint, preserves still-current historical evidence and invalidates changed command selections. Use `--invalidate-from <stage>` when an upgrade changes a stage contract.
 `migrate --preview` writes nothing and returns the exact `invalidated` and
