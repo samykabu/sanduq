@@ -612,9 +612,13 @@ class Scope:
                 require(artifact.is_relative_to((self.root / fresh['feature']).resolve())
                         and artifact.is_file() and read_analysis(artifact) == analysis,
                         'SCOPE_RESOLVED_ANALYSIS_EVIDENCE_MISMATCH')
-                artifact_sha = hashlib.sha256(artifact.read_bytes()).hexdigest()
-                require(fresh['decision_evidence'].get(artifact.relative_to(self.root).as_posix()) == artifact_sha,
-                        'SCOPE_RESOLVED_ANALYSIS_EVIDENCE_MISMATCH')
+                content = artifact.read_bytes()
+                artifact_sha = hashlib.sha256(content).hexdigest()
+                # Workflow 1.23 records evidence line-ending independent (CRLF read as LF, F6); older ledgers
+                # hold the raw bytes' hash.
+                portable_sha = hashlib.sha256(content.replace(b'\r\n', b'\n')).hexdigest()
+                require(fresh['decision_evidence'].get(artifact.relative_to(self.root).as_posix())
+                        in (artifact_sha, portable_sha), 'SCOPE_RESOLVED_ANALYSIS_EVIDENCE_MISMATCH')
             result.update(feature=fresh['feature'], decision_sha256=fresh['decision_sha256'],
                           published_prompt=receipt['prompt'], prompt=analysis['tree']['specify_prompt'] if revised else receipt['prompt'],
                           analysis_role='applied-resolution' if revised else 'consulted',
