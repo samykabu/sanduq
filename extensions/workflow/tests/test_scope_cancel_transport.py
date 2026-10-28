@@ -1,4 +1,4 @@
-"""Round 5 Scope changes: the cancel command (SC21) and the client module on the shared transport (SC8)."""
+"""Scope: the cancel command, the policy cache and the client module on the shared transport."""
 import contextlib
 import subprocess
 import io

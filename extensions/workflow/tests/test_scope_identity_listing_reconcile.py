@@ -1,6 +1,5 @@
-"""Round 4 Scope fixes: repository identity (F2), split publish before any write (SC10), messages instead of
-tracebacks (SC12), compact inspect output (SC13), one issue listing (SC14), ancestor reconcile (SC15) and the
-Specify overlay split (SC18)."""
+"""Scope: repository identity, a split publish refused before any write, messages instead of tracebacks,
+compact inspect output, one issue listing, ancestor reconcile and the Specify overlay split."""
 import contextlib
 import importlib.util
 import io
@@ -125,7 +124,7 @@ class Messages(Base):
 
     def test_a_hung_illustrate_export_is_a_failed_step_not_a_hang(self):
         path = ROOT / 'extensions/workflow/scripts/scope/accept_plan.py'
-        spec = importlib.util.spec_from_file_location('accept_plan_round4', path)
+        spec = importlib.util.spec_from_file_location('accept_plan_messages', path)
         accept = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(accept)
         receipt = {'commands': []}

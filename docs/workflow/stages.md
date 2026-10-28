@@ -120,7 +120,7 @@ verification summary read before raw reporter output; `git stash` and `git add -
 forbidden for workers; and a consumers checklist after every fix. Task-issue state syncs once
 per phase boundary, routine calls use `--summary`, and the light-tier collection rules
 (`--owned`, ledger-verified `successful` attempts, `accept`, `adopt`, `trust-reset`) are stated
-once in `execution-report.md`. `extensions/workflow/tests/test_execution_protocol_b11.py`
+once in `execution-report.md`. `extensions/workflow/tests/test_execution_protocol_references.py`
 asserts these rules are present in the installed reference files.
 
 ## Related pages
