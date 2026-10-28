@@ -55,9 +55,14 @@ def target_branch(root):
 
     The branch the feature forked from (`previous_branch`) unless origin does not have it while origin's
     default branch (the local `origin/HEAD`, else origin's only branch; no network) differs: a clone of
-    an empty repository sits on Git's local default (`master`) although the project pushed `main`."""
+    an empty repository sits on Git's local default (`master`) although the project pushed `main`.
+    Only a full fetch refspec makes a missing `origin/<branch>` mean origin lacks it; a single-branch
+    clone keeps the recorded branch."""
     previous = previous_branch(root)
     if not previous or git_ok(root, 'rev-parse', '--verify', '--quiet', 'refs/remotes/origin/' + previous):
+        return previous, None
+    refspecs = [spec.lstrip('+') for spec in git_lines(root, 'config', '--get-all', 'remote.origin.fetch')]
+    if 'refs/heads/*:refs/remotes/origin/*' not in refspecs:
         return previous, None
     local = run_git(root, 'symbolic-ref', '--short', 'refs/remotes/origin/HEAD', text=True, encoding='utf-8')
     default = local.stdout.strip()[len('origin/'):] if local.returncode == 0 and local.stdout.startswith('origin/') else None
