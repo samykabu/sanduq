@@ -1013,11 +1013,11 @@ def install(root, apply=False, packages=None, package_root=PACKAGE, runner=comma
                                           'sha256': hashlib.sha256(target.read_bytes()).hexdigest()}
             elif target.exists():
                 old_inventory = read(root / '.specify/workflow/install-receipt.json', {})
-                # The receipt is git-excluded, so a fresh clone also recognises an unedited render of the
-                # template before the base-branch gate (SEC-03) by the copy the package keeps.
-                previous = package_root / 'assets/github/previous/workflow-gates.yml'
-                require(ci_matches_managed(target.read_bytes(), asset, old_inventory) or (
-                    previous.is_file() and ci_matches_managed(target.read_bytes(), rendered(previous, policy), {})),
+                # The receipt is git-excluded, so a fresh clone also recognises an unedited render of any earlier
+                # template by the copies the package keeps (before SEC-03, and 1.22.0 before its fetch-depth fix).
+                previous = sorted((package_root / 'assets/github/previous').glob('workflow-gates*.yml'))
+                require(ci_matches_managed(target.read_bytes(), asset, old_inventory) or any(
+                    ci_matches_managed(target.read_bytes(), rendered(old, policy), {}) for old in previous),
                     'CI_WORKFLOW_HAS_LOCAL_EDITS')
             if gate_disabled:
                 if target.exists(): target.unlink()
