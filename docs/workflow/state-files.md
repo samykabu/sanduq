@@ -236,7 +236,7 @@ Receipts and recoveries written before 1.12.0 have no `claim_id`. They stay sepa
 
 Scope writes `specs/<feature>/workflow/clarifications.json` as `{"v": 1, "items": [...]}` after a
 clarification round is published. A reader can show the questions without calling GitHub. These two
-shapes are pinned, and `extensions/scope/tests/fixtures/clarifications-vector.json` is a test vector
+shapes are pinned, and `extensions/workflow/tests/fixtures/clarifications-vector.json` is a test vector
 that Scope's own `clarification_items` produces and a test regenerates.
 
 `evidence` is a list of objects, one per reference, always with the same four keys:

@@ -55,18 +55,22 @@ agent requests, not shell commands. Claude Desktop does not run extensions.
 
 ## Scope
 
-[Extension page](../extensions/scope.md) · [package README](../../extensions/scope/README.md)
+[Extension page](../extensions/scope.md) · [package README](../../extensions/workflow/README.md#scope)
+
+Workflow provides Scope from 2.0.0; before that these were `speckit.scope.run` and `speckit.scope.plan` in the
+separate `scope` extension ([upgrades](../start/upgrades.md#workflow-200-scope-is-part-of-workflow)).
 
 | Command | When and example |
 | --- | --- |
-| `$speckit-scope-run` | Analyze: `412 Inspect existing refund behavior and propose the remaining feature boundary.` |
-| `$speckit-scope-plan` | After decomposition: `Regenerate and validate the refund dependency plan as an Illustrate diagram.` |
+| `$speckit-workflow-scope-run` | Analyze: `412 Inspect existing refund behavior and propose the remaining feature boundary.` |
+| `$speckit-workflow-scope-plan` | After decomposition: `Regenerate and validate the refund dependency plan as an Illustrate diagram.` |
+| `$speckit-scope-migrate` | Only with the retired Scope 2.0.0 shim installed: `How do I move this project to Workflow 2.0.0?` |
 
 Scope's hook commands run from Spec Kit events and are not host skills (so they never compete with
-`speckit.specify` or `speckit.plan` for a prompt): `$speckit-scope-guard` before Specify,
-`$speckit-scope-bind` and `$speckit-scope-after-specify` after Specify, `$speckit-scope-plan-guard`
-before Plan, `$speckit-scope-reconcile` after Implement. To refresh parent progress by hand run
-`python .specify/extensions/scope/scripts/scope.py reconcile --apply`.
+`speckit.specify` or `speckit.plan` for a prompt): `$speckit-workflow-scope-guard` before Specify,
+`$speckit-workflow-scope-bind` and `$speckit-workflow-scope-after-specify` after Specify, `$speckit-workflow-scope-plan-guard`
+before Plan, `$speckit-workflow-scope-reconcile` after Implement. To refresh parent progress by hand run
+`python .specify/extensions/workflow/scripts/scope/scope.py reconcile --apply`.
 
 ## Project
 
@@ -191,9 +195,9 @@ python .specify/extensions/workflow/scripts/lint.py --feature specs/412-refund-a
 python .specify/extensions/workflow/scripts/workflow.py revalidate-upstream --feature specs/412-refund-approval --through plan --plan
 python .specify/extensions/workflow/scripts/workflow.py revalidate-upstream --feature specs/412-refund-approval --through plan --receipt <stages.json>
 # Render the spec from the approved Scope analysis (single leaf, approved analysis only)
-python .specify/extensions/scope/scripts/scope.py render-spec 412 --analysis <analysis.json> --feature specs/412-refund-approval --apply
+python .specify/extensions/workflow/scripts/scope/scope.py render-spec 412 --analysis <analysis.json> --feature specs/412-refund-approval --apply
 # Answer the first clarification round in the session (issue creator only)
-python .specify/extensions/scope/scripts/clarification.py publish 412 --analysis <analysis.json> --answers <answers.json> --apply
+python .specify/extensions/workflow/scripts/scope/clarification.py publish 412 --analysis <analysis.json> --answers <answers.json> --apply
 # Publish one phase's task issues under phase-lazy
 python .specify/extensions/workflow/scripts/task_issues.py --feature specs/412-refund-approval --parent 412 --phase "Phase 2: Refund approval" --apply --summary
 ```
@@ -223,8 +227,8 @@ These skills ship inside extensions; they are not additional `npx skills` instal
 | Skill source | Owner and use in the refund example |
 | --- | --- |
 | [assure](../../extensions/assure/skills/assure/SKILL.ext.md) | Assure Analyze/Document route QA analysis and test walkthroughs. |
-| [scope-analyst](../../extensions/scope/skills/scope-analyst/SKILL.ext.md) | Scope Run owns issue evidence, prerequisite checks, effort, and decomposition. |
-| [github-clarification](../../extensions/scope/skills/github-clarification/SKILL.ext.md) | Clarify/Brainstorm reread issue 412's human answers and preserve binding. |
+| [scope-analyst](../../extensions/workflow/skills/scope-analyst/SKILL.ext.md) | Scope Run owns issue evidence, prerequisite checks, effort, and decomposition. |
+| [github-clarification](../../extensions/workflow/skills/github-clarification/SKILL.ext.md) | Clarify/Brainstorm reread issue 412's human answers and preserve binding. |
 | [speckit-workflow](../../extensions/workflow/skills/workflow/SKILL.ext.md) | Workflow commands claim stages, invoke their references, and validate receipts. |
 | [speckit-scope alias](../../extensions/workflow/skills/speckit-scope/SKILL.ext.md) | The short entry routes issue 412 into the managed dispatcher. |
 | [Bridge alias](../../extensions/workflow/skills/speckit-superpowers-bridge/SKILL.ext.md) | Routes continuation to its current owner and prevents a competing executor. |

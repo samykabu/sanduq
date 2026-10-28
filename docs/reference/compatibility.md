@@ -79,7 +79,7 @@ run on Ubuntu and Windows. Manifest ranges allow other versions; those are not t
 | Package | Spec Kit range |
 | --- | --- |
 | Assure, Illustrate, PR, Project, User Manual | `>=0.2.0` |
-| Scope, `scope-gate`, `scope-brainstorm` | `>=1.0.0` |
+| Scope 2.0.0 (retired shim), `scope-gate`, `scope-brainstorm` | `>=1.0.0` |
 | Memory, Workflow, `workflow` preset | `>=1.0.0,<2.0.0` |
 | Progress | `>=1.1.1.dev0,<2.0.0` |
 

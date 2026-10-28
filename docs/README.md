@@ -37,7 +37,7 @@ One page per extension: purpose, lifecycle phase, hooks, dependencies, setup, an
 | Extension | Purpose |
 | --- | --- |
 | [Workflow](extensions/workflow.md) | Resumable issue-to-PR dispatcher |
-| [Scope](extensions/scope.md) | Issue scope, prerequisites and decomposition before Specify |
+| [Scope](extensions/scope.md) | Issue scope, prerequisites and decomposition before Specify; part of Workflow from 2.0.0 |
 | [Project](extensions/project.md) | GitHub Project board sync |
 | [Assure](extensions/assure.md) | QA readiness analysis and tester walkthrough |
 | [User Manual](extensions/user-manual.md) | Audience-aware application manual |

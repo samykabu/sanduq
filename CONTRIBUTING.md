@@ -61,7 +61,7 @@ need authenticated GitHub access. Use a disposable consumer for installer work.
 | Claude Code marketplace entries | `.claude-plugin/marketplace.json` (pinned `git-subdir` sources); bundle versions live in sanduq-skills |
 | Extension-adapted skill entrypoints | `SKILL.ext.md`; `package.py` restores `SKILL.md` in the archive |
 | Extension metadata and commands | `extensions/<id>/extension.yml`, `commands/`, `skills/`, and references |
-| Scope runtime, analyst and GitHub clarification | `extensions/scope/` (MIT license preserved) |
+| Scope runtime, analyst and GitHub clarification | `extensions/workflow/scripts/scope/`, `extensions/workflow/skills/scope-analyst/` and `github-clarification/` (MIT); `extensions/scope/` is the retired 2.0.0 shim |
 | Short Scope entry and Bridge router alias skills | `extensions/workflow/skills/speckit-scope/` and `speckit-superpowers-bridge/`; the installer replaces only a recognized legacy alias or an identical owned copy |
 | PR visuals contract | `extensions/pr/commands/speckit.pr.generate.md`; generated skills inherit it after installation |
 | Managed command policy | Canonical `presets/` (`workflow`, `scope-gate`, `scope-brainstorm`); bundled by package tooling |
@@ -115,7 +115,6 @@ Run the affected suite from the Sanduq checkout:
 
 ```bash
 python -m unittest discover -s extensions/workflow/tests -q
-python -m unittest discover -s extensions/scope/tests -q
 python -m unittest discover -s extensions/user-manual/tests -q
 python -m unittest discover -s extensions/memory/tests -q
 python extensions/scripts/vendor.py check

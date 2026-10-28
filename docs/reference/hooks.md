@@ -33,12 +33,12 @@ install an extension, before any init command changes it. Lower priority runs fi
 
 | Phase | When | Extension | Command | Mode | Priority |
 | --- | --- | --- | --- | --- | ---: |
-| specify | before | scope | `speckit.scope.guard` | mandatory | 1 |
+| specify | before | workflow | `speckit.workflow.scope-guard` | mandatory | 1 |
 | specify | before | memory | `speckit.memory.session` | mandatory |  |
-| specify | after | scope | `speckit.scope.bind` | mandatory | 1 |
+| specify | after | workflow | `speckit.workflow.scope-bind` | mandatory | 1 |
 | specify | after | project | `speckit.project.sync` | optional |  |
-| specify | after | scope | `speckit.scope.after-specify` | mandatory | 30 |
-| plan | before | scope | `speckit.scope.plan-guard` | mandatory | 1 |
+| specify | after | workflow | `speckit.workflow.scope-after-specify` | mandatory | 30 |
+| plan | before | workflow | `speckit.workflow.scope-plan-guard` | mandatory | 1 |
 | plan | after | project | `speckit.project.sync` | optional |  |
 | tasks | after | assure | `speckit.assure.analyze` | optional |  |
 | tasks | after | progress | `speckit.progress.init` | optional |  |
@@ -54,7 +54,7 @@ install an extension, before any init command changes it. Lower priority runs fi
 | implement | after | progress | `speckit.progress.refresh` | optional |  |
 | implement | after | project | `speckit.project.sync` | optional |  |
 | implement | after | user-manual | `speckit.user-manual.update` | optional |  |
-| implement | after | scope | `speckit.scope.reconcile` | mandatory | 30 |
+| implement | after | workflow | `speckit.workflow.scope-reconcile` | mandatory | 30 |
 
 ## Preset overlays
 
@@ -65,7 +65,7 @@ Generated from `presets/*/preset.yml`. An overlay runs Sanduq policy before the 
 | scope-brainstorm | `speckit.superspec.brainstorm` | replace |
 | scope-gate | `speckit.specify` | prepend |
 | scope-gate | `speckit.clarify` | replace |
-| workflow | `speckit.scope.run` | prepend |
+| workflow | `speckit.workflow.scope-run` | prepend |
 | workflow | `speckit.specify` | prepend |
 | workflow | `speckit.clarify` | replace |
 | workflow | `speckit.plan` | prepend |
@@ -89,7 +89,7 @@ these stages in order. A stage named `workflow:…` is performed by Workflow its
 
 | # | Stage | Command | Runs when |
 | ---: | --- | --- | --- |
-| 1 | `scope` | `speckit.scope.run` | always |
+| 1 | `scope` | `speckit.workflow.scope-run` | always |
 | 2 | `specify` | `speckit.specify` | always |
 | 3 | `clarify` | `speckit.clarify` | always |
 | 4 | `plan` | `speckit.plan` | always |
@@ -112,12 +112,12 @@ their manifest mode.
 
 | Phase | When | Extension | Command | Under Workflow |
 | --- | --- | --- | --- | --- |
-| specify | before | scope | `speckit.scope.guard` | kept |
+| specify | before | workflow | `speckit.workflow.scope-guard` | kept |
 | specify | before | memory | `speckit.memory.session` | disabled; the dispatcher owns this step |
-| specify | after | scope | `speckit.scope.bind` | kept |
+| specify | after | workflow | `speckit.workflow.scope-bind` | kept |
 | specify | after | project | `speckit.project.sync` | disabled; the dispatcher owns this step |
-| specify | after | scope | `speckit.scope.after-specify` | disabled; the dispatcher owns this step |
-| plan | before | scope | `speckit.scope.plan-guard` | kept |
+| specify | after | workflow | `speckit.workflow.scope-after-specify` | disabled; the dispatcher owns this step |
+| plan | before | workflow | `speckit.workflow.scope-plan-guard` | kept |
 | plan | after | project | `speckit.project.sync` | disabled; the dispatcher owns this step |
 | tasks | after | assure | `speckit.assure.analyze` | disabled; runs as stage `qa_analyze` |
 | tasks | after | progress | `speckit.progress.init` | kept |
@@ -133,7 +133,7 @@ their manifest mode.
 | implement | after | progress | `speckit.progress.refresh` | kept |
 | implement | after | project | `speckit.project.sync` | disabled; the dispatcher owns this step |
 | implement | after | user-manual | `speckit.user-manual.update` | disabled; runs as stage `manual_update` |
-| implement | after | scope | `speckit.scope.reconcile` | kept |
+| implement | after | workflow | `speckit.workflow.scope-reconcile` | kept |
 <!-- generated:hooks:end -->
 
 ## Limits

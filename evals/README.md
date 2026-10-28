@@ -29,7 +29,7 @@ smoke install first, then run the suite from the repository root:
 python extensions/scripts/smoke_install.py --host claude
 rm -rf evals/skills && mkdir -p evals/skills
 cp -r dist/install-tests/claude-*/project/.claude/skills/speckit-workflow-* evals/skills/
-cp -r dist/install-tests/claude-*/project/.claude/skills/speckit-scope* evals/skills/
+cp -r dist/install-tests/claude-*/project/.claude/skills/speckit-scope evals/skills/  # the short alias, with --with-aliases
 python -c "import sys, pathlib; sys.path.insert(0, 'extensions/workflow/scripts'); import delegation; \
   delegation.install_skill(pathlib.Path('dist/install-tests/claude-x/project').resolve(), 'claude', 'project')"
 cp -r dist/install-tests/claude-*/project/.claude/skills/delegate-task evals/skills/

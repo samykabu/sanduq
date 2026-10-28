@@ -133,7 +133,7 @@ provider. The dispatcher chooses one task generator and one executor for a featu
 
 | Overlaid command | Sanduq behavior and how to use it | Example |
 | --- | --- | --- |
-| `$speckit-scope-run` | Dispatch the managed Scope stage for the explicit issue. | `$speckit-scope-run 412` |
+| `$speckit-workflow-scope-run` | Dispatch the managed Scope stage for the explicit issue. | `$speckit-workflow-scope-run 412` |
 | `$speckit-specify` | Keep the issue binding and reserved feature identity. | `$speckit-specify Create the specification from issue 412's approved prompt.` |
 | `$speckit-clarify` | Use GitHub clarification and the managed claim. | `$speckit-clarify Read current answers for the bound feature.` |
 | `$speckit-plan` | Run the managed Plan stage after scope readiness. | `$speckit-plan Design the approved feature within the existing architecture.` |

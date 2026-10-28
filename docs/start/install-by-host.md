@@ -107,12 +107,11 @@ specify extension add user-manual
 specify extension add pr
 specify extension add project
 specify extension add progress     # needs Spec Kit 1.1.1 or later
-specify extension add workflow
-specify extension add scope    # requires workflow; the community catalog uses the same ID
+specify extension add workflow   # includes Scope from 2.0.0; never add a scope extension
 specify extension add memory   # the community catalog uses the same ID
 ```
 
-The community catalog publishes unrelated `scope` and `memory` extensions. If you keep Spec Kit's
+The community catalog publishes unrelated `scope` and `memory` extensions; Sanduq's own `scope` 2.0.0 is a retired shim. If you keep Spec Kit's
 default catalogs, [register Sanduq's catalog ahead of them](install-speckit.md#if-you-keep-spec-kits-default-catalogs).
 Workflow's `doctor` fails with `DEPENDENCY_SOURCE_MISMATCH` when an installed `scope` or `memory` names
 another repository or author, or when its files differ from the package inventory its release ships.
@@ -211,9 +210,9 @@ them. A failed install rolls them back.
   first; a route on another tier goes external with `native-unsupported:model-pin`. `install-lock.json` records the models the files
   were rendered with, and `doctor` warns `ROLE_FILES_STALE` after a model edit until
   `python .specify/extensions/workflow/scripts/reconcile.py --apply` re-renders them.
-- **Hook-only Scope skills.** On Claude Code, `speckit-scope-guard`, `-bind`, `-after-specify`,
-  `-plan-guard` and `-reconcile` get `user-invocable: false`, so they leave the `/` menu but stay
-  callable by Scope's hooks.
+- **Hook-only Scope commands.** `speckit.workflow.scope-guard`, `-bind`, `-after-specify`, `-plan-guard` and
+  `-reconcile` are not host skills: Spec Kit's event dispatcher finds them by file name. A `speckit-scope-*` hook
+  skill an older Scope rendered gets `user-invocable: false` on Claude Code until the upgrade removes it.
 - **Short aliases.** `speckit-scope` and `speckit-superpowers-bridge` are installed only with
   `install.py --with-aliases`. A project that already has them keeps them until you run
   `--without-aliases`. A registered upstream Superpowers Bridge is always replaced, because it is an

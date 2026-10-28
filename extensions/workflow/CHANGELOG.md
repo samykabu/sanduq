@@ -1,5 +1,21 @@
 # Changelog
 
+## [Unreleased]
+
+Breaking: Scope is part of Workflow (DEC-03, PH-06-T02), and every Scope command is renamed. Spec Kit 1.1.3 refuses an extension command whose name does not start with `speckit.<extension id>.` (`Command 'speckit.scope.run' must use extension namespace 'workflow'`), so `speckit.scope.<x>` is now `speckit.workflow.scope-<x>`: `scope-run` and `scope-plan` are host commands; `scope-guard`, `scope-bind`, `scope-after-specify`, `scope-plan-guard` and `scope-reconcile` are Workflow's hooks, found by the event dispatcher by file name and never host skills. The skill names `scope-analyst` and `github-clarification` are unchanged (Spec Kit renders skills only from commands, so it does not namespace them). The proposed version is 2.0.0; `release.py bump workflow` has not run yet.
+
+- Scope's scripts are in `scripts/scope/` (`scope.py`, `clarification.py`, `accept_plan.py`, `workflow_policy.py`) and import Workflow's `workflow.py` and `decisions.py` directly instead of loading them by path; `sanduq_scope_github.py` is in `scripts/` and `decisions.py` imports it. Scope's skills, `references/` and `examples/` are in this package at the same relative paths, its tests run in this suite (`tests/test_scope*.py`), and the `scope-gate` and `scope-brainstorm` presets ship only here. Error codes and messages are unchanged apart from the command names they print.
+- `dependencies.json` no longer pins `scope`, and `doctor` no longer needs it. Scope's state stays in `.specify/scope/` and is read in place; the issue-body markers (`speckit-scope:metadata` and the others) are unchanged.
+- The installer runs `specify extension remove scope` for an installed Sanduq Scope (1.x, or the retired 2.0.0 shim) before any other package change, inside its rollback transaction, and reports it as `scope_removed`; another source's `scope` stops it with `EXISTING_EXTENSION_SOURCE_CONFLICT: scope`. Spec Kit never enforces `requires.extensions`, so this order is the installer's. An upgrade, or a Scope removal, re-adds the presets, because the workflow preset now replaces `speckit.workflow.scope-run`.
+- `doctor` fails with `SCOPE_MERGED_INTO_WORKFLOW` (new registry code) while a Scope before 2.0.0 is installed, naming the `upgrade.py` command; it still fails with `DEPENDENCY_SOURCE_MISMATCH` when an installed `scope` or `memory` is not Sanduq's.
+- `migrate` treats a checkpoint's recorded `speckit.scope.run` as `speckit.workflow.scope-run`: the rename invalidates no receipt, and the migrated checkpoint records the new name.
+- `release.py prepare` copies `deprecated` and `superseded_by` from a manifest's extension block into its catalog entry.
+
+### Migration
+
+- Run `upgrade.py --version 2.0.0 --apply`, then `workflow.py migrate --feature specs/<feature> --reason "Scope merged into Workflow"` for each feature in progress. The old-to-new table is in docs/start/upgrades.md.
+- Replace `/speckit-scope-run`, `/speckit-scope-plan` and `.specify/extensions/scope/...` paths in your own notes or scripts.
+
 ## [1.25.0] - 2026-10-28
 
 - Native-first routing: when delegation is on and the route's preferred candidate is a tier on the selected host, the route starts with a native candidate (`route_kind: native`, `route_reason: native-first`) on that tier's model, and the configured candidates follow as external fallbacks. An external candidate always says why: `native-failed:<category>` (`start` fills in the latest native attempt's failure category, or `not-attempted`), `native-unsupported:<capability>` (`delegation-disabled`, `work-type-disabled`, `cross-vendor-route`, `model-pin` when the preferred tier has no role file to pin its model: only `standard` and `review` do) or `external:cross-vendor` for a candidate that names the other vendor. The claim's `delegation` shows the candidates and `route_kind`, and a native-first claim records `git_status_at_claim`. `start` launches only the external candidates.

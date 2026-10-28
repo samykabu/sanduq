@@ -2,7 +2,9 @@
 
 **Purpose:** check a GitHub issue before a specification exists. Scope verifies prerequisites,
 inventories requirements, estimates effort, and publishes only the decomposition you approve. It
-exports the dependency plan as a diagram.
+exports the dependency plan as a diagram. From Workflow 2.0.0 Scope is part of Workflow: its commands are
+`speckit.workflow.scope-*`, and there is no separate package to install
+([upgrades](../start/upgrades.md#workflow-200-scope-is-part-of-workflow)).
 
 An issue is ready when each prerequisite is In review or Done. The check follows prerequisites of
 prerequisites through In review issues and stops at a Done one, so a Done prerequisite whose own prerequisite
@@ -11,15 +13,15 @@ was reopened does not block.
 | | |
 | --- | --- |
 | Lifecycle phase | Before and after `specify`, before `plan`, after `implement` |
-| Hooks | Five mandatory hooks ([hooks](../reference/hooks.md)) |
-| Commands | `run`, `guard`, `bind`, `reconcile`, `plan`, `after-specify`, `plan-guard` ([reference](../reference/commands.md#scope)) |
-| Requires | Workflow 1.13.0 or later (below 2.0); Illustrate 2.2.1 or later (below 3.0); Python 3.11 or later |
+| Hooks | Five mandatory hooks, registered by Workflow ([hooks](../reference/hooks.md)) |
+| Commands | `speckit.workflow.scope-` + `run`, `plan`; hook-only `guard`, `bind`, `after-specify`, `plan-guard`, `reconcile` ([reference](../reference/commands.md#scope)) |
+| Requires | Workflow 2.0.0 or later, which ships Scope; Illustrate 2.2.1 or later (below 3.0); Python 3.11 or later |
 | Standalone | No |
 | License | MIT; the `scope-gate` and `scope-brainstorm` presets are MIT too |
 
 ## Setup
 
-Install Workflow and let its installer add Scope:
+Install Workflow; it includes Scope:
 
 ```bash
 specify extension add workflow
@@ -29,14 +31,14 @@ specify extension add workflow
 $speckit-workflow-init Use our existing GitHub Project and an advisory managed-only evidence gate.
 ```
 
-The community catalog publishes an unrelated extension with the ID `scope` ("Spec Scope").
-Workflow's installer resolves Sanduq's package from its pinned source. If you run
-`specify extension add scope` yourself, [register Sanduq's catalog ahead of the community catalog](../start/install-speckit.md#if-you-keep-spec-kits-default-catalogs).
+Do not install a `scope` extension. The community catalog publishes an unrelated one ("Spec Scope"), and
+Sanduq's own Scope 2.0.0 is a retired shim: it has no code, and installing it only prints the upgrade command.
+Workflow's installer removes any Sanduq `scope` package and keeps its state in `.specify/scope/`.
 
 ## Example
 
 ```text
-$speckit-scope-run 412 Inspect existing refund behavior and propose the remaining feature boundary.
+$speckit-workflow-scope-run 412 Inspect existing refund behavior and propose the remaining feature boundary.
 ```
 
 Clarification questions appear on the issue as separate comments with stable IDs, such as `C1Q1`,
@@ -61,9 +63,9 @@ The managed Workflow runs these steps through its dispatcher.
 
 ## Limits
 
-- Scope does not work without Workflow.
+- Scope is part of Workflow and does not exist without it.
 - Scope requires Illustrate. Plan acceptance needs Playwright with Chromium; without it, acceptance
   stops with the install command and keeps the previous plan.
 - Policy approval is recorded as project policy, never as a human approval.
 
-Package details: [Scope README](../../extensions/scope/README.md).
+Package details: [Workflow README, Scope section](../../extensions/workflow/README.md#scope).

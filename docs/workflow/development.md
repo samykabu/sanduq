@@ -22,7 +22,7 @@ GitHub Project status mappings, run `install.py` preview/apply and run doctor. O
 selections enable processes. The dependency lock records exact intended versions;
 unpublished versions require a staged package until the catalog is promoted.
 
-Scope's community catalog name is ambiguous. Always use the Sanduq archive URL or
-verified staged package, never a bare `specify extension add scope` command.
+Workflow ships Scope from 2.0.0; never install a `scope` extension. The community catalog's `scope` is another
+package, and Sanduq's own Scope 2.0.0 is a retired shim that only prints the upgrade command.
 
 The build script is [`extensions/scripts/package.py`](../../extensions/scripts/package.py). Exact intended dependency versions are in [`extensions/workflow/dependencies.json`](../../extensions/workflow/dependencies.json).
