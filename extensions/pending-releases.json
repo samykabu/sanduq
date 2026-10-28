@@ -4,6 +4,6 @@
     "workflow": "1.23.0",
     "scope": "1.13.1"
   },
-  "status": "implementation-in-progress",
-  "note": "Workflow 1.23.0 (PH-04 live-run fixes F2 to F10 and the low findings, plus the lean seven-stage lite tier) and Scope 1.13.1 (line-ending independent decision evidence), awaiting full CI on the exact main commit."
+  "status": "ready",
+  "note": "Workflow 1.23.0 and Scope 1.13.1: fixes for the PH-04 live-run findings F2 to F10 (plus seven low ones) and the lean lite tier (7 stages). Every suite passed on the merged tree locally. Release remains gated by successful CI on the exact main commit."
 }
