@@ -1221,6 +1221,7 @@ class LeanLiteTests(Base):
         claim = run.claim(self.usage())
         self.assertEqual(claim['clarification_round']['expected_questions'], 0)
         self.assertIn('clarification.py inspect 10', ' '.join(claim['clarification_round']['steps']))
+        self.assertIn('unmatched_comments; above 0 for any of them: load the clarification skill', ' '.join(claim['clarification_round']['steps']))
 
     def test_other_tiers_print_no_card(self):
         self.profiles()

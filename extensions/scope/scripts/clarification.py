@@ -1109,7 +1109,9 @@ def main(argv=None):
                 # What the analysis copies or checks first, so a zero-question round needs no read of the snapshot.
                 shown.update(snapshot_digest=result['snapshot_digest'], round=result['next_round'],
                              prior_questions=len(result['history']['questions']), comments=len(result['comments']),
-                             suggested_answers=len(result['suggested_answers']))
+                             suggested_answers=len(result['suggested_answers']),
+                             # trusted comments that answer no recorded question: a requirement change may sit there
+                             unmatched_comments=len(result['history']['unmatched_comments']))
             print(json.dumps(with_transport(shown, app.gh), ensure_ascii=True))
         else:
             print(json.dumps(with_transport(result, app.gh), indent=2, ensure_ascii=True))

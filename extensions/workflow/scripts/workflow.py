@@ -1482,8 +1482,8 @@ class Run:
                 'steps': [
                     'export SANDUQ_WORKFLOW_CLAIM_TOKEN=' + token + ' SANDUQ_WORKFLOW_SESSION_ID=' + str(session_id),
                     script + ' inspect ' + n + ' --output ' + snapshot + ' (prints snapshot_digest, round, '
-                    'prior_questions, suggested_answers; above 0 prior questions or suggested answers: load the '
-                    'clarification skill instead)',
+                    'prior_questions, suggested_answers, unmatched_comments; above 0 for any of them: load the '
+                    'clarification skill instead, since the issue discussion must be read)',
                     'Read ' + f + '/spec.md and mark each coverage category Clear, Partial or Missing: ' +
                     ', '.join(CLARIFY_CATEGORIES) + '. A material question: load the clarification skill instead.',
                     'Write ' + review + ' as {"version": 1, "issue": ' + n + ', "snapshot_digest": "<from inspect>", '

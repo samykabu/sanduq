@@ -1190,7 +1190,16 @@ class ClarificationTests(unittest.TestCase):
         shown = json.loads(out.getvalue())
         self.assertEqual(code, 0)
         self.assertEqual(shown['snapshot_digest'], sm.read_json(self.root / 'snap.json')['snapshot_digest'])
-        self.assertEqual((shown['round'], shown['prior_questions']), (1, 0))
+        self.assertEqual((shown['round'], shown['prior_questions'], shown['unmatched_comments']), (1, 0, 0))
+
+    def test_inspect_output_counts_a_plain_comment_so_the_shortcut_is_not_taken(self):
+        """A requirement change posted as an ordinary comment before round 1 must send the agent to the skill."""
+        self.gh.comment('Please also support reading from stdin.')
+        out = io.StringIO()
+        with patch.object(m, 'Scope', return_value=self.scope), contextlib.redirect_stdout(out):
+            m.main(['inspect', '1', '--root', str(self.root), '--output', str(self.root / 'snap.json')])
+        shown = json.loads(out.getvalue())
+        self.assertEqual((shown['prior_questions'], shown['unmatched_comments']), (0, 1))
 
     def test_a_cached_waiting_status_is_reread_before_refusing(self):
         self.move(m.WAITING)
