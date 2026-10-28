@@ -78,7 +78,7 @@ from wf_policy import (default_policy, select_gate, validate_policy, _positive, 
                        matches_side_effect, load_policy, stages, OPERATIONAL_SUBKEYS, policy_cutoff, POLICY_KEYS,
                        unknown_policy_key, parse_policy, PolicyLoader, project_sync_mode, sync_phases,
                        sync_phase_written, board_mode_line)
-from wf_health import (registry, compatible, active_host, running_host, command_exists, package_digest, resolve_commands,
+from wf_health import (registry, compatible, active_host, RUNNING_HOST_ENV, running_host, command_exists, package_digest, resolve_commands,
                        project_errors, SCOPE_STATUSES, project_defaults, MANAGED_CI, preserved_ci_path, ci_errors,
                        delegation_errors, host_warnings, progress_wiring_warnings, guard_approval_warnings,
                        doctor_cache_key, store_doctor_cache, cached_doctor, doctor, lean_preflight, pr_lint_binding,
@@ -1195,7 +1195,7 @@ class Run:
             health = cached_doctor(self.root, self.policy, state['dependency_digest'])
             require(health['ok'], '; '.join(health['errors']))
             agent_host, default_host = running_host(), active_host(self.root)
-            require(agent_host in (None, default_host),
+            require(agent_host in (None, default_host) or default_host not in RUNNING_HOST_ENV,  # unsupported: doctor's
                     'HOST_MISMATCH: this session runs under ' + str(agent_host) + ' but the project default host is ' +
                     str(default_host) + '; continue in ' + str(default_host) + ', or preview the switch with "' +
                     WORKFLOW_SCRIPT + ' host --use ' + str(agent_host) + ' --preview"')
