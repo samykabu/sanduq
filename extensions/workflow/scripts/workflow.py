@@ -105,6 +105,19 @@ def stage_reference(stage):
     return WORKFLOW_PACKAGE_PREFIX + 'skills/workflow/references/stage-' + stage + '.md'
 
 
+# The one-page lite lifecycle a session reads instead of the dispatcher references (lite re-measure, driver 2).
+LITE_CARD = WORKFLOW_PACKAGE_PREFIX + 'skills/workflow/references/lite.md'
+CLARIFY_CATEGORIES = ('functional', 'data', 'interaction', 'non_functional', 'integrations', 'edge_cases',
+                      'constraints', 'terminology', 'completion', 'placeholders')
+
+
+def claim_cli(relative, token):
+    """The exact complete and pause commands for a held claim, so no `--help` look-up is needed."""
+    return {'complete': WORKFLOW_SCRIPT + ' complete --feature ' + relative + ' --token ' + token +
+                        ' --receipt <receipt.json>',
+            'pause': WORKFLOW_SCRIPT + ' pause --feature ' + relative + ' --reason "<the question or failure>"'}
+
+
 def reference_text(root, stage, parts=()):
     """The stage reference's content followed by `parts` (names relative to the references folder), each from the
     installed package, else from this package's own tree."""
@@ -1330,6 +1343,14 @@ class Run:
                 claimed['scope_command'] = execution_tools.scope_command(
                     mode, 'gate' if stage == 'scope' else 'bind', state['issue'].split('#')[1], **params)
                 claimed['scope_analysis_required'] = mode == 'initial'
+            card = self.lite_card(state)
+            if card:
+                claimed['instructions'] = card
+                claimed['cli'] = claim_cli(self.relative, state['active']['token'])
+                if stage == 'clarify':
+                    round_ = self.clarification_round(state, state['active']['token'], usage['session_id'])
+                    if round_:
+                        claimed['clarification_round'] = round_
             if notices:
                 # Reported to the caller only; the checkpoint keeps the claim itself.
                 claimed['notices'] = notices
@@ -1429,6 +1450,48 @@ class Run:
         with path.open('r', encoding='utf-8-sig', errors='replace') as handle:
             match = RENDER_MARKER.fullmatch(handle.readline().strip())
         return match[1] if match else None
+
+    def lite_card(self, state):
+        """LITE_CARD when the feature runs the lite tier, or (before Plan fixes it) the Scope receipt's score, else the
+        analysis's proposed root score, falls in the lite band; None otherwise (the dispatcher references apply)."""
+        name = state_tier(state)
+        if name is None and (self.policy.get('profiles') or {}).get('enabled'):
+            score = ((state.get('receipts') or {}).get('scope') or {}).get('effort_score')
+            if score is None:
+                try:
+                    score = ((read(self.feature / 'scope-analysis.json', {}) or {}).get('tree') or {}).get('score')
+                except (ValueError, AttributeError):
+                    score = None
+            name = tier(self.policy, score) if score in EFFORT_SCORES else None
+        return LITE_CARD if name == 'lite' else None
+
+    def clarification_round(self, state, token, session_id):
+        """A zero-question Clarify round's exact steps, or None: only for a spec Scope rendered from the approved
+        analysis that holds no `[NEEDS CLARIFICATION` marker, on the GitHub transport. The coverage scan stays the
+        agent's; the steps replace loading the clarification skill."""
+        spec = self.feature / 'spec.md'
+        if state.get('clarification_transport', 'github-comments') == 'local' or not self.rendered_spec() \
+                or '[NEEDS CLARIFICATION' in spec.read_text(encoding='utf-8-sig'):
+            return None
+        n, f = state['issue'].split('#')[1], self.relative
+        script = 'python .specify/extensions/scope/scripts/clarification.py'
+        snapshot = '.specify/scope/clarification-' + n + '-snapshot.json'
+        review = f + '/clarify-review.json'
+        return {'expected_questions': 0,
+                'why': 'spec.md was rendered from the approved Scope analysis and has no [NEEDS CLARIFICATION] marker',
+                'steps': [
+                    'export SANDUQ_WORKFLOW_CLAIM_TOKEN=' + token + ' SANDUQ_WORKFLOW_SESSION_ID=' + str(session_id),
+                    script + ' inspect ' + n + ' --output ' + snapshot + ' (prints snapshot_digest, round, '
+                    'prior_questions, suggested_answers; above 0 prior questions or suggested answers: load the '
+                    'clarification skill instead)',
+                    'Read ' + f + '/spec.md and mark each coverage category Clear, Partial or Missing: ' +
+                    ', '.join(CLARIFY_CATEGORIES) + '. A material question: load the clarification skill instead.',
+                    'Write ' + review + ' as {"version": 1, "issue": ' + n + ', "snapshot_digest": "<from inspect>", '
+                    '"engine": "clarify", "coverage": {"<category>": "Clear: <why>", ...}, "summary": "<one line>", '
+                    '"answers": [], "questions": [], "spec_edits": []}',
+                    script + ' publish ' + n + ' --analysis ' + review + ' (dry run), then the same with --apply: it '
+                    'records the round and moves the issue to Ready',
+                    'Receipt: unresolved 0, answers_applied true, inputs and evidence ' + review + ' and ' + snapshot]}
 
     def verified_effort_score(self, state, gh=None):
         """OMAR-05: the effort score Scope's gate verified against the issue's Scope receipt and `effort:<n>` label,
@@ -2175,6 +2238,11 @@ def run_command(args):
                 if state.get('active'):
                     # A session resuming a held claim needs the receipt shape without re-claiming.
                     result['receipt_template'] = run.receipt_template(state, state['active']['stage'])
+                card = run.lite_card(state)
+                if card:
+                    result['instructions'] = card
+                    if state.get('active'):
+                        result['cli'] = claim_cli(run.relative, state['active']['token'])
             elif args.action == 'claim':
                 result = run.claim(read(args.usage), args.finalize, args.verbose,
                                    confirm_invalidation=args.confirm_invalidation)

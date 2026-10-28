@@ -1104,7 +1104,13 @@ def main(argv=None):
             result = getattr(app, args.command.replace('-', '_'))(args.issue)
         if args.output:
             write_json(args.output, result)
-            print(json.dumps(with_transport({'output': str(args.output), 'issue': result.get('issue', {}).get('number') if isinstance(result.get('issue'), dict) else result.get('issue')}, app.gh), ensure_ascii=True))
+            shown = {'output': str(args.output), 'issue': result.get('issue', {}).get('number') if isinstance(result.get('issue'), dict) else result.get('issue')}
+            if args.command == 'inspect':
+                # What the analysis copies or checks first, so a zero-question round needs no read of the snapshot.
+                shown.update(snapshot_digest=result['snapshot_digest'], round=result['next_round'],
+                             prior_questions=len(result['history']['questions']), comments=len(result['comments']),
+                             suggested_answers=len(result['suggested_answers']))
+            print(json.dumps(with_transport(shown, app.gh), ensure_ascii=True))
         else:
             print(json.dumps(with_transport(result, app.gh), indent=2, ensure_ascii=True))
         return 0

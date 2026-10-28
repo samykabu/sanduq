@@ -631,7 +631,7 @@ class Scope:
         require(not snapshot['blocked'], rejection(snapshot['blocked']))
         require(analysis.get('issue') == snapshot['issue']['number'] and analysis.get('fingerprint') == snapshot['fingerprint'], 'Analysis does not match current issue requirements.')
         fill_scores(analysis.get('tree'))
-        require(analysis.get('requirements') and all(isinstance(x, str) and x.strip() for x in analysis['requirements']), 'List the source requirements as stable coverage IDs.')
+        require(analysis.get('requirements') and all(isinstance(x, str) and x.strip() for x in analysis['requirements']), 'List the source requirements as stable coverage IDs: "requirements" is a list of strings, each an ID and its text such as "REV-1: Print the words in reverse order", and tree.covers repeats those exact strings.')
         require(analysis.get('alignment') and analysis.get('evidence'), 'Supply implementation alignment and source evidence.')
         observations = {x['url']: x for x in analysis.get('images', [])}
         for url in snapshot.get('images', []):

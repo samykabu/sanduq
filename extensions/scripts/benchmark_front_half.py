@@ -233,7 +233,9 @@ class Bench:
             raise RuntimeError('claim returned no token: ' + json.dumps(claim)[:500])
         command = claim.get('command') or ''
         self.claimed.append({'phase': phase, 'stage': stage, 'command': command, 'merged': claim.get('merged') or [],
-                             'protocol_in_claim': 'execute_protocol' in claim})
+                             'protocol_in_claim': 'execute_protocol' in claim,
+                             'instructions': claim.get('instructions'),
+                             'clarification_round': 'clarification_round' in claim})
         receipt = self.receipt(stage, claim.get('merged') or ())
         if stage == 'pr' and 'environment' in claim:
             receipt.update(self.lean_pr_evidence())
@@ -364,8 +366,12 @@ def instruction_load(repo, claimed):
         if stage in per_stage or stage == 'revalidate-upstream':
             continue
         extras = [] if stage in PROTOCOL_IN_CLAIM and item.get('protocol_in_claim') else STAGE_EXTRAS.get(stage, [])
-        names = [WORKFLOW_SKILL + 'SKILL.ext.md', WORKFLOW_SKILL + 'references/stage-' + stage + '.md',
-                 WORKFLOW_SKILL + 'references/receipt-rules.md', *extras]
+        if item.get('clarification_round'):
+            extras = []  # the claim prints the zero-question steps; the clarification skill is not loaded
+        # A claim that names an instruction card (Workflow 1.24+): the card replaces receipt-rules.md and the pointer
+        # set, and like the pointer set it is read once (counted below), not per stage.
+        rules = [] if item.get('instructions') else [WORKFLOW_SKILL + 'references/receipt-rules.md']
+        names = [WORKFLOW_SKILL + 'SKILL.ext.md', WORKFLOW_SKILL + 'references/stage-' + stage + '.md', *rules, *extras]
         overlay = 'presets/workflow/commands/' + command + '.md'
         if (repo / overlay).is_file(): names.append(overlay)
         files = {}
@@ -379,7 +385,10 @@ def instruction_load(repo, claimed):
                 missing.add(name)
         per_stage[stage] = {'bytes': sum(files.values()), 'files': files}
     shared = {}
-    for name in POINTER_SET:
+    stage_claims = [c for c in claimed if c['stage'] != 'revalidate-upstream']
+    cards = sorted({c['instructions'].replace('.specify/extensions/', 'extensions/') for c in stage_claims
+                    if c.get('instructions')})
+    for name in [*(POINTER_SET if any(not c.get('instructions') for c in stage_claims) else ()), *cards]:
         path = repo / name
         if path.is_file():
             shared[name] = path.stat().st_size

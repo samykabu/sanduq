@@ -1182,6 +1182,16 @@ class ClarificationTests(unittest.TestCase):
         self.assertEqual(code, 0)
         self.assertTrue(json.loads(out.getvalue())['in_session'])
 
+    def test_inspect_output_prints_what_a_zero_question_round_needs(self):
+        """Lite re-measure: the digest, round and prior questions print, so the agent need not read the snapshot."""
+        out = io.StringIO()
+        with patch.object(m, 'Scope', return_value=self.scope), contextlib.redirect_stdout(out):
+            code = m.main(['inspect', '1', '--root', str(self.root), '--output', str(self.root / 'snap.json')])
+        shown = json.loads(out.getvalue())
+        self.assertEqual(code, 0)
+        self.assertEqual(shown['snapshot_digest'], sm.read_json(self.root / 'snap.json')['snapshot_digest'])
+        self.assertEqual((shown['round'], shown['prior_questions']), (1, 0))
+
     def test_a_cached_waiting_status_is_reread_before_refusing(self):
         self.move(m.WAITING)
         self.scope.board()  # the shared cache now says Need Clarifications
