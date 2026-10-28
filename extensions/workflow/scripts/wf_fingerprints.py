@@ -49,6 +49,35 @@ def sync_binding(root, feature):
     return fingerprint_files(root, [label], feature=feature)[label]
 
 
+DECISION_RECORDS_PREFIX = 'decision-records:v1:'
+DECISION_LEDGER = re.compile(r'(?:^|/)workflow/decisions\.json$')
+
+
+def decision_projection(content, ids=None):
+    """`decision-records:v1:<ids>:<sha256>` of the ledger's records with these ids (all when None) (F3).
+
+    A receipt depends only on the decisions that existed when it was recorded, so a later decision (the
+    User Manual module map raised at Execute) does not stale Scope through Tasks."""
+    try:
+        records = json.loads(content.decode('utf-8-sig')).get('decisions')
+        records = [item for item in records if ids is None or item.get('id') in ids]
+    except (ValueError, AttributeError, TypeError):
+        records = None  # unreadable: every byte counts
+    if ids is None:
+        ids = sorted(str(item.get('id')) for item in records or [])
+    body = content if records is None else json.dumps(records, sort_keys=True, ensure_ascii=False).encode()
+    return DECISION_RECORDS_PREFIX + ','.join(ids) + ':' + hashlib.sha256(body).hexdigest()
+
+
+def recorded_decision_ids(value):
+    """The ids a stored decision projection covers; None for a legacy raw hash (it stays byte-exact)."""
+    value = str(value)
+    if not value.startswith(DECISION_RECORDS_PREFIX):
+        return None
+    listed = value[len(DECISION_RECORDS_PREFIX):].rsplit(':', 1)[0]
+    return listed.split(',') if listed else []
+
+
 def normalized_text(content):
     """Markdown read for a drift decision: CRLF, trailing spaces or tabs and final newlines carry no meaning."""
     return re.sub(rb'[ \t]+(?=\n|\Z)', b'', content.replace(b'\r\n', b'\n')).rstrip(b'\n')
@@ -81,6 +110,9 @@ def fingerprint_files(root, paths, normalize=False, feature=None, like=None):
         if content is not None and canonical[relative] == state \
                 and str((like or {}).get(relative, SYNC_BINDING_PREFIX)).startswith(SYNC_BINDING_PREFIX):
             result[relative] = sync_projection(content, feature)
+        elif content is not None and not normalize and DECISION_LEDGER.search(canonical[relative])                 and (like is None or relative not in like or recorded_decision_ids(like[relative]) is not None):
+            result[relative] = decision_projection(
+                content, recorded_decision_ids(like[relative]) if like and relative in like else None)
         elif content is not None:
             # Checkbox bookkeeping must not invalidate task publication or planning.
             if canonical[relative].rsplit('/', 1)[-1] == 'tasks.md':

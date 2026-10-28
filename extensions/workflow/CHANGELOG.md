@@ -2,6 +2,7 @@
 
 ## [Unreleased]
 
+- A receipt fingerprints `workflow/decisions.json` as `decision-records:v1:<ids>:<sha256>` of only the decisions that existed when it was recorded, so recording a late decision (the User Manual module map SD1 at Manual Update or Execute) no longer stales every receipt back to Scope or rejects Execute's completion with `UPSTREAM_INPUT_CHANGED_DURING_STAGE` (F3). A changed answer to a decision a receipt saw still stales it; a receipt recorded earlier keeps its byte hash.
 - A receipt's source inventory side file and decision evidence hash with the same checkout-independent rule as the fingerprints (CRLF read as LF for UTF-8 text), so a Windows `core.autocrlf=true` checkout no longer fails with `SOURCE_INVENTORY_INVALID` or `DECISION_APPLICATION_STALE` where an LF checkout passes (F6). Evidence hashes a ledger recorded before this release still verify.
 - A waiver comment by the PR author is rejected with the explicit reason `written by the PR author` (F2). A one-person setup, where the agent opens PRs with the owner's token, can list the owner under the new optional `decisions.self_waivers`; the gate reads it from the base branch policy, so a PR cannot add its author. The guard hook now refuses any `gh`, `curl` or `wget` command carrying a `sanduq-gate-waiver` marker (inline or in a `gh --body-file`), so the agent cannot post a waiver; delivery-policy.md states the threat model.
 

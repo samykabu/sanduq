@@ -595,7 +595,7 @@ def verify_ledger(root, feature, ledger):
         require(application.get('answer_digest') == item['answer_digest'], 'DECISION_APPLICATION_STALE')
         for name, expected in application.get('evidence', {}).items():
             path = inside(root, name)
-            # A ledger recorded before 1.22.1 holds the raw checkout bytes' hash (F6).
+            # A ledger recorded before F6 holds the raw checkout bytes' hash (F6).
             require(path.is_file() and expected in (portable_sha256(path), sha256_file(path)),
                     'DECISION_APPLICATION_STALE: ' + name)
 

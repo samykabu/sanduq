@@ -143,7 +143,11 @@ of being ignored.
 Conflicting answers, edits, missing application evidence, or a failed GitHub
 read block a passed stage. The agent applies the chosen answer to actual
 artifacts and records their hashes in `workflow/decisions.json`; future changes
-reopen the check. `decisions.py sync --project-field` refreshes the issue record
+reopen the check. Each receipt depends only on the decisions that existed when
+it was recorded, so a decision raised late (for example the User Manual module
+map at Execute) stales no earlier stage; a changed answer to a decision a stage
+already saw still does. Receipts recorded before this rule keep a byte hash of
+the whole ledger until their stage is recorded again. `decisions.py sync --project-field` refreshes the issue record
 and its separate Project Decision field. While a decision is pending or in
 conflict, an issue in mapped Backlog or Feature Specification status moves to the mapped
 Need Clarifications status. When nothing is pending it moves back only if

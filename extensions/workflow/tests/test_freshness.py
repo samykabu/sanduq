@@ -33,6 +33,23 @@ class FreshnessTests(unittest.TestCase):
         (self.root/self.feature/'tasks.md').write_text('- [x] T001 Behavior')
         self.assertTrue(self.call()['current'])
 
+    def test_a_later_decision_does_not_stale_receipts_recorded_before_it(self):
+        label = self.feature + '/workflow/decisions.json'
+        ledger = {'version': 1, 'feature': self.feature, 'decisions': [{'id': 'SD1', 'status': 'applied'}]}
+        (self.root / label).parent.mkdir()
+        (self.root / label).write_text(json.dumps(ledger))
+        stored = w.fingerprint_files(self.root, [label], feature=self.feature)
+        self.assertTrue(stored[label].startswith('decision-records:v1:SD1:'))
+        ledger['decisions'].append({'id': 'SD2', 'status': 'pending'})  # the late module-map decision
+        (self.root / label).write_text(json.dumps(ledger))
+        self.assertEqual(w.fingerprint_files(self.root, [label], feature=self.feature, like=stored), stored)
+        self.assertIn('SD1,SD2:', w.fingerprint_files(self.root, [label], feature=self.feature)[label])
+        ledger['decisions'][0]['status'] = 'answered'  # a consumed decision still counts
+        (self.root / label).write_text(json.dumps(ledger))
+        self.assertNotEqual(w.fingerprint_files(self.root, [label], feature=self.feature, like=stored), stored)
+        legacy = {label: 'a' * 64}  # a receipt recorded before projections stays byte-exact
+        self.assertNotIn(':', w.fingerprint_files(self.root, [label], feature=self.feature, like=legacy)[label])
+
     def test_generated_graph_is_not_an_implicit_doc_input(self):
         graph = self.root / 'graphify-out/graph.json'
         graph.parent.mkdir(); graph.write_text('old graph')
