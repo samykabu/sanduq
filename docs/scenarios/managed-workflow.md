@@ -47,8 +47,8 @@ Follow these in order. Each step links to its detail.
    count varies); answer `y`. Then register the Sanduq catalog at priority 1
    ([set up Spec Kit](../start/install-speckit.md)).
 4. Create a GitHub Project (v2) and link it to the repository:
-   `gh project create --owner <owner> --title "<name>"` prints the board URL, whose last number is
-   the board number; then `gh project link <number> --owner <owner> --repo <owner>/<name>`. Do not
+   `gh project create --owner <owner> --title "<name>" --format json --jq .number` prints the board
+   number (without `--format json` a non-terminal shell prints nothing); then `gh project link <number> --owner <owner> --repo <owner>/<name>`. Do not
    add the Status options by hand: `gh` cannot edit them, and step 7 creates the seven statuses.
 5. Run `specify extension add workflow`.
 6. Run `$speckit-workflow-init` with your choices (see [install](#install)). The host command runs

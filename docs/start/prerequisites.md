@@ -153,7 +153,9 @@ specify extension add --dev ./superspec
 [Superpowers Bridge](https://github.com/lihan3238/speckit-superpowers-bridge) is an optional Spec Kit
 extension that hands Spec Kit tasks to [Superpowers](https://github.com/obra/superpowers). Bridge 1.3.0
 requires Superpowers 5.1 or later. Follow each project's README to install it on your host. In a managed
-project, Workflow's overlays route Bridge commands to the current owner so two executors never run.
+project, run `python .specify/extensions/workflow/scripts/install.py --apply --with-aliases` after adding
+the Bridge; it clears the doctor findings the Bridge install leaves. Workflow's overlays route Bridge
+commands to the current owner so two executors never run.
 
 ## Who enforces dependencies
 

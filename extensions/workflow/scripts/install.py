@@ -1111,7 +1111,7 @@ if __name__ == '__main__':
         result = install(args.root,args.apply,args.packages,upgrade_owner=args.upgrade_owner,preserve_ci=args.preserve_ci,
                          replace_unrecognized_aliases=args.replace_unrecognized_aliases,with_optional=args.with_optional,
                          with_aliases=args.with_aliases)
-        print(json.dumps(result,indent=2))
+        print(json.dumps(result,indent=2), flush=True)  # F12: the JSON first when a shell merges stderr into it
         for key in ('codex_hook_approval', 'illustrate_hook_approval'):
             if result.get(key): print(result[key], file=sys.stderr)
         if (result.get('progress') or {}).get('hint'): print(result['progress']['hint'], file=sys.stderr)
