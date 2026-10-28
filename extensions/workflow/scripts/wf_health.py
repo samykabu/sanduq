@@ -514,8 +514,9 @@ def doctor(root, policy, project=False, preserved_ci=None, check_delegation=True
             errors.append('PRESET_NOT_ENABLED: ' + preset)
     errors += ci_errors(root, policy, preserved_ci) + interrupted_install_errors(root)
     if project: errors += project_errors(root, policy) + history_errors(root)
+    import hosts
     warnings = (host_warnings(root) + guard_approval_warnings(root) + progress_wiring_warnings(root)
-                + inert_value_warnings(policy))
+                + inert_value_warnings(policy) + hosts.role_file_warnings(root, policy))
     if explicit: warnings += hook_python_warnings(root)  # one subprocess; no claim pays for it
     # E9: AGENTS.md is the standing file; CLAUDE.md should import it, not repeat it.
     claude_md = root / 'CLAUDE.md'

@@ -154,12 +154,49 @@ class HostFilesTests(HostTests):
         self.assertEqual(head['name'], 'sanduq-worker')
         self.assertEqual(head['description'], worker['description'])
         self.assertEqual(head['tools'], ', '.join(worker['tools']))
-        self.assertNotIn('model', head)  # delegation off: the role inherits the session model
+        # Delegation off, but the default routes name the standard tier: the role is pinned to it (SAMY-03).
+        self.assertEqual(head['model'], self.policy['delegation']['models']['claude']['standard'])
         expected = worker['instructions'].strip().replace('{no_dispatcher_commands}', dispatch.NO_DISPATCHER_COMMANDS.strip())
         self.assertIn(expected, text)
         codex = tomllib.loads((self.root / '.codex/agents/sanduq-worker.toml').read_text(encoding='utf-8'))
-        self.assertEqual(set(codex), {'name', 'description', 'developer_instructions'})
+        self.assertEqual(set(codex), {'name', 'description', 'model', 'developer_instructions'})
         self.assertEqual(codex['developer_instructions'].strip(), expected)
+        self.assertEqual(w.read(self.root / hosts.INSTALL_LOCK)['role_models']['codex'],
+                         {'standard': codex['model'], 'review': self.policy['delegation']['models']['codex']['review']})
+
+    def test_role_models_pin_each_tier_a_route_the_host_runs_names(self):
+        models = {'codex': {'standard': 'gpt-s', 'review': 'gpt-r'}, 'claude': {'standard': 'sonnet', 'review': 'opus'}}
+        route = lambda harness, tier: {'preferred': {'harness': harness, 'tier': tier}, 'fallbacks': []}
+        policy = {'delegation': {'enabled': False, 'models': models, 'routes': {'implementation': route('selected', 'standard')},
+                                 'overrides': {'specs/x/T001': {'preferred': {'harness': 'codex', 'model': 'gpt-y'},
+                                                                'fallbacks': [{'harness': 'codex', 'tier': 'review'}]}}}}
+        self.assertEqual(hosts.role_models(policy, 'claude', self.package), {'standard': 'sonnet'})
+        self.assertEqual(hosts.role_models(policy, 'codex', self.package), {'standard': 'gpt-s', 'review': 'gpt-r'})
+        policy['delegation']['routes'] = {'implementation': {'preferred': {'harness': 'claude', 'model': 'x'}, 'fallbacks': []}}
+        policy['delegation']['overrides'] = {}
+        self.assertEqual(hosts.role_models(policy, 'claude', self.package), {})  # nothing names a tier: unpinned
+        policy['delegation']['enabled'] = True
+        self.assertEqual(hosts.role_models(policy, 'claude', self.package), models['claude'])
+
+    def test_doctor_warns_role_files_stale_until_reconcile(self):
+        self.install()
+        stale = lambda: [x for x in w.doctor(self.root, w.load_policy(self.root))['warnings'] if x.startswith('ROLE_FILES_STALE')]
+        self.assertEqual(stale(), [])
+        path = self.root / '.specify/workflow.yml'
+        policy = yaml.safe_load(path.read_text(encoding='utf-8'))
+        policy['delegation']['models']['codex']['standard'] = 'gpt-6-changed'
+        path.write_text(yaml.safe_dump(policy), encoding='utf-8')
+        [warning] = stale()
+        self.assertIn('.specify/workflow/install-lock.json, .codex/agents/sanduq-worker.toml', warning)
+        self.assertIn('"python .specify/extensions/workflow/scripts/reconcile.py --apply"', warning)
+        reconcile.reconcile(self.root, apply=True)
+        self.assertEqual(stale(), [])
+        self.assertIn('model = "gpt-6-changed"', (self.root / '.codex/agents/sanduq-worker.toml').read_text(encoding='utf-8'))
+        with self.subTest('a hand-edited model line'):
+            role = self.root / '.codex/agents/sanduq-reviewer.toml'
+            role.write_text(role.read_text(encoding='utf-8').replace('model = "', 'model = "edited-'), encoding='utf-8')
+            self.assertIn('.codex/agents/sanduq-reviewer.toml', stale()[0])
+            self.assertNotIn('install-lock.json', stale()[0])
 
     def test_role_model_comes_from_enabled_delegation_tiers(self):
         role = yaml.safe_load((ROLES / 'reviewer.yml').read_text(encoding='utf-8'))

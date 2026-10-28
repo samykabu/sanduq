@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 - `claim` detects the host CLI it runs under (Claude Code from `CLAUDECODE` or `CLAUDE_CODE_ENTRYPOINT`, Codex from `CODEX_SANDBOX` or `CODEX_SANDBOX_NETWORK_DISABLED`) and refuses with `HOST_MISMATCH` when that is not the project's default host, naming both and the `workflow.py host --use <host> --preview` command. No variable, or both hosts' variables, means unknown and no check. The claim and the completed receipt record the host as `agent_host` (`unknown` when undetected) (PH-05-T05, AHMED-11).
+- The `sanduq-worker` and `sanduq-reviewer` role files pin their tier's model (`delegation.models.<host>.standard` and `.review`) whenever a delegation route or override the host runs names that tier, not only when delegation is enabled; the default routes name both, so a fresh install pins them. `install-lock.json` records the models the role files were rendered with (`role_models`), and `doctor` warns `ROLE_FILES_STALE` (new registry code) when those, or a role file's model line, differ from `.specify/workflow.yml`, naming `python .specify/extensions/workflow/scripts/reconcile.py --apply` (PH-05-T04, SAMY-03, AHMED-19).
 
 ## [1.24.1] - 2026-10-28
 
