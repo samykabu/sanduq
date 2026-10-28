@@ -97,7 +97,10 @@ def ledger_lock(root, feature):
 
 
 def written_marker(root, feature):
-    """Runtime record of the ledger bytes this dispatcher last wrote."""
+    """Runtime record of the ledger bytes this dispatcher last wrote.
+
+    The trust markers are advisory: a same-user writer can rewrite both the ledger and this record.
+    """
     return root / '.specify/workflow/runtime' / ('delegation-' + workflow.digest(feature) + '.written')
 
 
@@ -1345,6 +1348,7 @@ def replacement_link(ledger, attempt):
 # self-reported summary) and ``accept`` (reading an acceptance command's own
 # output, run independently by the orchestrator); only the latter is
 # authoritative verification, but both apply the identical, documented schema.
+# parse_counts and the light-tier summary path are advisory: only accept's own run decides.
 # ---------------------------------------------------------------------------
 
 LIGHT_TIER_EVIDENCE_MISSING_REASON = (
@@ -2574,8 +2578,11 @@ def acceptance_check(command, expect, cwd, owned_paths, timeout, source):
     return run, evidence
 
 
-def accept(root, feature, run_id, command, expect, timeout=None, owned=None):
+def accept(root, feature, run_id, command, expect, timeout=None, owned=None, task_id=None):
     """Independently run and judge an acceptance command for an unverified run.
+
+    With ``task_id`` instead of ``run_id`` (CLI: ``accept --no-attempt --id T###``, alias ``adopt``)
+    it brings a checked task that has no attempt under the ledger instead; see ``_accept_no_attempt``.
 
     The only new dispatcher command in B12: it resolves a light-tier
     ``unverified`` outcome without a standard-tier reassignment, by running a
@@ -2603,12 +2610,18 @@ def accept(root, feature, run_id, command, expect, timeout=None, owned=None):
     """
     root = root.resolve()
     feature = feature_identity(root, feature)
+    if task_id is not None:  # the identity and context guards run first in this mode, as adopt always ran them
+        delegation.require(re.fullmatch(r'T\d{3,}', task_id) is not None, 'DELEGATION_IDENTITY_INVALID')
+        require_not_worker_context(feature, task_id)
+        require_not_delegated_lineage(root, feature)
     delegation.require(expect in ACCEPT_EXPECTS, 'DELEGATION_ACCEPT_EXPECT_INVALID')
     delegation.require(isinstance(command, str) and command.strip(),
                        'DELEGATION_ACCEPT_COMMAND_REQUIRED')
     timeout = timeout if timeout is not None else ACCEPT_TIMEOUT_DEFAULT
     delegation.require(type(timeout) is int and 0 < timeout <= 28800, 'DELEGATION_TIMEOUT_INVALID')
     delegation.require_no_maintenance(root)
+    if task_id is not None:
+        return _accept_no_attempt(root, feature, task_id, command, expect, timeout, owned)
     ledger = read_ledger(root, feature)
     attempt = find_run(ledger, run_id)
     delegation.require(attempt is not None, 'DELEGATION_RUN_UNKNOWN: ' + run_id)
@@ -2780,7 +2793,15 @@ def trust_reset(root, feature, reason):
 
 
 def adopt(root, feature, task_id, command, expect, timeout=None, owned=None):
-    """Bring a checked task that has no delegation attempt at all under the
+    """Alias of ``accept --no-attempt``: one implementation, the same output."""
+    return accept(root, feature, None, command, expect, timeout, owned, task_id=task_id)
+
+
+def _accept_no_attempt(root, feature, task_id, command, expect, timeout, owned):
+    """``accept``'s no-attempt mode (alias ``adopt``); ``accept`` has already resolved ``root`` and
+    ``feature`` and validated the identity, context, ``expect``, ``command`` and ``timeout``.
+
+    Bring a checked task that has no delegation attempt at all under the
     ledger's own evidence, by independently running an acceptance check --
     never by asserting an exemption (round 7, findings 1-2 removed both
     prior bypasses: a worker could self-certify with the now-deleted
@@ -2836,17 +2857,6 @@ def adopt(root, feature, task_id, command, expect, timeout=None, owned=None):
     run at all. The feature directory remains the *default* owned root for
     ``--expect files``, unchanged in effect from before.
     """
-    root = root.resolve()
-    feature = feature_identity(root, feature)
-    delegation.require(re.fullmatch(r'T\d{3,}', task_id) is not None, 'DELEGATION_IDENTITY_INVALID')
-    require_not_worker_context(feature, task_id)
-    require_not_delegated_lineage(root, feature)
-    delegation.require(expect in ACCEPT_EXPECTS, 'DELEGATION_ACCEPT_EXPECT_INVALID')
-    delegation.require(isinstance(command, str) and command.strip(),
-                       'DELEGATION_ACCEPT_COMMAND_REQUIRED')
-    timeout = timeout if timeout is not None else ACCEPT_TIMEOUT_DEFAULT
-    delegation.require(type(timeout) is int and 0 < timeout <= 28800, 'DELEGATION_TIMEOUT_INVALID')
-    delegation.require_no_maintenance(root)
     tasks_path = root / feature / 'tasks.md'
     delegation.require(tasks_path.is_file(), 'DELEGATION_TASKS_MISSING')
     matches = [line.strip() for line in tasks_path.read_text(encoding='utf-8-sig').splitlines()
@@ -2945,13 +2955,17 @@ def main(argv=None):
     accept_cmd = sub.add_parser('accept')
     accept_cmd.add_argument('--feature', required=True)
     accept_cmd.add_argument('--nonce', help='The dispatcher nonce (SEC-06); start returns it')
-    accept_cmd.add_argument('--run-id', required=True)
+    accept_cmd.add_argument('--run-id', help='The unverified run to accept (required without --no-attempt)')
+    accept_cmd.add_argument('--no-attempt', action='store_true',
+                            help='Adopt a checked task that has no attempt (needs --id; "adopt" is an alias)')
+    accept_cmd.add_argument('--id', help='The T### task to adopt with --no-attempt')
     accept_cmd.add_argument('--command', required=True)
     accept_cmd.add_argument('--expect', choices=ACCEPT_EXPECTS, required=True)
     accept_cmd.add_argument('--timeout', type=int)
     accept_cmd.add_argument('--owned', action='append',
                             help='A path (repeatable) to check "files" evidence against for this '
-                                 'call, overriding the paths recorded at start')
+                                 'call, overriding the paths recorded at start; with --no-attempt, '
+                                 'relative to the repo root, defaulting to the feature directory')
     trust_reset_cmd = sub.add_parser('trust-reset')
     trust_reset_cmd.add_argument('--feature', required=True)
     trust_reset_cmd.add_argument('--nonce', help='The dispatcher nonce (SEC-06); start returns it')
@@ -2992,6 +3006,8 @@ def main(argv=None):
                             help='A path (repeatable), relative to the repo root, to check "files" evidence '
                                  'against; defaults to the feature directory')
     args = parser.parse_args(argv)
+    if args.action == 'accept' and (args.no_attempt != bool(args.id) or args.no_attempt == bool(args.run_id)):
+        accept_cmd.error('accept needs --run-id, or --no-attempt with --id (never both)')
     try:
         if args.action in ('accept', 'adopt', 'reassign', 'trust-reset'):
             require_dispatcher_nonce(args.root, args.nonce)
@@ -3018,12 +3034,12 @@ def main(argv=None):
             result = abandon_intent(args.root, args.feature, args.intent_id, args.reason)
         elif args.action == 'accept':
             result = accept(args.root, args.feature, args.run_id, args.command, args.expect,
-                            args.timeout, args.owned)
+                            args.timeout, args.owned, task_id=args.id)
         elif args.action == 'trust-reset':
             result = trust_reset(args.root, args.feature, args.reason)
         elif args.action == 'adopt':
-            result = adopt(args.root, args.feature, args.id, args.command, args.expect,
-                           args.timeout, args.owned)
+            result = accept(args.root, args.feature, None, args.command, args.expect,
+                            args.timeout, args.owned, task_id=args.id)
         elif args.action == 'record-native':
             result = record_native(args.root, args.feature, args.id, args.token, args.host_agent_id,
                                    args.requested_model, args.command, args.expect, args.observed_model,

@@ -1,5 +1,11 @@
 # Changelog
 
+## [Unreleased]
+
+- `delegate_dispatch.py accept --no-attempt --id <T###> --command "<check>" --expect counts|files [--owned <path>] --nonce <n>` adopts a checked task that has no attempt. `adopt` stays as an alias with the same arguments and byte-identical output; both run one implementation. `accept` without `--no-attempt` still needs `--run-id`, and mixing the two modes is a usage error (exit 2). No behaviour changes (PH-06-T03, DEC-02 A).
+- The parse_counts and light-tier summary path and the ledger trust markers are documented as advisory. No migration was removed: each one reads state a released version can have left.
+- CONTRIBUTING.md adds the no-behaviour-change rule for cleanup pull requests.
+
 ## [1.25.0] - 2026-10-28
 
 - Native-first routing: when delegation is on and the route's preferred candidate is a tier on the selected host, the route starts with a native candidate (`route_kind: native`, `route_reason: native-first`) on that tier's model, and the configured candidates follow as external fallbacks. An external candidate always says why: `native-failed:<category>` (`start` fills in the latest native attempt's failure category, or `not-attempted`), `native-unsupported:<capability>` (`delegation-disabled`, `work-type-disabled`, `cross-vendor-route`, `model-pin` when the preferred tier has no role file to pin its model: only `standard` and `review` do) or `external:cross-vendor` for a candidate that names the other vendor. The claim's `delegation` shows the candidates and `route_kind`, and a native-first claim records `git_status_at_claim`. `start` launches only the external candidates.

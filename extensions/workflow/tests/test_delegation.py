@@ -1160,6 +1160,34 @@ class DelegationTests(unittest.TestCase):
         self.assertEqual(second['status'], 'successful')
         self.assertEqual(delegation.latest_attempt(self.root, self.feature, 'T001')['status'], 'successful')
 
+    def test_adopt_is_an_alias_of_accept_no_attempt_with_identical_output(self):
+        """DEC-02 A: adopt and accept --no-attempt share one implementation and print the same bytes,
+        for a passing and a failing check, each from a fresh fixture; the CLI refuses a mixed mode."""
+        home = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, home, True)
+        for exit_code, output in ((0, '{"total": 5, "passed": 5, "failed": 0}'), (1, 'boom')):
+            printed = []
+            for verb in (['adopt'], ['accept', '--no-attempt']):
+                self.setUp()
+                self.tasks('- [x] T001 [Collect] Run smoke suite\n')
+                self.enable()
+                out = io.StringIO()
+                with patch.object(delegation, 'global_root', return_value=home), \
+                     patch.object(dispatch, 'run_capped', return_value=self.fake_run_capped(exit_code, output)), \
+                     patch.object(dispatch.uuid, 'uuid4', return_value=type('U', (), {'hex': '0' * 32})()), \
+                     contextlib.redirect_stdout(out):
+                    code = dispatch.main(['--root', str(self.root), *verb, '--feature', self.feature,
+                                          '--id', 'T001', '--command', 'pytest -q', '--expect', 'counts',
+                                          '--nonce', dispatch.dispatcher_nonce(self.root)])
+                printed.append((code, out.getvalue()))
+            self.assertEqual(printed[0], printed[1])
+            self.assertEqual(json.loads(printed[0][1])['adopted'], exit_code == 0)
+        for bad in (['--run-id', 'r', '--no-attempt', '--id', 'T001'], ['--id', 'T001'], ['--no-attempt'], []):
+            with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as stop:
+                dispatch.main(['--root', str(self.root), 'accept', '--feature', self.feature, *bad,
+                               '--command', 'x', '--expect', 'counts'])
+            self.assertEqual(stop.exception.code, 2)
+
     def test_dispatcher_commands_refuse_inside_a_delegated_worker_context(self):
         """Round 9, finding 1a: adopt, accept, trust-reset and reassign must
         all refuse when SANDUQ_DELEGATED_RUN is set, marking this process as
