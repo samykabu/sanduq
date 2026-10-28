@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [1.8.4] - 2026-10-28
 
 - The packaged `sanduq_ci.py` helper's docstrings state the rule they protect instead of citing review findings. No behaviour change.
 

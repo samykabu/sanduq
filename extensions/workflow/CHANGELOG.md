@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [2.0.0] - 2026-10-28
 
 Breaking: Scope is part of Workflow (DEC-03, PH-06-T02), and every Scope command is renamed. Spec Kit 1.1.3 refuses an extension command whose name does not start with `speckit.<extension id>.` (`Command 'speckit.scope.run' must use extension namespace 'workflow'`), so `speckit.scope.<x>` is now `speckit.workflow.scope-<x>`: `scope-run` and `scope-plan` are host commands; `scope-guard`, `scope-bind`, `scope-after-specify`, `scope-plan-guard` and `scope-reconcile` are Workflow's hooks, found by the event dispatcher by file name and never host skills. The skill names `scope-analyst` and `github-clarification` are unchanged (Spec Kit renders skills only from commands, so it does not namespace them). 
 

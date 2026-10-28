@@ -8,6 +8,6 @@
     "pr": "4.7.4",
     "user-manual": "1.8.4"
   },
-  "status": "implementation-in-progress",
-  "note": "Workflow 1.25.0: PH-05 native-first routing (route_kind/route_reason, record-native with provenance, SAME_LINEAGE_REVIEW, HOST_MISMATCH, ROLE_FILES_STALE, one routing rule); every suite passed locally on the merged tree."
+  "status": "ready",
+  "note": "PH-06: Workflow 2.0.0 (Scope merged, commands renamed speckit.workflow.scope-*), Scope 2.0.0 retired shim, Assure 2.7.1, Memory 2.6.2, PR 4.7.4, User Manual 1.8.4; every suite passed locally on the merged tree and a consumer upgrade kept every receipt."
 }

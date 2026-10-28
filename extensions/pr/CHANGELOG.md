@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [4.7.4] - 2026-10-28
 
 - Script comments state the rule they protect instead of citing review findings. No behaviour change.
 
