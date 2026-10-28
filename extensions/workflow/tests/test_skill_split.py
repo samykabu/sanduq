@@ -54,7 +54,7 @@ class RuleInventoryTests(unittest.TestCase):
         common = ['analysis-json.md', 'controls.md', 'managed.md', 'standalone.md']
         # Stream C: the local clarification transport has its own reference in github-clarification.
         for skill, expected in (('scope-analyst', common), ('github-clarification', sorted(common + ['local.md']))):
-            folder = ROOT / 'extensions/scope/skills' / skill
+            folder = ROOT / 'extensions/workflow/skills' / skill
             core = (folder / 'SKILL.ext.md').read_text(encoding='utf-8')
             names = sorted(p.name for p in (folder / 'references').glob('*.md'))
             self.assertEqual(names, expected, skill)
@@ -82,7 +82,7 @@ class RuleInventoryTests(unittest.TestCase):
         # The managed binding rules and the required-only checkpoint rule each exist once.
         binding = 'This narrow path permits mapped Feature Specification'
         checkpoints = 'project policy pre-authorizes routine phase checkpoints'
-        sources = list(REFERENCES.glob('*.md')) + list((ROOT / 'extensions/scope/commands').glob('*.md'))
+        sources = list(REFERENCES.glob('*.md')) + list((ROOT / 'extensions/workflow/commands').glob('*.md'))
         sources += list((ROOT / 'presets').rglob('*.md'))
         for phrase, home in ((binding, 'scope-binding.md'), (checkpoints, 'superspec-checkpoints.md')):
             holders = [p.name for p in sources if phrase in normalize(p.read_text(encoding='utf-8'))]
@@ -100,10 +100,9 @@ class RuleInventoryTests(unittest.TestCase):
         import yaml
         files = list((ROOT / 'presets').rglob('commands/*.md'))
         files += list((ROOT / 'extensions/workflow/commands').glob('*.md'))
-        files += list((ROOT / 'extensions/scope/commands').glob('*.md'))
         files += [ROOT / 'extensions/workflow/skills/workflow/SKILL.ext.md',
-                  ROOT / 'extensions/scope/skills/scope-analyst/SKILL.ext.md',
-                  ROOT / 'extensions/scope/skills/github-clarification/SKILL.ext.md']
+                  ROOT / 'extensions/workflow/skills/scope-analyst/SKILL.ext.md',
+                  ROOT / 'extensions/workflow/skills/github-clarification/SKILL.ext.md']
         for path in files:
             front = yaml.safe_load(path.read_text(encoding='utf-8').split('---')[1])
             description = front['description']
@@ -117,7 +116,7 @@ class RuleInventoryTests(unittest.TestCase):
         # Review ids (B11, F1, W01d, "round 3", "Scope 1.6.1") belong in the CHANGELOG.
         # Headings worker_brief.py parses (F1, F2, T0, F3, T7, T8) are the known exceptions.
         pattern = re.compile(r'\b(?:W0\d[a-z]?|P0\d|B1\d|Scope \d+\.\d+|review round \d|finding \d+|Sprint \d)\b')
-        roots = [SKILL, ROOT / 'extensions/scope/skills', ROOT / 'extensions/scope/commands', ROOT / 'presets']
+        roots = [ROOT / 'extensions/workflow/skills', ROOT / 'extensions/workflow/commands', ROOT / 'presets']
         hits = [(p.name, m.group(0)) for root in roots for p in root.rglob('*.md')
                 for m in pattern.finditer(p.read_text(encoding='utf-8'))]
         self.assertEqual(hits, [])

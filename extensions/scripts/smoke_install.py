@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """Exercise public Spec Kit install/reinstall in a fresh local fixture, without GitHub writes."""
 import argparse
-import importlib.util
 import json
 import subprocess
 import sys
@@ -27,7 +26,7 @@ def smoke(host, superspec_source=None, second_host=None):
     run(['specify','init','--here','--force','--ignore-agent-tools','--integration',host] + (['--integration-options=--skills'] if host == 'codex' else []))
     if second_host:
         run(['specify','integration','install',second_host] + (['--integration-options=--skills'] if second_host == 'codex' else []))
-    for name in ('illustrate','project','scope','pr','assure','user-manual','progress','workflow'):
+    for name in ('illustrate','project','pr','assure','user-manual','progress','workflow'):
         result = package(name, output=workspace / 'archives' / (name + '.zip'))
         with zipfile.ZipFile(result['archive']) as archive: archive.extractall(workspace / 'packages')
         if name == 'workflow': run(['specify','extension','add','--dev',str(workspace / 'packages' / name)])
@@ -63,13 +62,15 @@ def smoke(host, superspec_source=None, second_host=None):
     installed_workflow = project / '.specify/extensions/workflow'
     # Every claimable stage's reference must be present in the installed copy (B8):
     # the split core SKILL.md plus one references/stage-<name>.md per BASE_STAGES entry.
-    spec = importlib.util.spec_from_file_location('installed_workflow_runtime', installed_workflow / 'scripts/workflow.py')
-    installed_runtime = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(installed_runtime)
-    for stage in installed_runtime.BASE_STAGES:
+    # A child process imports the installed runtime, so this process never holds a second `workflow` module.
+    query = ('import json, sys; sys.path.insert(0, sys.argv[1]); import workflow; '
+             'print(json.dumps([workflow.stage_reference(stage) for stage in workflow.BASE_STAGES]))')
+    references = json.loads(subprocess.run([sys.executable, '-c', query, str(installed_workflow / 'scripts')],
+                                           check=True, capture_output=True, text=True, timeout=120).stdout)
+    for relative in references:
         # stage_reference() is project-relative (`.specify/extensions/workflow/...`), so it
         # resolves directly against the project root, not against installed_workflow.
-        reference = project / installed_runtime.stage_reference(stage)
+        reference = project / relative
         assert reference.is_file(), 'Missing installed stage reference: ' + str(reference)
     assert len((installed_workflow / 'skills/workflow/SKILL.md').read_bytes()) <= 6144, 'Core SKILL.md over the 6 KB budget'
     execution_files = ('skills/workflow/references/execution-assign.md', 'skills/workflow/references/execution-report.md',

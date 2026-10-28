@@ -1,5 +1,9 @@
 # Changelog
 
+## [2.7.1] - 2026-10-28
+
+- The packaged `sanduq_ci.py` helper's docstrings state the rule they protect instead of citing review findings. No behaviour change.
+
 ## [2.7.0] - 2026-10-28
 
 - `documentation-gates.yml` checks out the PR base into `.sanduq-base` and runs the base's `assure_state.py` and User Manual script against the head; `SANDUQ_POLICY_ROOT` makes the base's `assure-config.yml` decide whether the gate is on (SEC-03). A first-install PR runs the released Assure the head names, after `sanduq_ci.py verify-release` checks the head copy. `assure init` replaces an unedited render of the previous template.

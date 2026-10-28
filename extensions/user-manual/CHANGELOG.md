@@ -1,5 +1,9 @@
 # Changelog
 
+## [1.8.4] - 2026-10-28
+
+- The packaged `sanduq_ci.py` helper's docstrings state the rule they protect instead of citing review findings. No behaviour change.
+
 ## [1.8.3] - 2026-10-28
 
 - `requires.tools` declares Python `>=3.11`, the floor every Sanduq extension now states (SAMY-11).

@@ -37,7 +37,7 @@ def compatible(root, name):
 
 def upgrade_command(root):
     """The dependency-aware fix: upgrade.py at the installed Workflow version installs the versions its lock names.
-    Before the first `install.py --apply` (no install lock yet) the fix is that install (AHMED-35)."""
+    Before the first `install.py --apply` (no install lock yet) the fix is that install."""
     version = registry(root).get('workflow', {}).get('version')
     if not (root / '.specify/workflow/install-lock.json').is_file():
         return 'python .specify/extensions/workflow/scripts/install.py --apply', version
@@ -174,7 +174,7 @@ def project_errors(root, policy):
     config = read(root / '.specify/extensions/project/config.json', {})
     if not isinstance(config, dict): return ['PROJECT_CONFIG_INVALID: expected a JSON object']
     if not config.get('projectId'):
-        # AHMED-06: an absent board is one setup step, not twenty partial-configuration codes.
+        # An absent board is one setup step, not twenty partial-configuration codes.
         return ['PROJECT_NOT_CONFIGURED: no GitHub Project board is configured (.specify/extensions/project/config.json '
                 'is missing or has no projectId) and project_sync.mode is ' + mode + '; run $speckit-project-init '
                 '(python .specify/extensions/project/scripts/project_init.py --hooks-mode required) to map a board, or '
@@ -204,7 +204,7 @@ def project_errors(root, policy):
 SCOPE_STATUSES = ('Backlog', 'Feature Specification', 'Need Clarifications', 'Ready', 'In progress', 'In review', 'Done')
 PHASE_DEFAULTS = {'open': 'Feature Specification', 'analysis': 'Ready', 'engineer-review': 'Ready',
                   'ready': 'Ready', 'in-progress': 'In progress', 'in-review': 'In review', 'done': 'Done'}
-# AHMED-25: accepted values that change nothing today; doctor warns per value set.
+# Accepted values that change nothing today; doctor warns per value set.
 INERT_VALUES = (('execution', 'checkpoints', 'every-phase', 'acts as required-only'),
                 ('context', 'mode', 'measured-with-estimated-fallback', 'acts as measured-only'),
                 ('updates', 'policy', None, 'update scheduling is not implemented; updates are run by hand'))
@@ -353,8 +353,8 @@ def progress_wiring_warnings(root):
 
 
 def interrupted_install_errors(root):
-    """INSTALL_INTERRUPTED when an install, upgrade or host switch left its in-progress marker and its process is gone
-    (AHMED-09); the marker names the backup `install.py --restore` puts back."""
+    """INSTALL_INTERRUPTED when an install, upgrade or host switch left its in-progress marker and its process is gone;
+    the marker names the backup `install.py --restore` puts back."""
     from install import IN_PROGRESS  # lazy: install imports this module
     marker = read(root / IN_PROGRESS, None) if (root / IN_PROGRESS).is_file() else None
     if not isinstance(marker, dict) or sanduq_fs.process_alive(marker.get('pid')):
@@ -365,7 +365,7 @@ def interrupted_install_errors(root):
 
 
 def history_errors(root):
-    """HISTORY_UNRELATED as a doctor --project error (AHMED-24)."""
+    """HISTORY_UNRELATED as a doctor --project error."""
     try:
         require_shared_history(root)
     except WorkflowError as exc:
@@ -377,8 +377,8 @@ HOOK_PYTHON_PROBE = 'import sys;print(sys.version_info[0],sys.version_info[1])'
 
 
 def hook_python_warnings(root):
-    """HOOK_PYTHON_MISSING / HOOK_PYTHON_TOO_OLD for the interpreter the active host's guard hook names (AHMED-21):
-    the guard allows everything when it cannot run, and every Sanduq extension needs Python 3.11 (SAMY-11)."""
+    """HOOK_PYTHON_MISSING / HOOK_PYTHON_TOO_OLD for the interpreter the active host's guard hook names:
+    the guard allows everything when it cannot run, and every Sanduq extension needs Python 3.11."""
     import hosts
     path = root / hosts.HOOK_FILES.get(active_host(root), '')
     try:
@@ -464,8 +464,17 @@ def doctor(root, policy, project=False, preserved_ci=None, check_delegation=True
            explicit=False):
     """Installation health. `explicit` (the `doctor` command) also runs the skill inventory (with `project`)
     and the byte-sensitive line-ending scan, which no claim or other command pays for."""
-    needed = ['scope', 'project', 'pr'] + (['assure'] if policy['processes']['qa'] else []) + (['user-manual'] if policy['processes']['user_manual'] else [])
+    needed = ['project', 'pr'] + (['assure'] if policy['processes']['qa'] else []) + (['user-manual'] if policy['processes']['user_manual'] else [])
     errors = dependency_errors(root, needed, project)
+    scope = registry(root).get('scope', {}).get('version')
+    try:  # DEC-03: Workflow provides Scope; a Scope with code (before its 2.0.0 shim) would run old hooks too
+        merged = scope is None or Version(str(scope)) >= Version('2.0.0')
+    except ValueError:
+        merged = False
+    if not merged:
+        errors.append('SCOPE_MERGED_INTO_WORKFLOW: scope ' + str(scope) + ' is installed, but Workflow provides Scope now '
+                      '(speckit.scope.<x> is speckit.workflow.scope-<x>); run "' + upgrade_command(root)[0] +
+                      '" to remove it; its state in .specify/scope is kept')
     if active_host(root) not in ('codex','claude'):
         errors.append('HOST_UNSUPPORTED: this release supports Codex and Claude skills mode')
     if (check_delegation and policy.get('delegation', {}).get('enabled') and
@@ -559,7 +568,7 @@ def doctor(root, policy, project=False, preserved_ci=None, check_delegation=True
     if project and explicit:
         result['skill_inventory'] = skill_inventory_result
     if explicit:
-        from install import backup_usage  # lazy: only an explicit doctor reports the kept backups (X19)
+        from install import backup_usage  # lazy: only an explicit doctor reports the kept backups
         result['backups'] = {**backup_usage(root), 'kept': 'the three newest before.zip'}
     if preflight:
         result['preflight'] = preflight
@@ -597,7 +606,7 @@ def pr_lint_binding(root, feature, state, receipt):
     computed = execution_tools.pr_lint(body, repo, int(issue), source['dependencies'])
     bound = computed['bound']
     closed = any((c['repo'], c['issue']) == (bound['repo'], bound['issue']) for c in computed['closes'])
-    # the missing bound reference alone gets its own code (1.24.1, N1); any other finding stays the general one
+    # the missing bound reference alone gets its own code; any other finding stays the general one
     require(computed['ok'] or (not closed and len(computed['violations']) == 1),
             'PR_CLOSING_REFERENCE_REJECTED: ' + json.dumps(computed['violations']))
     require(closed, 'PR_BOUND_ISSUE_NOT_CLOSED: the body never closes %s#%s' % (repo, issue))

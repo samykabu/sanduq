@@ -14,10 +14,9 @@ def github_repository(root):
     `origin` remote, in whatever form it is written -- any scheme, an
     embedded token or other userinfo, the bare `git@host:path` shorthand,
     with or without a trailing `.git` -- because it is derived from the
-    same `normalize_remote_url` the portable identity uses (round 2,
-    finding N1: the previous ad-hoc regex accepted only two literal forms
-    and rejected, for example, `ssh://git@github.com/acme/app` and a
-    token URL like `https://x-access-token:TOKEN@github.com/acme/app`).
+    same `normalize_remote_url` the portable identity uses, so forms such as
+    `ssh://git@github.com/acme/app` and a token URL like
+    `https://x-access-token:TOKEN@github.com/acme/app` all read the same.
 
     Case is preserved, not folded here: GitHub repository names are not
     case sensitive, so compare the result with `same_github_repository`,
@@ -51,7 +50,7 @@ def git_lines(root, *args):
 
 
 def target_branch(root):
-    """The feature's target branch and, when it was corrected, why (F8).
+    """The feature's target branch and, when it was corrected, why.
 
     The branch the feature forked from (`previous_branch`) unless origin does not have it while origin's
     default branch (the local `origin/HEAD`, else origin's only branch; no network) differs: a clone of
@@ -149,8 +148,8 @@ def current_identity(root, recorded):
 
 def root_commit_still_reachable(root, commit_sha):
     """Whether `commit_sha` (a previously recorded root commit) is still an
-    ancestor of (or equal to) the current HEAD in the repository at `root`
-    (round 2, finding N4). Merging in an unrelated history
+    ancestor of (or equal to) the current HEAD in the repository at `root`.
+    Merging in an unrelated history
     (`git merge --allow-unrelated-histories`) adds another root commit
     reachable from HEAD, often older, which can change which one
     `root_commit_sha`'s deterministic pick returns even though this is
@@ -200,7 +199,7 @@ def identity_matches(recorded, current, current_root=None):
     makes a previously-accepted checkpoint newly refused. When the root
     commits differ and `current_root` (the live repository to check
     against) is given, the recorded one is also accepted if it is still
-    reachable there (`root_commit_still_reachable`, round 2, finding N4)
+    reachable there (`root_commit_still_reachable`)
     rather than refusing outright -- `current_root` is omitted by pure
     dict-level callers (e.g. unit tests with no real repository to check
     against), which keeps this exact-match-only, as before.
@@ -236,7 +235,7 @@ def identity_matches(recorded, current, current_root=None):
 
 def legacy_history_signal(root, state):
     """Whether a pre-1.8.0 checkpoint records a commit still reachable from
-    HEAD (Codex round 1, finding 1). A legacy checkpoint has no portable
+    HEAD. A legacy checkpoint has no portable
     identity, only the `head` every `save()` recorded (plus any receipt
     `head` a 1.6.0+ receipt carries), and
     a full-hex commit id that is an ancestor of this repository's HEAD is
@@ -294,7 +293,7 @@ def verify_checkpoint_identity(root, state, relative):
 
 def root_history_changed(root, state, current):
     """Whether the checkpoint's recorded history is no longer this
-    repository's (Codex round 1, finding 2). `identity_matches` ignores the
+    repository's. `identity_matches` ignores the
     root commit unless both sides are confidently non-shallow, and accepts
     one that is still reachable; when the recorded root is neither equal nor
     reachable on a non-shallow clone, or a legacy checkpoint records no
@@ -316,8 +315,8 @@ def require_issue_repository_binding(root, state, relative):
     remote -- the same binding `start` (see below) and the scope
     extension's `bound_claim` (`workflow_policy.py`) already require, and
     for the same reason: `repo_identity`'s remote/root-commit match is only
-    ever as strong as this repository's own, locally-editable Git config
-    (round 1, finding 1). A *legacy* checkpoint has no portable
+    ever as strong as this repository's own, locally-editable Git config.
+    A *legacy* checkpoint has no portable
     `repo_identity` at all to check against, so without this, a legacy
     checkpoint bound to some other repository's issue was accepted by
     almost any repository whose own identity happened to resolve at all --
@@ -352,7 +351,7 @@ def issue_identity(root, issue, gh=None):
     if gh is None:
         from decisions import GitHub
         gh = GitHub()
-    # AHMED-13: a fork's issues live upstream, so binding #n on the fork would bind the wrong issue.
+    # A fork's issues live upstream, so binding #n on the fork would bind the wrong issue.
     origin = gh.api(f'repos/{repo}') or {}
     require(not origin.get('fork'), 'ORIGIN_IS_FORK: the "origin" remote ' + repo + ' is a fork of '
             + str((origin.get('parent') or {}).get('full_name') or 'another repository') + ', whose issues are not '
@@ -371,7 +370,7 @@ def issue_identity(root, issue, gh=None):
 
 
 def require_shared_history(root):
-    """HISTORY_UNRELATED when origin/HEAD exists locally and shares no commit with HEAD (AHMED-24): an orphan or
+    """HISTORY_UNRELATED when origin/HEAD exists locally and shares no commit with HEAD: an orphan or
     recreated history is self-consistent to the identity checks but can never merge. No fetch; local refs only."""
     if not git_ok(root, 'rev-parse', '--verify', '--quiet', 'refs/remotes/origin/HEAD'):
         return

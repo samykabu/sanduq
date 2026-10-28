@@ -19,7 +19,7 @@
     "test_eol_fingerprints": 7.3,
     "test_evidence_snapshot": 21.8,
     "test_execution_policy": 1.2,
-    "test_execution_protocol_b11": 0.1,
+    "test_execution_protocol_references": 0.1,
     "test_execution_tools": 1.0,
     "test_freshness": 29.5,
     "test_front_half_runtime": 115.8,

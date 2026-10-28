@@ -68,7 +68,7 @@ class MemoryHandoffTests(unittest.TestCase):
         return (run, run.complete('execute-token', receipt)) if complete else (run, receipt)
 
     def call(self, transition='execute', **kwargs):
-        return mh.handoff(w, self.root, transition, kwargs.pop('feature', self.feature), **kwargs)
+        return mh.handoff(self.root, transition, kwargs.pop('feature', self.feature), run_class=w.Run, **kwargs)
 
     def merge(self):
         w.git(self.root, 'add', '-A')

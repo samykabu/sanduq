@@ -1,7 +1,7 @@
 ---
 type: tool_used
 tool: Skill
-input_match: '"skill"\s*:\s*"(?:[\w-]+:)?speckit-scope-(?:guard|bind|after-specify|plan-guard|reconcile)"'
+input_match: '"skill"\s*:\s*"(?:[\w-]+:)?speckit-(?:workflow-)?scope-(?:guard|bind|after-specify|plan-guard|reconcile)"'
 min: 0
 max: 0
 ---

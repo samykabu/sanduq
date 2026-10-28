@@ -21,7 +21,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-SUITES = ["workflow", "scope", "user-manual", "memory", "illustrate", "progress", "assure", "pr", "project"]
+SUITES = ["workflow", "user-manual", "memory", "illustrate", "progress", "assure", "pr", "project"]
 OSES = ["ubuntu-latest", "windows-latest"]
 # Suites whose Windows runs are slow (workflow 21-23 min of runner time, memory 8-12 min), so pushes to
 # main skip them; pull requests and the nightly schedule still cover them.
@@ -42,10 +42,6 @@ VENDORED_WEEKDAY = 6
 
 # extensions/<key>/** also runs these suites. The mapping lists real dependencies only:
 #   progress -> workflow: workflow tests exercise the Progress integration.
-#   workflow -> scope: scope loads extensions/workflow/scripts/{workflow,decisions}.py
-#                      (extensions/scope/scripts/workflow_policy.py).
-#   scope -> workflow: workflow's ScopeCommandTests import Scope's real parser and main()
-#                      (extensions/workflow/tests/test_execution_tools.py).
 #   assure -> workflow: workflow tests render documentation-gates.yml and run assure_state.py.
 #   pr -> workflow: workflow tests lint PR bodies and the guard hook covers gh pr.
 #   project -> workflow: workflow's sync_project runs project_sync.py (test_sync_binding, test_workflow).
@@ -54,18 +50,21 @@ VENDORED_WEEKDAY = 6
 #   workflow -> pr: pr_publish tests import extensions/workflow/scripts (test_pr_publish).
 # test_ci_matrix.py scans every extensions/<suite>/tests/*.py for references to another suite's source and
 # fails when neither this table nor MODULE_RULES covers one.
-DEPENDENTS = {"progress": ["workflow"], "workflow": ["scope", "pr"], "scope": ["workflow"],
+DEPENDENTS = {"progress": ["workflow"], "workflow": ["pr"],
               "assure": ["workflow"], "pr": ["workflow"], "project": ["workflow"], "memory": ["workflow"]}
 
 # Paths that run only some modules of a suite: {path prefix: {suite: [modules]}}.
 #   Illustrate's hook is wired into managed installs by install.wire_illustrate (test_install_hooks).
 #   The repository tooling below is read by one module each.
-#   Scope's plan tests and PR's diagram recipe tests read Illustrate's skill files.
+#   Scope's plan tests (in the workflow suite since Scope merged into Workflow) and PR's diagram recipe tests read
+#   Illustrate's skill files.
+#   extensions/scope/ is the retired Scope shim (no code); test_install checks its manifest.
 MODULE_RULES = {"extensions/illustrate/hooks/": {"workflow": ["test_install_hooks"]},
-                "extensions/illustrate/skill/": {"scope": ["test_plan"], "pr": ["test_pr_diagram_recipe"]},
+                "extensions/illustrate/skill/": {"workflow": ["test_scope_plan"], "pr": ["test_pr_diagram_recipe"]},
+                "extensions/scope/": {"workflow": ["test_install"]},
                 "extensions/scripts/release.py": {"workflow": ["test_release"]},
                 "extensions/scripts/check_docs.py": {"assure": ["test_descriptions"]},
-                "extensions/scripts/benchmark_instructions.py": {"scope": ["test_instructions"]}}
+                "extensions/scripts/benchmark_instructions.py": {"workflow": ["test_scope_instructions"]}}
 
 # Files that extensions/scripts/package.py injects into other packages, with every suite that ships or
 # tests them. test_ci_matrix.py checks this against the built archives. Other shared files run everything.
@@ -74,11 +73,10 @@ INJECTED = {"extensions/scripts/shared/sanduq_freshness.py": ["assure", "user-ma
             "extensions/scripts/shared/check_inputs.py": ["memory", "workflow"],
             "extensions/scripts/shared/bounded_json.py": ["memory", "workflow"],
             "extensions/scripts/shared/evidence_snapshot.py": ["workflow"],
-            "extensions/scripts/shared/sanduq_remote.py": ["workflow", "project", "scope"],
-            "extensions/scripts/shared/sanduq_gh.py": ["scope", "workflow", "project", "pr"],
+            "extensions/scripts/shared/sanduq_remote.py": ["workflow", "project"],
+            "extensions/scripts/shared/sanduq_gh.py": ["workflow", "project", "pr"],
             "extensions/scripts/shared/sanduq_pr_lint.py": ["pr", "workflow"],
-            "extensions/scripts/shared/sanduq_fs.py": ["workflow", "memory", "scope"],
-            "extensions/scope/scripts/sanduq_scope_github.py": ["scope", "workflow"],
+            "extensions/scripts/shared/sanduq_fs.py": ["workflow", "memory"],
             "extensions/workflow/scripts/sanduq_hash.py": ["workflow", "assure", "user-manual"],
             "extensions/workflow/scripts/sanduq_ci.py": ["workflow", "assure", "user-manual"]}
 

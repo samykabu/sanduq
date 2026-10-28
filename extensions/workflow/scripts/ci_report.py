@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Summarize the last N CI runs of a workflow: legs, cancellations, and a wall-clock span (B13).
+"""Summarize the last N CI runs of a workflow: legs, cancellations, and a wall-clock span.
 
 Reads exclusively through the GitHub REST API (`ci_evidence.GhClient`, the
 same `gh api` wrapper Verify evidence already uses), so it needs no new
@@ -9,8 +9,7 @@ the duration of jobs whose name matches `--fixed-job` (repeatable); everything
 else is counted as test time. Without `--fixed-job`, every job's time counts
 as test time and fixed is reported as zero -- an honest default, not a guess.
 `wall_clock_span_seconds` is earliest job start to latest job completion; it
-is a span, not a computed dependency-aware critical path (review round 1,
-finding 9), so it is named for what it actually measures. Runs and jobs are
+is a span, not a computed dependency-aware critical path, so it is named for what it actually measures. Runs and jobs are
 both paginated (GitHub's own 100-per-page cap), and `--branch` is URL-encoded.
 """
 from __future__ import annotations
@@ -135,8 +134,8 @@ def render_markdown(report):
 
 
 def remote_check(client, repository, ref, name, attempts=3, interval=20, sleep=time.sleep):
-    """One check run's state on `ref`, polled at most `attempts` times `interval` seconds apart (lite re-measure R1:
-    an unbounded `gh pr checks --watch` blocked for minutes on a job no runner picked up). `state` is the check's
+    """One check run's state on `ref`, polled at most `attempts` times `interval` seconds apart: an
+    unbounded wait would block for minutes on a job no runner picks up. `state` is the check's
     conclusion once completed, else `queued` (no runner has taken the job), `in_progress` or `absent`; it is
     reported, never waited on further."""
     for attempt in range(1, attempts + 1):

@@ -2,7 +2,7 @@ schema_version: "1.0"
 preset:
   id: scope-gate
   name: Scope before Specify
-  version: "1.6.2"
+  version: "1.7.0"
   description: "Require a scoped GitHub issue before the upstream Specify workflow."
   author: "Samy K. Abushanab"
   repository: "https://github.com/samykabu/sanduq"

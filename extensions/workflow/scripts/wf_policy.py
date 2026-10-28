@@ -79,7 +79,7 @@ def select_gate(ci, mode=None, scope=None, rules=(), keys=None):
     return ci
 
 
-# AHMED-03: the keys of `.specify/workflow.yml` (None: the top level) and of each fixed-schema section. A misspelt
+# The keys of `.specify/workflow.yml` (None: the top level) and of each fixed-schema section. A misspelt
 # key would otherwise be ignored, or change a section and invalidate receipts. `delegation`, `ci` and
 # `lean_execution` check their own keys; `receipts` and `skills.inventory_thresholds` already refuse unknown ones.
 POLICY_KEYS = {
@@ -387,7 +387,7 @@ def matches_side_effect(path, patterns):
 
 
 class PolicyLoader(yaml.SafeLoader):
-    """AHMED-04: a duplicated key (a README section pasted below an existing one) is refused with its line instead
+    """A duplicated key (a README section pasted below an existing one) is refused with its line instead
     of silently replacing the first mapping."""
 
     def construct_mapping(self, node, deep=False):
@@ -424,7 +424,7 @@ def stages(policy, tier=None, skipped=None):
 
 
 # Sub-keys that tune how future work runs (a cache TTL, a question cap, the board mode) and never change what
-# finished evidence means; a change to them alone reaches no stage (AHMED-30: switching `issue_sync.taskstoissues`
+# finished evidence means; a change to them alone reaches no stage (switching `issue_sync.taskstoissues`
 # or `project_sync.mode` on a feature in flight invalidates nothing). `transport` is frozen per feature on
 # its checkpoint at Scope start (REQ-21), so a later edit only affects features started after it.
 OPERATIONAL_SUBKEYS = {'scope': ('board_cache_seconds',),

@@ -54,7 +54,7 @@ DECISION_LEDGER = re.compile(r'(?:^|/)workflow/decisions\.json$')
 
 
 def decision_projection(content, ids=None):
-    """`decision-records:v1:<ids>:<sha256>` of the ledger's records with these ids (all when None) (F3).
+    """`decision-records:v1:<ids>:<sha256>` of the ledger's records with these ids (all when None).
 
     A receipt depends only on the decisions that existed when it was recorded, so a later decision (the
     User Manual module map raised at Execute) does not stale Scope through Tasks. A record's ``unparsed`` list
@@ -204,7 +204,7 @@ def source_fingerprints_of(root, receipt, feature=None):
     require(feature, 'SOURCE_INVENTORY_INVALID: the feature is required to read ' + reference['path'])
     label = feature + '/' + reference['path']
     try:
-        # The same checkout-independent read as the fingerprints: an autocrlf checkout keeps the hash (F6).
+        # The same checkout-independent read as the fingerprints: an autocrlf checkout keeps the hash.
         data = portable_content(label, inside(root, label).read_bytes())
     except OSError as exc:
         raise WorkflowError('SOURCE_INVENTORY_INVALID: ' + label + ': ' + str(exc)) from exc

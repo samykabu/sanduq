@@ -106,20 +106,20 @@ def product_map():
     b = []
     # step 1: extension zone
     b.append(g(1, '<rect x="24" y="48" width="952" height="404" rx="8" class="zone"/>'
-                  '<text class="e" x="48" y="80" font-size="12">THIS REPOSITORY · 8 SPEC KIT EXTENSIONS AND 3 PRESETS</text>'))
+                  '<text class="e" x="48" y="80" font-size="12">THIS REPOSITORY · 9 SPEC KIT EXTENSIONS (SCOPE IS A RETIRED SHIM) AND 3 PRESETS</text>'))
     # step 2: Illustrate hub
     b.append(g(2, node(56, R3, 892, 64, 'Illustrate',
                        ['themed diagrams and charts · works alone · includes the Illustrate skill'], 'focal', 17)))
-    # step 3: the four extensions that require Illustrate + their arrows
+    # step 3: the four extensions that require Illustrate + their arrows (Scope is part of Workflow from 2.0.0)
     arrows = ''.join(f'<path class="c" d="M{c} {R2 + BH} V{R3 - 2}" marker-end="url(#ar)"/>' for c in cx)
     b.append(g(3, arrows
-               + node(X[0], R2, BW, BH, 'Scope', ['issue scope and split', 'presets: gate, brainstorm'])
+               + node(X[0], R2, BW, BH, 'Workflow', ['issue to verified PR', 'includes Scope, 3 presets'])
                + node(X[1], R2, BW, BH, 'Assure', ['QA analysis', 'tester walkthrough'])
                + node(X[2], R2, BW, BH, 'PR', ['feature docs, PR text', 'review feedback'])
                + node(X[3], R2, BW, BH, 'User Manual', ['application manual', 'includes 5 skills'])))
-    # step 4: Workflow + Scope requires Workflow
-    b.append(g(4, f'<path class="c" d="M{cx[0]} {R2} V{R1 + BH + 2}" marker-end="url(#ar)"/>'
-                  + node(X[0], R1, BW, BH, 'Workflow', ['issue to verified PR', 'preset: workflow'])))
+    # step 4: Workflow uses Progress when installed
+    b.append(g(4, f'<path class="c opt" d="M{cx[0]} {R2} V{R1 + BH // 2} H{X[1] - 2}" marker-end="url(#ar)"/>'
+                  + node(X[1], R1, BW, BH, 'Progress', ['progress report', 'no extension needed'])))
     # step 5: PR optionally uses Assure and User Manual
     y = R2 + BH // 2
     b.append(g(5, f'<path class="c opt" d="M{X[2]} {y} H{X[1] + BW + 2}" marker-end="url(#ar)"/>'
@@ -151,11 +151,13 @@ def product_map():
     b.append(g(8, leg))
     H = L + 56
     write('product-map', W, H, 'What is in the box',
-          'Eight Spec Kit extensions and three presets live in this repository. Scope requires Workflow and '
-          'Illustrate; Assure, PR and User Manual require Illustrate; PR uses Assure and User Manual when they are '
-          'installed; Project and Memory need no other extension. The separate sanduq-skills repository holds the '
-          'portable Illustrate, User Manual and Delegate Task skills, which are copied into the Illustrate, User '
-          'Manual and Workflow extensions and published as plugin bundles through the sanduq marketplace.',
+          'Nine Spec Kit extensions and three presets live in this repository. Scope is part of Workflow from '
+          'Workflow 2.0.0, so the scope package is a retired shim with no code and is not drawn; the presets ship with Workflow. Workflow, Assure, PR and User Manual require '
+          'Illustrate; PR uses Assure and User Manual when they are installed; Workflow uses Progress when it is '
+          'installed; Project, Memory and Progress need no other extension. The separate sanduq-skills repository '
+          'holds the portable Illustrate, User Manual and Delegate Task skills, which are copied into the '
+          'Illustrate, User Manual and Workflow extensions and published as plugin bundles through the sanduq '
+          'marketplace.',
           ''.join(b), 8, 520,
           note='Arrows point from a product to what it needs.')
 
@@ -163,15 +165,15 @@ def product_map():
 # ----------------------------------------------------------- lifecycle overlay
 M, O = 'mand', 'opt'
 PHASES = [
-    ('Specify', 'speckit.specify', [('scope.guard', M), ('memory.session', M)],
-     [('scope.bind', M), ('project.sync', O), ('scope.after-specify', M)]),
+    ('Specify', 'speckit.specify', [('workflow.scope-guard', M), ('memory.session', M)],
+     [('workflow.scope-bind', M), ('project.sync', O), ('workflow.scope-after-specify', M)]),
     ('Clarify', 'speckit.clarify', [], []),
-    ('Plan', 'speckit.plan', [('scope.plan-guard', M)], [('project.sync', O)]),
+    ('Plan', 'speckit.plan', [('workflow.scope-plan-guard', M)], [('project.sync', O)]),
     ('Tasks', 'speckit.tasks', [], [('assure.analyze', O), ('project.sync', O), ('user-manual.analyze', O)]),
     ('Analyze', 'speckit.analyze', [('memory.impact', M)], [('project.sync', O)]),
     ('Implement', 'speckit.implement', [('assure.analyze', O), ('project.sync', O)],
      [('assure.document', O), ('memory.prepare', M), ('pr.generate', O), ('project.sync', O),
-      ('user-manual.update', O), ('scope.reconcile', M)]),
+      ('user-manual.update', O), ('workflow.scope-reconcile', M)]),
     ('After merge, release', 'you run these', [], [('memory.run', 'cmd'), ('user-manual.release', 'cmd')]),
 ]
 
@@ -186,8 +188,8 @@ def chip(x, y, label, kind, w=212):
 
 def lifecycle():
     W = 1000
-    BX, PX, PW, AX = 40, 300, 176, 520   # before column, phase column, after columns
-    CW, GAP = 212, 16
+    BX, PX, PW, AX = 40, 284, 176, 496   # before column, phase column, after columns
+    CW, ACW, GAP = 212, 232, 12  # after chips fit workflow.scope-after-specify
     b = [g(1, '<text class="e" x="40" y="36" font-size="12">BEFORE THE PHASE</text>'
               f'<text class="e" x="{PX + PW // 2}" y="36" font-size="12" text-anchor="middle">SPEC KIT PHASE</text>'
               f'<text class="e" x="{AX}" y="36" font-size="12">AFTER THE PHASE</text>')]
@@ -209,7 +211,7 @@ def lifecycle():
             ay = mid - (a_rows * 36 - 8) / 2
             parts.append(f'<path class="c" d="M{PX + PW} {mid:g} H{AX - 2}" marker-end="url(#ar)"/>')
             for k, (lab, kind) in enumerate(after):
-                parts.append(chip(AX + (k % 2) * (CW + GAP), ay + (k // 2) * 36, lab, kind))
+                parts.append(chip(AX + (k % 2) * (ACW + GAP), ay + (k // 2) * 36, lab, kind, ACW))
         if not before and not after:
             parts.append(f'<text class="m" x="{AX}" y="{mid + 4:g}" font-size="13">no hooks</text>')
         last = i == len(PHASES)

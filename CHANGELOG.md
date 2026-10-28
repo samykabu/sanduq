@@ -4,6 +4,11 @@ All notable changes to sanduq extensions/plugins are recorded here.
 Format: [Keep a Changelog](https://keepachangelog.com/). Extensions are versioned
 independently via `<extension>-vX.Y.Z` tags.
 
+## 2026-10-28 — Workflow 2.0.0, Scope 2.0.0 (retired), Assure 2.7.1, Memory 2.6.2, PR 4.7.4, User Manual 1.8.4 (pending release)
+
+- PH-06 of the October 2026 review. **Breaking:** Scope is part of Workflow, and every `speckit.scope.<x>` command is now `speckit.workflow.scope-<x>` (Spec Kit requires an extension's commands to start with its id). The installer removes the old Scope package and keeps `.specify/scope/` state; `migrate` treats the old command name as the new one, so features in progress keep their receipts. Scope 2.0.0 is a no-code shim marked deprecated that prints the upgrade step. Presets workflow 1.4.0, scope-gate 1.7.0, scope-brainstorm 1.6.0.
+- A claim previews every receipt it would remove and why, and `recover` restores them when the claim did no work (#109, #112, #114). `adopt` is an alias of `accept --no-attempt`. Internal clean-up with no behaviour change: explicit `memory_handoff` inputs, ledger-trust helpers in one module, no script loaded by path, review-history comments rewritten as rules with a lint check, round-named test modules renamed. The upgrade preview reports the blockers apply would hit, reuses an earlier `--preserve-ci` choice, and a rolled-back upgrade restores `.specify/integrations/`. A real consumer upgrade from 1.18.2 kept every receipt of its 12 features in progress. See the 2.0.0 table in `docs/start/upgrades.md`.
+
 ## 2026-10-28 — Workflow 1.25.1, Scope 1.14.1
 
 - Hotfix from the first PH-05-T07 live run: a Clarify comment that mentioned decision SD1 made Scope's receipt stale (the decision fingerprint hashed the diagnostic `unparsed` list), and Scope's own comments were not recorded as Sanduq's. Both fixed; receipts recorded before keep their hashes.

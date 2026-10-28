@@ -116,7 +116,7 @@ class ReconcileTests(unittest.TestCase):
         self.assertFalse(self._hooks()['hooks']['after_tasks'][0]['enabled'])
     def test_reconcile_roundtrip_preserves_unrelated_entries(self):
         path = self.root / '.specify/extensions.yml'
-        original = {'hooks': {'after_tasks': [{'extension':'project','command':'speckit.project.sync','optional':False}], 'before_specify':[{'extension':'scope','command':'speckit.scope.guard','optional':False}], 'after_implement':[{'extension':'custom','command':'custom.check','optional':True}]}, 'other':{'keep':True}}
+        original = {'hooks': {'after_tasks': [{'extension':'project','command':'speckit.project.sync','optional':False}], 'before_specify':[{'extension':'scope','command':'speckit.workflow.scope-guard','optional':False}], 'after_implement':[{'extension':'custom','command':'custom.check','optional':True}]}, 'other':{'keep':True}}
         path.write_text(yaml.safe_dump(original), encoding='utf-8')
         self.assertEqual(len(reconcile(self.root)['changes']),1)
         self.assertEqual(yaml.safe_load(path.read_text()),original)

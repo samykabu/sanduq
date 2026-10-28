@@ -11,6 +11,7 @@ usable example. Generated agent registrations and installed consumer copies are 
 - [Find the owning source](#find-the-owning-source)
 - [Test a local package](#test-a-local-package)
 - [Validate a change](#validate-a-change)
+- [No-behaviour-change rule for cleanup PRs](#no-behaviour-change-rule-for-cleanup-prs)
 - [Update documentation and assets](#update-documentation-and-assets)
 - [Prepare a release](#prepare-a-release)
 - [Release trains](#release-trains)
@@ -61,7 +62,7 @@ need authenticated GitHub access. Use a disposable consumer for installer work.
 | Claude Code marketplace entries | `.claude-plugin/marketplace.json` (pinned `git-subdir` sources); bundle versions live in sanduq-skills |
 | Extension-adapted skill entrypoints | `SKILL.ext.md`; `package.py` restores `SKILL.md` in the archive |
 | Extension metadata and commands | `extensions/<id>/extension.yml`, `commands/`, `skills/`, and references |
-| Scope runtime, analyst and GitHub clarification | `extensions/scope/` (MIT license preserved) |
+| Scope runtime, analyst and GitHub clarification | `extensions/workflow/scripts/scope/`, `extensions/workflow/skills/scope-analyst/` and `github-clarification/` (MIT); `extensions/scope/` is the retired 2.0.0 shim |
 | Short Scope entry and Bridge router alias skills | `extensions/workflow/skills/speckit-scope/` and `speckit-superpowers-bridge/`; the installer replaces only a recognized legacy alias or an identical owned copy |
 | PR visuals contract | `extensions/pr/commands/speckit.pr.generate.md`; generated skills inherit it after installation |
 | Managed command policy | Canonical `presets/` (`workflow`, `scope-gate`, `scope-brainstorm`); bundled by package tooling |
@@ -115,7 +116,6 @@ Run the affected suite from the Sanduq checkout:
 
 ```bash
 python -m unittest discover -s extensions/workflow/tests -q
-python -m unittest discover -s extensions/scope/tests -q
 python -m unittest discover -s extensions/user-manual/tests -q
 python -m unittest discover -s extensions/memory/tests -q
 python extensions/scripts/vendor.py check
@@ -126,7 +126,14 @@ git diff --check
 
 Choose the suites affected by the diff. Documentation-only changes need the documentation check,
 link review, and rendered illustration inspection. Changed command semantics need a check that
-fails when the behavior breaks, not a copy of the implementation.
+fails when the behavior breaks, not a copy of the implementation. A test of a skill reference or
+document checks a heading, a command, an error code or a key term, or forbids a pattern; it does not
+pin a sentence unless code parses that sentence.
+
+A comment states the rule it protects, not the review that found it: `check_docs.py` fails on a
+comment or docstring in `extensions/*/scripts` that cites a review round, a finding number or a
+reviewer id, and on a test module named after a round or review. Review history belongs in the
+package CHANGELOG.
 
 Installation changes also need the relevant smoke check:
 
@@ -140,6 +147,19 @@ python extensions/scripts/smoke_memory_install.py
 CI exercises Linux/Windows regression, Codex/Claude and core/SuperSpec installs, transactional
 upgrades, Project initialization on Linux and Windows, and Memory registration. Report unavailable
 infrastructure and skipped checks accurately; package creation alone is not live acceptance.
+
+## No-behaviour-change rule for cleanup PRs
+
+A cleanup pull request (a merge, a rename, dead-code removal, a simplification) changes no behaviour a
+user can reach. Its description shows all four:
+
+1. The affected suites pass, unchanged, before and after (see [Validate a change](#validate-a-change)).
+2. The fixture lifecycle gives identical outputs before and after: `test_lifecycle_e2e` passes and
+   `python extensions/scripts/benchmark_front_half.py --repo . --tier <lite|standard|full> --out <file>`
+   writes the same JSON for each tier once `meta.generated_at` and `meta.repo_head` are ignored.
+3. No capability or code path a user can reach is removed. A renamed command keeps its old name as an
+   alias with the same output; a migration stays while any released version can have left the state it reads.
+4. The line counts of the changed files before and after.
 
 ## Update a vendored skill
 

@@ -10,6 +10,8 @@ managed run of a real issue by an agent host, from scope to an open pull request
 not a live run.
 
 Workflow 1.19.2 hotfix: focused reconciler, rollback and packaged CLI checks passed with Spec Kit 1.1.3, plus an existing Windows consumer upgrade and project doctor. No new full managed live run was recorded for either host for this patch; the older live runs below retain their stated versions.
+Workflow 2.0.0 train (PH-06): every suite passed on Windows with Spec Kit 1.1.3 on the merged tree, and a real consumer project upgraded from Workflow 1.18.2 with Spec Kit 1.1.3 kept every receipt of its 12 features in progress (`doctor --project` passed). No new managed live run was recorded for this train.
+
 Workflow 1.21.0 train (PH-03): every suite passed on Windows with Spec Kit 1.1.3 on the merged tree (workflow 1391, scope 287, memory 207, shared scripts 209, project, pr, assure, user-manual, progress). No new managed live run was recorded for this train.
 
 Workflow 1.20.0 and Scope 1.11.1 (PH-02): every suite passed on Windows with Spec Kit 1.1.3 (scripts, assure, pr, project, user-manual, progress, memory and the full workflow suite, including the new end-to-end lifecycle test). No new managed live run was recorded for this train; the older live runs below retain their stated versions.
@@ -79,7 +81,7 @@ run on Ubuntu and Windows. Manifest ranges allow other versions; those are not t
 | Package | Spec Kit range |
 | --- | --- |
 | Assure, Illustrate, PR, Project, User Manual | `>=0.2.0` |
-| Scope, `scope-gate`, `scope-brainstorm` | `>=1.0.0` |
+| Scope 2.0.0 (retired shim), `scope-gate`, `scope-brainstorm` | `>=1.0.0` |
 | Memory, Workflow, `workflow` preset | `>=1.0.0,<2.0.0` |
 | Progress | `>=1.1.1.dev0,<2.0.0` |
 

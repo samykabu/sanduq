@@ -106,12 +106,12 @@ class OwnershipTests(unittest.TestCase):
         del state['receipts']['pr']
         run.save(state)
         with patch.object(GitHub, 'api', side_effect=self.api):
-            result = w.memory_handoff.handoff(w, self.root, 'postmerge', self.feature, report=self.report)
+            result = w.memory_handoff.handoff(self.root, 'postmerge', self.feature, report=self.report, run_class=w.Run)
         self.assertTrue(result['ownership']['released'])
         self.assertEqual('MEMORY_DEPENDENCY_MISSING_OR_DISABLED', result['reason'])
         self.assertEqual({}, run.load()['receipts'])
         with patch.object(GitHub, 'api', side_effect=self.api):
-            self.assertFalse(w.memory_handoff.handoff(w, self.root, 'postmerge', self.feature,
+            self.assertFalse(w.memory_handoff.handoff(self.root, 'postmerge', self.feature, run_class=w.Run,
                                                      report=self.report)['ownership']['released'])
 
     def test_enabled_memory_keeps_pr_receipt_guard_after_external_ownership_release(self):
@@ -123,7 +123,7 @@ class OwnershipTests(unittest.TestCase):
         MemoryHandoffTests.install_memory(self)
         MemoryHandoffTests.enable(self)
         with patch.object(GitHub, 'api', side_effect=self.api):
-            result = w.memory_handoff.handoff(w, self.root, 'postmerge', self.feature, report=self.report)
+            result = w.memory_handoff.handoff(self.root, 'postmerge', self.feature, report=self.report, run_class=w.Run)
         self.assertTrue(result['ownership']['released'])
         self.assertFalse(result['ok'])
         self.assertEqual('MEMORY_POSTMERGE_BINDING_MISMATCH', result['reason'])
@@ -133,7 +133,7 @@ class OwnershipTests(unittest.TestCase):
         self.assertFalse((self.memory_state / 'active.json').exists())
         self.assertFalse((self.memory_state / 'pending.json').exists())
         checkpoint = run.path.read_bytes()
-        retry = w.memory_handoff.handoff(w, self.root, 'postmerge', self.feature, report=self.report)
+        retry = w.memory_handoff.handoff(self.root, 'postmerge', self.feature, report=self.report, run_class=w.Run)
         self.assertFalse(retry['ownership']['released'])
         self.assertFalse(retry['ok'])
         self.assertEqual('MEMORY_POSTMERGE_BINDING_MISMATCH', retry['reason'])

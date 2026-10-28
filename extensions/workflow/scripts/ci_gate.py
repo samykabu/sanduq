@@ -229,12 +229,12 @@ def check_index(root, feature):
 
 
 def report_warnings(results):
-    """Surface each feature's non-fatal warnings (round 4, finding 2): a
+    """Surface each feature's non-fatal warnings: a
     reviewer reading only the job log or the PR checks tab would otherwise
     never see DELEGATION_LEDGER_TRUST_UNVERIFIED_LOCAL, since it changes
     nothing about the gate's pass/fail outcome. Printed to stderr always, and
     appended to $GITHUB_STEP_SUMMARY when the runner sets it; never affects
-    the exit code. The summary write is best-effort (round 5, finding 2):
+    the exit code. The summary write is best-effort:
     this runs inside `main`'s own try block, so an unwritable or missing
     $GITHUB_STEP_SUMMARY path must never turn a passing gate into a reported
     failure -- the warning was already printed to stderr regardless.

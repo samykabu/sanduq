@@ -240,41 +240,59 @@ class InstallTests(unittest.TestCase):
         with self.assertRaisesRegex(w.WorkflowError, 'NEWER_DEPENDENCY_DISABLED'):
             installer.install(self.root, package_root=self.package)
 
-    def test_scope_declares_it_requires_workflow_1_13_0(self):
+    def test_scope_shim_requires_workflow_2(self):
         source = Path(__file__).resolve().parents[2] / 'scope/extension.yml'
         doc = yaml.safe_load(source.read_text(encoding='utf-8'))
-        self.assertIn({'id': 'workflow', 'version': '>=1.13.0,<2.0.0', 'required': True},
-                      doc['requires']['extensions'])
-        installer.check_workflow_requirement('scope', doc, '1.13.0')
-        installer.check_workflow_requirement('scope', doc, '1.13.4')
-        for unsupported in ('1.7.0', '1.12.0', '2.0.0'):
-            with self.assertRaisesRegex(w.WorkflowError, 'WORKFLOW_VERSION_UNSUPPORTED'):
-                installer.check_workflow_requirement('scope', doc, unsupported)
+        self.assertEqual(doc['extension']['version'], '2.0.0')
+        self.assertIs(doc['extension']['deprecated'], True)
+        self.assertEqual([c['name'] for c in doc['provides']['commands']], ['speckit.scope.migrate'])
+        self.assertNotIn('hooks', doc)
+        self.assertIn({'id': 'workflow', 'version': '>=2.0.0,<3.0.0', 'required': True}, doc['requires']['extensions'])
+        installer.check_workflow_requirement('scope', doc, '2.0.0')
+        with self.assertRaisesRegex(w.WorkflowError, 'WORKFLOW_VERSION_UNSUPPORTED'):
+            installer.check_workflow_requirement('scope', doc, '1.25.0')
 
-    def test_installer_refuses_installed_scope_1_5_0_under_workflow_1_7_0(self):
-        source = Path(__file__).resolve().parents[2] / 'scope/extension.yml'
-        installed = self.root / '.specify/extensions/scope/extension.yml'
-        installed.write_text(source.read_text(encoding='utf-8'), encoding='utf-8')
-        with patch.object(installer, 'workflow_version', return_value='1.7.0'):
-            with self.assertRaisesRegex(w.WorkflowError, 'WORKFLOW_VERSION_UNSUPPORTED: scope requires workflow'):
-                installer.install(self.root, package_root=self.package)
+    def installed_scope(self, version, repository='https://github.com/samykabu/sanduq'):
+        manifest = self.root / '.specify/extensions/scope/extension.yml'
+        manifest.parent.mkdir(parents=True, exist_ok=True)
+        manifest.write_text(yaml.safe_dump({'extension': {'id': 'scope', 'version': version, 'repository': repository}}),
+                            encoding='utf-8')
+        registry = w.registry(self.root); registry['scope'] = {'version': version, 'enabled': True}
+        w.write(self.root / '.specify/extensions/.registry', {'extensions': registry})
 
-    def test_installer_refuses_staged_scope_1_5_0_under_workflow_1_7_0(self):
-        staged = self.package / 'staged'
-        for name in ('illustrate', 'project', 'scope', 'pr', 'assure', 'user-manual'):
-            shutil.copytree(Path(__file__).resolve().parents[2] / name, staged / name,
-                            ignore=shutil.ignore_patterns('__pycache__', 'tests'))
-        self.version('scope', '1.4.0')
-        with patch.object(installer, 'workflow_version', return_value='1.7.0'):
-            with self.assertRaisesRegex(w.WorkflowError, 'WORKFLOW_VERSION_UNSUPPORTED'):
-                installer.install(self.root, package_root=self.package, packages=staged)
+    def test_installer_removes_an_installed_scope_before_any_other_package(self):
+        """DEC-03: Workflow provides Scope; Spec Kit never enforces requires.extensions, so the installer removes
+        Scope (1.x with code, or the 2.0.0 shim) first and keeps its state in .specify/scope."""
+        self.assertNotIn('scope', w.read(self.package / 'dependencies.json')['required'])
+        for version in ('1.14.0', '2.0.0'):
+            with self.subTest(version=version):
+                self.installed_scope(version)
+                state = self.root / '.specify/scope/approvals/10-baseline.json'
+                w.write(state, {'issue': 10})
+                plan = installer.install(self.root, package_root=self.package)
+                self.assertEqual(plan['scope_removed']['args'], ['specify', 'extension', 'remove', 'scope', '--force'])
+                self.assertEqual(plan['scope_removed']['state'], '.specify/scope (kept, read in place)')
+                self.version('project', '2.0.0')  # one more operation, to see the order
+                calls = []
+
+                def runner(root, args, log):
+                    calls.append(args[:3] + args[3:4])
+                    if args[:3] == ['specify', 'extension', 'remove']:
+                        shutil.rmtree(root / '.specify/extensions/scope')
+                        registry = w.registry(root); registry.pop('scope')
+                        w.write(root / '.specify/extensions/.registry', {'extensions': registry})
+                with patch.object(installer, 'install_aliases', return_value={}),                      patch.object(installer, 'doctor', return_value={'ok': True, 'errors': []}):
+                    result = installer.install(self.root, apply=True, package_root=self.package, runner=runner)
+                self.assertEqual(calls[0], ['specify', 'extension', 'remove', 'scope'])
+                self.assertIn(['specify', 'extension', 'add', 'project'], calls[1:])
+                self.assertEqual(result['scope_removed']['version'], version)
+                self.assertEqual(w.read(state), {'issue': 10})
+                self.assertNotIn('scope', w.read(self.root / '.specify/workflow/install-lock.json')['extensions'])
+                self.assertIsNone(installer.install(self.root, package_root=self.package)['scope_removed'])
 
     def test_unrelated_scope_package_cannot_be_overwritten(self):
-        p = self.root / '.specify/extensions/scope/extension.yml'
-        manifest = yaml.safe_load(p.read_text(encoding='utf-8'))
-        manifest['extension']['repository'] = 'https://github.com/unrelated/scope'
-        p.write_text(yaml.safe_dump(manifest), encoding='utf-8')
-        with self.assertRaisesRegex(w.WorkflowError, 'SOURCE_CONFLICT'):
+        self.installed_scope('1.0.0', repository='https://github.com/unrelated/scope')
+        with self.assertRaisesRegex(w.WorkflowError, 'EXISTING_EXTENSION_SOURCE_CONFLICT: scope'):
             installer.install(self.root, package_root=self.package)
 
     def test_backups_and_runtime_are_ignored_without_ignoring_receipts(self):

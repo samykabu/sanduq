@@ -1,4 +1,3 @@
-import importlib.util
 import json
 import os
 import sys
@@ -9,10 +8,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
 import skill_inventory as si
 
-SPEC = importlib.util.spec_from_file_location('sanduq_workflow_for_skill_inventory',
-                                              Path(__file__).resolve().parents[1] / 'scripts/workflow.py')
-w = importlib.util.module_from_spec(SPEC)
-SPEC.loader.exec_module(w)
+import workflow as w  # noqa: E402
 
 
 def write_skill(root, name, description=None, extra_frontmatter='', body='body text'):

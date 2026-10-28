@@ -11,7 +11,7 @@ claimed command. GitHub-discussion and handoff rules:
 
 ## Required work and evidence
 
-A claim with `clarification_round` needs no skill: follow its `steps`. Otherwise run `.specify/extensions/scope/skills/github-clarification/SKILL.md` with engine `clarify`, or
+A claim with `clarification_round` needs no skill: follow its `steps`. Otherwise run `.specify/extensions/workflow/skills/github-clarification/SKILL.md` with engine `clarify`, or
 `brainstorm` for `speckit.superspec.brainstorm`. Read every page of current comments and edited
 answers; reuse earlier answered clarification only after checking the current discussion and
 spec. Unchanged unanswered discussions wait without new posts. Receipt: `unresolved: 0` and

@@ -579,7 +579,7 @@ class CheckpointVersionTests(Harness):
 
     def test_scope_bound_claim_reads_versions_1_and_2(self):
         import importlib.util
-        path = Path(__file__).resolve().parents[2] / 'scope/scripts/workflow_policy.py'
+        path = Path(__file__).resolve().parents[1] / 'scripts/scope/workflow_policy.py'
         spec = importlib.util.spec_from_file_location('scope_workflow_policy_w27', path)
         policy = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(policy)

@@ -27,7 +27,7 @@ The [product brief](docs/start/product-brief.md) says who Sanduq is for and how 
 
 ## Products
 
-![Product map: nine Spec Kit extensions in this repository. Scope requires Workflow and Illustrate; Assure, PR and User Manual require Illustrate; PR uses Assure and User Manual when installed; Workflow uses Progress when installed; Project, Memory and Progress stand alone. The sanduq-skills repository supplies the Illustrate, User Manual and Delegate Task skills, copied into extensions and listed by the sanduq marketplace.](docs/diagrams/product-map.animated.svg)
+![Product map: nine Spec Kit extensions in this repository; Scope is part of Workflow, and its own package is a retired shim. Workflow, Assure, PR and User Manual require Illustrate; PR uses Assure and User Manual when installed; Workflow uses Progress when installed; Project, Memory and Progress stand alone. The sanduq-skills repository supplies the Illustrate, User Manual and Delegate Task skills, copied into extensions and listed by the sanduq marketplace.](docs/diagrams/product-map.animated.svg)
 
 The map shows each extension and what it requires; arrows point to the dependency.
 [Editable source](docs/diagrams/product-map.html) and [static version](docs/diagrams/product-map.svg).
@@ -35,7 +35,7 @@ The map shows each extension and what it requires; arrows point to the dependenc
 | Product | Purpose | Lifecycle phase | Standalone | Requires | Hosts |
 | --- | --- | --- | --- | --- | --- |
 | [Workflow](docs/extensions/workflow.md) | Resumable issue-to-PR dispatcher | All, as 16 stages | Yes | Python 3.11+, Git, `gh`; installs the extensions it uses | Claude Code (live run); Codex (install only) |
-| [Scope](docs/extensions/scope.md) | Issue scope, prerequisites and decomposition | Before and after Specify, before Plan | No | Workflow, Illustrate | Through Workflow (Claude Code live run) |
+| [Scope](docs/extensions/scope.md) | Issue scope, prerequisites and decomposition; part of Workflow from 2.0.0 | Before and after Specify, before Plan | No | Workflow (it ships Scope), Illustrate | Through Workflow (Claude Code live run) |
 | [Project](docs/extensions/project.md) | GitHub Project board sync | Specify to Implement | Yes | `gh` (optional standalone; Workflow needs a mapped board in its `full` and `minimal` board modes, none in `none`) | Claude Code (live run through Workflow); Codex (unverified) |
 | [Assure](docs/extensions/assure.md) | QA readiness analysis and walkthrough | After Tasks, around Implement | Yes | Illustrate | Codex, Claude Code (unverified) |
 | [User Manual](docs/extensions/user-manual.md) | Audience-aware application manual | After Tasks and Implement; release | Yes | Illustrate | Codex, Claude Code (unverified) |

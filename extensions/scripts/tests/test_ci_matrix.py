@@ -43,15 +43,19 @@ class CiMatrixTests(unittest.TestCase):
     def test_progress_runs_progress_and_workflow(self):
         self.assertEqual({"progress", "workflow"}, suites(["extensions/progress/scripts/progress.py"]))
 
-    def test_workflow_runs_workflow_scope_and_pr(self):
-        self.assertEqual({"workflow", "scope", "pr"}, suites(["extensions/workflow/scripts/workflow.py"]))
+    def test_workflow_runs_workflow_and_pr(self):
+        # Scope merged into Workflow (DEC-03): no scope suite, and no workflow-scope cycle in DEPENDENTS.
+        self.assertEqual({"workflow", "pr"}, suites(["extensions/workflow/scripts/workflow.py"]))
+        self.assertNotIn("scope", ci_matrix.SUITES)
+        self.assertNotIn("scope", ci_matrix.DEPENDENTS)
+        self.assertFalse(any("scope" in dependents for dependents in ci_matrix.DEPENDENTS.values()))
 
     def test_single_suite(self):
         self.assertEqual({"illustrate"}, suites(["extensions/illustrate/commands/x.md"]))
 
     def test_illustrate_skill_also_runs_the_scope_and_pr_modules_that_read_it(self):
         selection = ci_matrix.selection_for(["extensions/illustrate/skill/SKILL.md"])
-        self.assertEqual({"illustrate": None, "scope": {"test_plan"}, "pr": {"test_pr_diagram_recipe"}}, selection)
+        self.assertEqual({"illustrate": None, "workflow": {"test_scope_plan"}, "pr": {"test_pr_diagram_recipe"}}, selection)
 
     def test_memory_change_selects_workflow(self):
         """SAMY-06: workflow's Memory handoff tests run Memory's archive.py."""
@@ -131,7 +135,7 @@ class Round3Selection(unittest.TestCase):
                      ".github/workflows/ci.yml", ".github/scripts/ci_matrix.py",
                      "extensions/project/scripts/project_sync.py"):
             self.assertTrue(self.result([path])["install_smoke"], path)
-        for path in ("extensions/scope/scripts/scope.py", "extensions/memory/scripts/x.py",
+        for path in ("extensions/assure/scripts/x.py", "extensions/memory/scripts/x.py",
                      "extensions/illustrate/commands/x.md", "extensions/scripts/check_docs.py",
                      "extensions/scope/tests/extension.yml", "docs/start/install.md"):
             self.assertFalse(self.result([path])["install_smoke"], path)
@@ -175,7 +179,7 @@ class Round3Selection(unittest.TestCase):
     def test_push_omits_both_windows_slow_suites(self):
         windows = {s for s, o in pairs(None, "push") if o == "windows-latest"}
         self.assertFalse({"workflow", "memory"} & windows)
-        self.assertIn("scope", windows)
+        self.assertIn("assure", windows)
 
     def test_linux_runs_every_suite_but_whole_workflow_in_one_batch_job(self):
         """FAST: one Linux job for the small suites, sharded workflow, Windows unchanged."""
@@ -285,8 +289,10 @@ class CiWorkflowFile(unittest.TestCase):
 
 
 class ReviewFindings(unittest.TestCase):
-    def test_scope_change_also_runs_workflow(self):
-        self.assertEqual(ci_matrix.suites_for(["extensions/scope/scripts/scope.py"]), {"scope", "workflow"})
+    def test_scope_change_runs_workflow(self):
+        self.assertEqual(ci_matrix.suites_for(["extensions/workflow/scripts/scope/scope.py"]), {"workflow", "pr"})
+        # The retired shim runs only the module that reads its manifest.
+        self.assertEqual(ci_matrix.selection_for(["extensions/scope/extension.yml"]), {"workflow": {"test_install"}})
 
     def test_docs_examples_run_the_suites_that_read_them(self):
         self.assertEqual(ci_matrix.suites_for(["docs/examples/booking-illustration-theme.yml"]),
@@ -372,7 +378,7 @@ class Round4Selection(unittest.TestCase):
     def test_tooling_scripts_run_the_one_module_that_reads_them(self):
         for path, suite, module in (("extensions/scripts/release.py", "workflow", "test_release"),
                                     ("extensions/scripts/check_docs.py", "assure", "test_descriptions"),
-                                    ("extensions/scripts/benchmark_instructions.py", "scope", "test_instructions")):
+                                    ("extensions/scripts/benchmark_instructions.py", "workflow", "test_scope_instructions")):
             include = self.include([path])
             self.assertEqual({suite}, {i["suite"] for i in include}, path)
             self.assertEqual({module}, {i["modules"] for i in include}, path)
@@ -380,8 +386,8 @@ class Round4Selection(unittest.TestCase):
             self.assertTrue((ci_matrix.ROOT / include[0]["tests"] / (module + ".py")).is_file(), path)
 
     def test_injected_files_run_every_suite_that_ships_them(self):
-        self.assertEqual({"workflow", "project", "scope", "pr"}, suites(["extensions/scripts/shared/sanduq_remote.py"]))
-        self.assertLessEqual({"workflow", "scope", "assure", "user-manual"},
+        self.assertEqual({"workflow", "project", "pr"}, suites(["extensions/scripts/shared/sanduq_remote.py"]))
+        self.assertLessEqual({"workflow", "assure", "user-manual"},
                              suites(["extensions/workflow/scripts/sanduq_ci.py"]))
         self.assertLessEqual({"assure", "user-manual"}, suites(["extensions/workflow/scripts/sanduq_hash.py"]))
         self.assertTrue(ci_matrix.build(["extensions/scripts/shared/deps.py"], "push")["install_smoke"])
@@ -591,7 +597,7 @@ class Round5ShardTimes(unittest.TestCase):
         self.assertIn('python -m unittest discover -s "$tests" -q || rc=$?', text)
 
     def test_sanduq_gh_runs_every_suite_that_ships_it(self):
-        self.assertEqual({"scope", "workflow", "project", "pr"}, suites(["extensions/scripts/shared/sanduq_gh.py"]))
+        self.assertEqual({"workflow", "project", "pr"}, suites(["extensions/scripts/shared/sanduq_gh.py"]))
         self.assertTrue(ci_matrix.build(["extensions/scripts/shared/sanduq_gh.py"], "push")["install_smoke"])
 
 

@@ -23,11 +23,11 @@ from urllib.parse import quote
 import yaml
 from packaging.version import InvalidVersion, Version
 from packaging.specifiers import SpecifierSet
-from workflow import load_policy, read, write, require, inside, registry, doctor, locked, WorkflowError, RANGES, ensure_local_excludes, package_digest, active_host, github_repository, sanduq_ci, git, now, explain
+from workflow import load_policy, read, write, require, inside, registry, doctor, locked, WorkflowError, RANGES, ensure_local_excludes, package_digest, active_host, github_repository, sanduq_ci, git, now, explain, other_feature_command
 from reconcile import reconcile
 from delegate_dispatch import maintenance_preflight
 from delegation import is_junction, is_link
-from hosts import (ALIASES, HOST_SKILLS, CODEX_HOOK_APPROVAL, ROLE_FILES, ROLES, alias_wanted, aliases_enabled,
+from hosts import (ALIASES, HOST_SKILLS, CODEX_HOOK_APPROVAL, ROLE_FILES, ROLES, alias_wanted, aliases_enabled, checkpoints,
                    installed_hosts, register_hosts, skill_errors, skill_report)
 try:
     import sanduq_gh
@@ -36,7 +36,8 @@ except ModuleNotFoundError:  # the source tree; package.py copies it into script
     import sanduq_gh
 
 PACKAGE = Path(__file__).resolve().parents[1]
-DIRECTORIES = ('.specify/extensions', '.specify/presets')
+# Spec Kit rewrites .specify/integrations/<host>.manifest.json on extension, preset and integration commands.
+DIRECTORIES = ('.specify/extensions', '.specify/presets', '.specify/integrations')
 FILES = ('.specify/extensions.yml', '.specify/workflow.yml', '.specify/integration.json', '.specify/init-options.json', '.specify/workflow/integration-backup.json',
          '.specify/workflow/install-lock.json',
          '.specify/workflow/install-receipt.json',
@@ -222,7 +223,7 @@ def snapshot(root, directory):
 BACKUP_KINDS = ('installs', 'upgrades', 'hosts')
 KEEP_BACKUP_ZIPS = 3
 # Written after the snapshot and removed after success or a completed rollback; a hard kill leaves it, and doctor
-# then reports INSTALL_INTERRUPTED with the restore command (AHMED-09).
+# then reports INSTALL_INTERRUPTED with the restore command.
 IN_PROGRESS = '.specify/workflow/runtime/install-in-progress.json'
 
 
@@ -408,6 +409,32 @@ def rendered(asset, policy):
         return sanduq_ci.render(asset.read_bytes(), policy.get('ci') or sanduq_ci.default_ci())
     except sanduq_ci.CIPolicyError as exc:
         raise WorkflowError('CI_RENDER_FAILED: ' + asset.name + ': ' + str(exc)) from exc
+
+
+CI_GATE = '.github/workflows/sanduq-workflow-gates.yml'
+
+
+def active_stage_blockers(root):
+    """Each feature whose active claim an install or upgrade would restore files under, with its recover command."""
+    return ['ACTIVE_STAGE_MUST_BE_RESOLVED: ' + feature + '; complete or pause that stage, or run ' +
+            other_feature_command(feature, state['active']) for feature, state in checkpoints(root) if state.get('active')]
+
+
+def ci_edit_blocker(root, policy, package_root, preserve_ci):
+    """CI_WORKFLOW_HAS_LOCAL_EDITS when the gate file is neither preserved nor an unedited managed render."""
+    target = root / CI_GATE
+    if preserve_ci or not target.exists():
+        return None
+    asset = rendered(package_root / 'assets/github/workflow-gates.yml', policy)
+    old_inventory = read(root / '.specify/workflow/install-receipt.json', {})
+    # The receipt is git-excluded, so a fresh clone also recognises an unedited render of any earlier
+    # template by the copies the package keeps (before SEC-03, and 1.22.0 before its fetch-depth fix).
+    previous = sorted((package_root / 'assets/github/previous').glob('workflow-gates*.yml'))
+    content = target.read_bytes()
+    if ci_matches_managed(content, asset, old_inventory) or any(
+            ci_matches_managed(content, rendered(old, policy), {}) for old in previous):
+        return None
+    return 'CI_WORKFLOW_HAS_LOCAL_EDITS: ' + CI_GATE + '; rerun with --preserve-ci to keep it'
 
 
 def required_gate_checks(root):
@@ -829,6 +856,26 @@ def wire_illustrate(root, policy, hosts):
     return record
 
 
+# DEC-03: Scope's code, commands and skills are Workflow's (speckit.scope.<x> -> speckit.workflow.scope-<x>). An
+# installed Sanduq Scope (a release with code, or the 2.0.0 shim) is removed by Spec Kit before any other package
+# changes, which also drops its commands, skills and hook entries; its state in .specify/scope is read in place.
+SCOPE_STATE = '.specify/scope'
+
+
+def scope_removal(root, existing, repository):
+    """The `specify extension remove scope` operation for an installed Sanduq Scope, else None. Spec Kit never
+    enforces `requires.extensions`, so this order is the installer's job. Another source's `scope` is refused."""
+    if 'scope' not in existing:
+        return None
+    manifest = root / '.specify/extensions/scope/extension.yml'
+    doc = (yaml.safe_load(manifest.read_text(encoding='utf-8-sig')) or {}) if manifest.is_file() else {}
+    require(((doc.get('extension') or {}).get('repository') or '').rstrip('/') == repository,
+            'EXISTING_EXTENSION_SOURCE_CONFLICT: scope')
+    return {'extension': 'scope', 'version': existing['scope'].get('version'),
+            'args': ['specify', 'extension', 'remove', 'scope', '--force'],
+            'state': SCOPE_STATE + (' (kept, read in place)' if (root / SCOPE_STATE).is_dir() else ' (none)')}
+
+
 def preset_digest(folder):
     """sha256 over a bundled preset's files (paths and LF-normalised bytes), to tell a changed preset from the last apply's."""
     digest = hashlib.sha256()
@@ -849,6 +896,7 @@ def install(root, apply=False, packages=None, package_root=PACKAGE, runner=comma
     for process, enabled in policy['processes'].items():
         if enabled: selected.update(lock['selected'][process])
     existing = registry(root); operations = []; retained = []
+    scope_removed = scope_removal(root, existing, lock['repository'])
     last_wiring = (read(root / '.specify/workflow/install-lock.json', {}).get('progress') or {}).get('hook_wiring')
     was_native = last_wiring == 'native'
     # IP21: without an explicit key, Progress keeps the wiring it has (Spec Kit's, if installed before the lock
@@ -861,7 +909,7 @@ def install(root, apply=False, packages=None, package_root=PACKAGE, runner=comma
     require(not unknown, 'UNKNOWN_OPTIONAL_EXTENSION: ' + ', '.join(unknown) + '; offered: ' + ', '.join(sorted(offered)))
     chosen = sorted(set(with_optional) | {name for name in offered if name in existing})
     selected.update({name: offered[name] for name in chosen})
-    order = ('illustrate', 'project', 'scope', 'pr', 'assure', 'user-manual', 'progress')
+    order = ('illustrate', 'project', 'pr', 'assure', 'user-manual', 'progress')
     for name in sorted(selected, key=lambda key: order.index(key)):
         version = selected[name]
         manifest = root / '.specify/extensions' / name / 'extension.yml'
@@ -900,9 +948,10 @@ def install(root, apply=False, packages=None, package_root=PACKAGE, runner=comma
         require((source / 'preset.yml').is_file(), 'BUNDLED_PRESET_MISSING: build/install the workflow archive first')
         preset_ops.append({'name':name,'source':str(source),'priority':priority,'sha256':preset_digest(source)})
     # Re-add a preset only when it changed since the last apply. An extension update re-renders the commands a preset
-    # replaces, so any extension operation still re-adds every preset.
+    # replaces, so any extension operation still re-adds every preset; so does an upgrade, which re-added Workflow,
+    # whose speckit.workflow.scope-run the workflow preset replaces, and a Scope removal.
     last = read(root / '.specify/workflow/install-lock.json', {}).get('presets') or {}
-    skipped_presets = [] if operations else [
+    skipped_presets = [] if operations or scope_removed or upgrade_owner is not None else [
         op['name'] for op in preset_ops
         if (root / '.specify/presets' / op['name'] / 'preset.yml').is_file()
         and (last.get(op['name']) or {}).get('source_sha256') == op['sha256']
@@ -911,6 +960,7 @@ def install(root, apply=False, packages=None, package_root=PACKAGE, runner=comma
     # every other installed host is re-registered after the packages change.
     default_host, hosts = active_host(root), installed_hosts(root)
     result = {'applied':False,'extensions':operations,'retained_newer':retained,'presets':preset_ops,
+              'scope_removed': scope_removed,
               'skipped_presets':skipped_presets,'processes':policy['processes'],
               'optional_extensions': chosen,
               'hosts': {'default': default_host, 'installed': hosts,
@@ -934,13 +984,13 @@ def install(root, apply=False, packages=None, package_root=PACKAGE, runner=comma
     bridge = read(root / '.specify/superpowers-handoff.json', {})
     require(bridge.get('status') not in ('executing','blocked'), 'LEGACY_EXECUTOR_OWNS_FEATURE: reconcile its actual work before installation')
     # A package update cannot occur while an executor owns unfinished work.
-    for path in (root / 'specs').glob('*/workflow/checkpoint.json'):
-        require(not read(path, {}).get('active'), 'ACTIVE_STAGE_MUST_BE_RESOLVED: ' + str(path))
+    blockers = active_stage_blockers(root)
+    require(not blockers, '; '.join(blockers))
     with locked(root / '.specify/workflow/runtime/dispatch.lock'), locked(root / '.specify/workflow/runtime/install.lock'):
         upgrade = read(root / '.specify/workflow/runtime/upgrade.lock', {})
         require(not upgrade or upgrade.get('pid') == upgrade_owner, 'WORKFLOW_UPGRADE_IN_PROGRESS')
-        for path in (root / 'specs').glob('*/workflow/checkpoint.json'):
-            require(not read(path, {}).get('active'), 'ACTIVE_STAGE_MUST_BE_RESOLVED: ' + str(path))
+        blockers = active_stage_blockers(root)
+        require(not blockers, '; '.join(blockers))
         # A rollback restores every delegation ledger, so no attempt may be live.
         delegation_preflight(root)
         memory_archive_preflight(root)
@@ -960,6 +1010,8 @@ def install(root, apply=False, packages=None, package_root=PACKAGE, runner=comma
                 restored_hooks = reconcile(root, apply=True, restore=True)
                 result['hook_metadata_refreshes'] = [change for change in restored_hooks['changes']
                                                     if change.get('metadata_refresh')]
+            if scope_removed:
+                runner(root, scope_removed['args'], log)
             for operation in operations:
                 preserved = preservation(root, operation['extension'])
                 runner(root, operation['args'], log)
@@ -996,7 +1048,7 @@ def install(root, apply=False, packages=None, package_root=PACKAGE, runner=comma
                                                       scope=policy['delegation']['install_scope'],
                                                       upgrade_owner=upgrade_owner)
                 require(delegation_health['ok'], health_error(delegation_health))
-            target = root / '.github/workflows/sanduq-workflow-gates.yml'
+            target = root / CI_GATE
             # The shipped asset is a template. What lands in the project is the
             # project's own CI selection rendered from it, never a copy.
             asset = rendered(package_root / 'assets/github/workflow-gates.yml', policy)
@@ -1011,14 +1063,8 @@ def install(root, apply=False, packages=None, package_root=PACKAGE, runner=comma
             if target.exists() and preserve_ci:
                 result['preserved_ci'] = {'path': target.relative_to(root).as_posix(),
                                           'sha256': hashlib.sha256(target.read_bytes()).hexdigest()}
-            elif target.exists():
-                old_inventory = read(root / '.specify/workflow/install-receipt.json', {})
-                # The receipt is git-excluded, so a fresh clone also recognises an unedited render of any earlier
-                # template by the copies the package keeps (before SEC-03, and 1.22.0 before its fetch-depth fix).
-                previous = sorted((package_root / 'assets/github/previous').glob('workflow-gates*.yml'))
-                require(ci_matches_managed(target.read_bytes(), asset, old_inventory) or any(
-                    ci_matches_managed(target.read_bytes(), rendered(old, policy), {}) for old in previous),
-                    'CI_WORKFLOW_HAS_LOCAL_EDITS')
+            blocker = ci_edit_blocker(root, policy, package_root, preserve_ci)
+            require(not blocker, blocker)
             if gate_disabled:
                 if target.exists(): target.unlink()
             elif not result['preserved_ci']:
@@ -1077,7 +1123,7 @@ def install(root, apply=False, packages=None, package_root=PACKAGE, runner=comma
                 receipt['backups'] = prune_backups(root)
                 clear_in_progress(root)
             return receipt
-        except BaseException as exc:  # Ctrl-C and SystemExit restore too, then re-raise as they are (AHMED-09)
+        except BaseException as exc:  # Ctrl-C and SystemExit restore too, then re-raise as they are
             failed = managed_files(root)
             write(backup / 'result.json', {'ok':False,'error':str(exc) or type(exc).__name__,'commands':log,
                                          'hook_metadata_refreshes':result['hook_metadata_refreshes']})
@@ -1112,7 +1158,7 @@ if __name__ == '__main__':
         result = install(args.root,args.apply,args.packages,upgrade_owner=args.upgrade_owner,preserve_ci=args.preserve_ci,
                          replace_unrecognized_aliases=args.replace_unrecognized_aliases,with_optional=args.with_optional,
                          with_aliases=args.with_aliases)
-        print(json.dumps(result,indent=2), flush=True)  # F12: the JSON first when a shell merges stderr into it
+        print(json.dumps(result,indent=2), flush=True)  # the JSON first when a shell merges stderr into it
         for key in ('codex_hook_approval', 'illustrate_hook_approval'):
             if result.get(key): print(result[key], file=sys.stderr)
         if (result.get('progress') or {}).get('hint'): print(result['progress']['hint'], file=sys.stderr)

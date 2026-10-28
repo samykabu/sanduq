@@ -25,7 +25,7 @@ to use. Then install, and use the reference when you need an exact command or ho
 
 ## Extensions
 
-![Product map: Scope requires Workflow and Illustrate; Assure, PR and User Manual require Illustrate; PR uses Assure and User Manual when installed; Workflow uses Progress when installed; Project, Memory and Progress stand alone. Portable skills from sanduq-skills are copied into the Illustrate, User Manual and Workflow extensions and listed by the sanduq marketplace.](diagrams/product-map.animated.svg)
+![Product map: Scope is part of Workflow. Workflow, Assure, PR and User Manual require Illustrate; PR uses Assure and User Manual when installed; Workflow uses Progress when installed; Project, Memory and Progress stand alone. Portable skills from sanduq-skills are copied into the Illustrate, User Manual and Workflow extensions and listed by the sanduq marketplace.](diagrams/product-map.animated.svg)
 
 Scope requires Workflow and Illustrate. Assure, PR and User Manual require Illustrate, and PR uses
 Assure and User Manual when they are installed. Project and Memory need no other extension. The
@@ -37,7 +37,7 @@ One page per extension: purpose, lifecycle phase, hooks, dependencies, setup, an
 | Extension | Purpose |
 | --- | --- |
 | [Workflow](extensions/workflow.md) | Resumable issue-to-PR dispatcher |
-| [Scope](extensions/scope.md) | Issue scope, prerequisites and decomposition before Specify |
+| [Scope](extensions/scope.md) | Issue scope, prerequisites and decomposition before Specify; part of Workflow from 2.0.0 |
 | [Project](extensions/project.md) | GitHub Project board sync |
 | [Assure](extensions/assure.md) | QA readiness analysis and tester walkthrough |
 | [User Manual](extensions/user-manual.md) | Audience-aware application manual |

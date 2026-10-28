@@ -6,7 +6,7 @@ are in the root [CHANGELOG](../../CHANGELOG.md) and in each package's `CHANGELOG
 ## Workflow and its dependencies
 
 If Workflow is installed, upgrade it only through its `upgrade.py`. Workflow pins the versions of
-Scope, Project, PR and Illustrate, and of Assure, User Manual and Progress when selected, in
+Project, PR and Illustrate (and Scope before 2.0.0), and of Assure, User Manual and Progress when selected, in
 `dependencies.json`. Some releases need them
 updated together (Workflow 1.18.0 needs Scope 1.11.0). `specify extension update workflow` on its own
 is not supported: it updates Workflow without its companions, and the mismatch can misbehave
@@ -57,7 +57,8 @@ specify extension update <id>
 Use this for an extension that Workflow does not pin, such as Memory, or in a project without
 Workflow. Then rerun the extension's init or doctor command if its changelog asks for it.
 
-`update` skips `scope` and `memory` without an error when the community catalog wins their IDs.
+Workflow 2.0.0 provides Scope, so never update or add `scope`. `update` skips `memory` without an error when the
+community catalog wins its ID.
 [Register Sanduq's catalog ahead of it](install-speckit.md#if-you-keep-spec-kits-default-catalogs).
 
 ## Adopt Workflow 1.13.0 profiles
@@ -225,6 +226,46 @@ $speckit-memory-enable Review the renewed archiving policy and approve it.
 | Project refuses a malformed state file | The sync stops on a malformed `.specify/project-sync-state.json` | Restore it from git or fix it, then rerun |
 | Project owner type | A config from an older Init for an organization board says `ownerType: user` | Rerun `$speckit-project-init`, or set `"ownerType": "org"` |
 | Scope's `scope-gate` preset changed | A managed Specify claim is no longer told to chain Clarify | Unmanaged projects run `specify preset add` again for `scope-gate`; the Workflow installer re-adds it |
+
+## Workflow 2.0.0: Scope is part of Workflow
+
+Breaking: Scope is no longer a separate extension. Its code, commands, skills and references ship in Workflow
+2.0.0, and every Scope command is renamed, because Spec Kit requires an extension's commands to start with
+`speckit.<extension id>.`. Scope's state in `.specify/scope/` (approvals, publish journals, clarification
+records, the board cache) stays where it is and is read in place.
+
+Resolve active claims, then upgrade:
+
+```bash
+python .specify/extensions/workflow/scripts/upgrade.py --version 2.0.0 --apply
+python .specify/extensions/workflow/scripts/workflow.py migrate --feature specs/<feature> --reason "Scope merged into Workflow"
+```
+
+The upgrade installs Workflow 2.0.0, then its installer runs `specify extension remove scope` before any other
+package change. That drops Scope 1.x's commands, skills and hook entries; Workflow registers the renamed hooks. A
+failure rolls back both, Scope included. Run `migrate` on each feature in progress: the rename alone invalidates
+no receipt, and the checkpoint then records the new Scope command.
+
+| Old name (Scope 1.x) | New name (Workflow 2.0.0) | Kind |
+| --- | --- | --- |
+| `speckit.scope.run` (`/speckit-scope-run`, `$speckit-scope-run`) | `speckit.workflow.scope-run` (`/speckit-workflow-scope-run`, `$speckit-workflow-scope-run`) | Command |
+| `speckit.scope.plan` (`/speckit-scope-plan`) | `speckit.workflow.scope-plan` (`/speckit-workflow-scope-plan`) | Command |
+| `speckit.scope.guard` | `speckit.workflow.scope-guard` | Hook, before Specify |
+| `speckit.scope.bind` | `speckit.workflow.scope-bind` | Hook, after Specify |
+| `speckit.scope.after-specify` | `speckit.workflow.scope-after-specify` | Hook, after Specify (disabled under Workflow) |
+| `speckit.scope.plan-guard` | `speckit.workflow.scope-plan-guard` | Hook, before Plan |
+| `speckit.scope.reconcile` | `speckit.workflow.scope-reconcile` | Hook, after Implement |
+| `.specify/extensions/scope/scripts/scope.py` | `.specify/extensions/workflow/scripts/scope/scope.py` | Script (also `clarification.py`, `accept_plan.py`) |
+| `.specify/extensions/scope/skills/scope-analyst/` | `.specify/extensions/workflow/skills/scope-analyst/` | Skill (name unchanged) |
+| `.specify/extensions/scope/skills/github-clarification/` | `.specify/extensions/workflow/skills/github-clarification/` | Skill (name unchanged) |
+| `.specify/extensions/scope/references/`, `examples/` | `.specify/extensions/workflow/references/`, `examples/` | Reference files |
+
+| Change | What you see | What to do |
+| --- | --- | --- |
+| Old Scope still installed | `doctor` fails with `SCOPE_MERGED_INTO_WORKFLOW`, naming the `upgrade.py` command | Run that command |
+| The Scope 2.0.0 shim | `specify extension add scope` installs a package with no code; Spec Kit prints the upgrade command | Run it; the upgrade removes the shim |
+| A foreign `scope` package | `doctor` fails with `DEPENDENCY_SOURCE_MISMATCH: scope`; the installer refuses with `EXISTING_EXTENSION_SOURCE_CONFLICT: scope` | `specify extension remove scope`, then upgrade |
+| Scripts, notes or aliases that name the old commands | `/speckit-scope-run` is unknown | Use the new names above; the issue-body markers (`speckit-scope:metadata`) are unchanged |
 
 ## PH-05 native-first routing (Workflow 1.25.0)
 

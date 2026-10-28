@@ -31,6 +31,13 @@ class ReleaseTests(unittest.TestCase):
         self.assertEqual((self.root/'catalog.json').read_bytes(),self.before)
         self.assertTrue(a['publishable'])
 
+    def test_a_deprecated_manifest_marks_its_catalog_entry(self):
+        manifest = self.root/'extensions/example/extension.yml'
+        manifest.write_text(manifest.read_text() + '  deprecated: true\n  superseded_by: workflow\n')
+        subprocess.run(['git','commit','-qam','Retire'],cwd=self.root,check=True,capture_output=True)
+        entry = r.prepare(self.root)['catalog']['extensions']['example']
+        self.assertEqual((entry['deprecated'], entry['superseded_by']), (True, 'workflow'))
+
     def test_dirty_preview_cannot_be_published(self):
         (self.root/'extensions/example/README.md').write_text('Uncommitted')
         with self.assertRaisesRegex(ValueError,'clean checkout'):r.prepare(self.root)

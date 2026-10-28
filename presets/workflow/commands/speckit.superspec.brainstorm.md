@@ -17,7 +17,7 @@ Inside a matching claim, follow `.specify/extensions/workflow/skills/workflow/re
 from the claim's `reference_text`, and under `required-only` checkpoints also
 `.specify/extensions/workflow/skills/workflow/references/superspec-checkpoints.md`.
 
-In every case execute `.specify/extensions/scope/skills/github-clarification/SKILL.md` with
+In every case execute `.specify/extensions/workflow/skills/github-clarification/SKILL.md` with
 `engine: brainstorm`, using the explicit issue number or the bound feature. That shared contract
 supersedes SuperSpec's and Superpowers' one-at-a-time questioning, question quotas, chat
 approvals and completion signals; an optional underlying brainstorming skill must not bring them

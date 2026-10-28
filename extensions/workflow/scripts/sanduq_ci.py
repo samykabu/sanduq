@@ -100,7 +100,7 @@ def validate_gate(gate):
 
 
 def affected_command(gate):
-    """The optional affected-lane hook as an argv list, or None (1.6.0, B3).
+    """The optional affected-lane hook as an argv list, or None (since 1.6.0).
 
     The hook reads a JSON list of repository paths on stdin and prints
     `{"paths": {"<path>": ["<lane>", ...]}}`; a path mapped to `[]` affects no
@@ -122,7 +122,7 @@ def affected_command(gate):
 
 
 def verify_command(gate):
-    """The optional local affected-lane runner (1.7.x, B13) as an argv list, or None.
+    """The optional local affected-lane runner (since 1.7.x) as an argv list, or None.
 
     Read by `speckit-workflow-verify-affected` only; the gate itself never
     calls it. It receives `{"lanes": [...], "results_path": "<path>"}` on
@@ -143,7 +143,7 @@ def verify_command(gate):
 
 
 def verification_check(gate):
-    """The CI check accepted as Verify evidence, normalised, or None (1.6.0, B4).
+    """The CI check accepted as Verify evidence, normalised, or None (since 1.6.0).
 
     Either the check (job) name, or `{name, workflow, artifact_prefix}`: the job
     that must conclude success, the workflow run name it must belong to

@@ -9,7 +9,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import release  # noqa: E402
 
-CONSUMERS = ('scope', 'workflow', 'project', 'pr')  # package.SHARED['sanduq_gh.py']
+CONSUMERS = ('workflow', 'project', 'pr')  # package.SHARED['sanduq_gh.py']
 
 
 def manifest(name, version):
@@ -88,13 +88,13 @@ class CheckBumps(unittest.TestCase):
 
     def test_bundled_preset_change_fails_in_its_packages(self):
         self.write('presets/scope-gate/preset.yml', 'id: scope-gate\nversion: 2\n')
-        self.assertEqual(self.failed(), ['scope', 'workflow'])
+        self.assertEqual(self.failed(), ['workflow'])  # Scope no longer bundles presets (DEC-03)
 
     def test_a_manifest_or_pending_version_above_the_catalog_passes(self):
         self.write('extensions/scripts/shared/sanduq_gh.py', 'TIMEOUT = 120\n')
-        self.write('extensions/scope/extension.yml', manifest('scope', '1.0.1'))
+        self.write('extensions/project/extension.yml', manifest('project', '1.0.1'))
         self.pending({'workflow': '1.1.0'})
-        self.assertEqual(self.failed(), ['pr', 'project'])
+        self.assertEqual(self.failed(), ['pr'])
 
     def test_pending_with_an_equal_version_does_not_count(self):
         self.write('extensions/pr/commands/speckit.pr.run.md', 'Changed.\n')
