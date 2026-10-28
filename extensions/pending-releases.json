@@ -1,9 +1,6 @@
 {
   "schema_version": 1,
-  "versions": {
-    "workflow": "1.25.1",
-    "scope": "1.14.1"
-  },
-  "status": "ready",
+  "versions": {},
+  "status": "released",
   "note": "Workflow 1.25.1 and Scope 1.14.1: a comment that only mentions a decision no longer stales dependent receipts; Scope records the comments it posts (PH-05-T07 live-run finding)."
 }
