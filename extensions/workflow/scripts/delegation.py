@@ -44,6 +44,8 @@ DEFAULT_TIERS = {'discovery': 'standard', 'implementation': 'standard', 'qa_auth
                  'qa_collect': 'light', 'documentation': 'documentation', 'review': 'review',
                  'coordination': 'high'}
 MODEL_PROFILES = ('high', 'standard', 'light', 'documentation', 'review')
+# Tiers a Sanduq role file pins (assets/roles): only these can run natively on the exact model.
+ROLE_TIERS = ('standard', 'review')
 STAGE_TYPES = {
     'scope': 'discovery', 'specify': 'discovery', 'clarify': 'discovery',
     'plan': 'discovery', 'tasks': 'discovery', 'qa_analyze': 'qa_author',
@@ -521,7 +523,8 @@ def native_unsupported(config, work_type, preferred, selected_host):
 
     Native needs delegation on (the role files then pin the tier's model), the work type allowed by
     ``native_allowed``, a preferred candidate on the selected host (a route naming the other vendor is a
-    deliberate cross-vendor route and stays external) and a tier, so the exact model is a configured one.
+    deliberate cross-vendor route and stays external) and a tier a role file pins, so the exact model is a
+    configured one.
     """
     if not config['enabled']:
         return 'delegation-disabled'
@@ -529,7 +532,7 @@ def native_unsupported(config, work_type, preferred, selected_host):
         return 'work-type-disabled'
     if preferred['harness'] not in ('selected', selected_host):
         return 'cross-vendor-route'
-    if 'tier' not in preferred:
+    if preferred.get('tier') not in ROLE_TIERS:
         return 'model-pin'
     return None
 

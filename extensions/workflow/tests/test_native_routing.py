@@ -80,6 +80,9 @@ class NativeRoutingTests(unittest.TestCase):
                          ['external:cross-vendor', 'native-unsupported:cross-vendor-route'])
         self.assertEqual(delegation.selected_route(self.policy['delegation'], 'implementation', 'codex')[0]
                          ['route_reason'], 'native-unsupported:delegation-disabled')
+        # Coordination's high tier has no role file to pin its model, so it never goes native first.
+        self.assertEqual(delegation.selected_route(config, 'coordination', 'codex')[0]['route_reason'],
+                         'native-unsupported:model-pin')
         for bad in ({'bogus': True}, {'implementation': 'yes'}, ['implementation']):
             with self.subTest(bad=bad), self.assertRaisesRegex(delegation.DelegationError,
                                                                'DELEGATION_NATIVE_ALLOWED_INVALID'):

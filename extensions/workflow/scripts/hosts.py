@@ -329,17 +329,14 @@ def load_role(package_root, name):
 
 
 def role_models(policy, host, package_root):
-    """tier -> model for each role whose model is pinned on ``host``: delegation is enabled, or a route or override
-    the host runs (harness ``selected`` or ``host``) names the role's tier (SAMY-03). An unpinned role inherits the
-    session's model."""
+    """tier -> model for each role, pinned only when delegation is enabled (its routes then name the tiers, SAMY-03);
+    otherwise a role inherits the session's model."""
     delegation = (policy or {}).get('delegation') or {}
+    if not delegation.get('enabled'):
+        return {}
     models = (delegation.get('models') or {}).get(host) or {}
-    named = {item.get('tier') for table in ('routes', 'overrides') for route in (delegation.get(table) or {}).values()
-             if isinstance(route, dict)
-             for item in [route.get('preferred'), *(route.get('fallbacks') or [])]
-             if isinstance(item, dict) and item.get('harness') in ('selected', host)}
     tiers = (load_role(package_root, name)['model_tier'] for name in ROLES)
-    return {tier: models[tier] for tier in tiers if tier in models and (delegation.get('enabled') or tier in named)}
+    return {tier: models[tier] for tier in tiers if tier in models}
 
 
 def role_model(text, host):

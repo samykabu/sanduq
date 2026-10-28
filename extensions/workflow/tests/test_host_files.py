@@ -154,36 +154,30 @@ class HostFilesTests(HostTests):
         self.assertEqual(head['name'], 'sanduq-worker')
         self.assertEqual(head['description'], worker['description'])
         self.assertEqual(head['tools'], ', '.join(worker['tools']))
-        # Delegation off, but the default routes name the standard tier: the role is pinned to it (SAMY-03).
-        self.assertEqual(head['model'], self.policy['delegation']['models']['claude']['standard'])
+        self.assertNotIn('model', head)  # delegation off: the role inherits the session model
         expected = worker['instructions'].strip().replace('{no_dispatcher_commands}', dispatch.NO_DISPATCHER_COMMANDS.strip())
         self.assertIn(expected, text)
         codex = tomllib.loads((self.root / '.codex/agents/sanduq-worker.toml').read_text(encoding='utf-8'))
-        self.assertEqual(set(codex), {'name', 'description', 'model', 'developer_instructions'})
+        self.assertEqual(set(codex), {'name', 'description', 'developer_instructions'})
         self.assertEqual(codex['developer_instructions'].strip(), expected)
-        self.assertEqual(w.read(self.root / hosts.INSTALL_LOCK)['role_models']['codex'],
-                         {'standard': codex['model'], 'review': self.policy['delegation']['models']['codex']['review']})
+        self.assertEqual(w.read(self.root / hosts.INSTALL_LOCK)['role_models']['codex'], {})
 
-    def test_role_models_pin_each_tier_a_route_the_host_runs_names(self):
+    def test_role_models_pin_only_with_delegation_enabled(self):
         models = {'codex': {'standard': 'gpt-s', 'review': 'gpt-r'}, 'claude': {'standard': 'sonnet', 'review': 'opus'}}
-        route = lambda harness, tier: {'preferred': {'harness': harness, 'tier': tier}, 'fallbacks': []}
-        policy = {'delegation': {'enabled': False, 'models': models, 'routes': {'implementation': route('selected', 'standard')},
-                                 'overrides': {'specs/x/T001': {'preferred': {'harness': 'codex', 'model': 'gpt-y'},
-                                                                'fallbacks': [{'harness': 'codex', 'tier': 'review'}]}}}}
-        self.assertEqual(hosts.role_models(policy, 'claude', self.package), {'standard': 'sonnet'})
-        self.assertEqual(hosts.role_models(policy, 'codex', self.package), {'standard': 'gpt-s', 'review': 'gpt-r'})
-        policy['delegation']['routes'] = {'implementation': {'preferred': {'harness': 'claude', 'model': 'x'}, 'fallbacks': []}}
-        policy['delegation']['overrides'] = {}
-        self.assertEqual(hosts.role_models(policy, 'claude', self.package), {})  # nothing names a tier: unpinned
+        policy = {'delegation': {'enabled': False, 'models': models}}
+        self.assertEqual(hosts.role_models(policy, 'claude', self.package), {})
         policy['delegation']['enabled'] = True
         self.assertEqual(hosts.role_models(policy, 'claude', self.package), models['claude'])
 
     def test_doctor_warns_role_files_stale_until_reconcile(self):
         self.install()
         stale = lambda: [x for x in w.doctor(self.root, w.load_policy(self.root))['warnings'] if x.startswith('ROLE_FILES_STALE')]
-        self.assertEqual(stale(), [])
         path = self.root / '.specify/workflow.yml'
         policy = yaml.safe_load(path.read_text(encoding='utf-8'))
+        policy['delegation']['enabled'] = True
+        path.write_text(yaml.safe_dump(policy), encoding='utf-8')
+        reconcile.reconcile(self.root, apply=True)
+        self.assertEqual(stale(), [])
         policy['delegation']['models']['codex']['standard'] = 'gpt-6-changed'
         path.write_text(yaml.safe_dump(policy), encoding='utf-8')
         [warning] = stale()
