@@ -162,6 +162,12 @@ def reject_placeholders(receipt):
                 raise WorkflowError('RECEIPT_PLACEHOLDER: ' + path + ' still holds the receipt_template placeholder '
                                     + repr(item) + '; set it to what this stage actually produced (every gating field '
                                     'is set by the agent), then run workflow.py complete again with the edited receipt')
+    evidence = receipt.get('evidence')
+    for item in evidence if isinstance(evidence, list) else []:
+        if isinstance(item, str) and PLACEHOLDER.search(item):
+            raise WorkflowError('RECEIPT_PLACEHOLDER: evidence still holds the receipt_template placeholder ' +
+                                repr(item) + '; list the existing files that prove the work (test or lint output, '
+                                'publication record), then run workflow.py complete again')
 
 
 def other_feature_command(relative, active):
@@ -1528,7 +1534,9 @@ class Run:
         """The receipt skeleton `claim` prints: the fields `_check_receipt` and `_check_stage_rules` require for this
         stage and tier. Inputs the runtime adds itself (`_stamp`: required artifacts, the decision ledger) are left
         out; `<...>` values are placeholders to replace, and every gating field is one (OMAR-01)."""
-        template = {'stage': stage, 'outcome': '<passed|failed|blocked>', 'summary': '', 'inputs': [], 'evidence': []}
+        # R2: evidence is required, so the template never shows an empty list that `complete` refuses.
+        template = {'stage': stage, 'outcome': '<passed|failed|blocked>', 'summary': '', 'inputs': [],
+                    'evidence': ['<existing file that proves the work>']}
         if stage == 'scope' and (self.policy.get('profiles') or {}).get('enabled'):
             template['effort_score'] = '<one of ' + ', '.join(map(str, EFFORT_SCORES)) + '>'
         if stage == 'clarify':
@@ -1537,6 +1545,9 @@ class Run:
                 template['inputs'] = [self.relative + '/clarifications.md']
         if stage == 'plan' and state_tier(state) in ('lite', 'standard'):
             template['inputs'] = [self.relative + '/tasks.md']
+        if stage == 'plan' and state_tier(state) == 'lite':
+            # Lite folds Analyze into Plan: the lint output is the evidence (stage-plan.md names the command).
+            template['evidence'] = [self.relative + '/evidence/plan-lint.json']
         if stage == 'analyze' and state['commands'].get(stage) == LINT_COMMAND:
             template['lint'] = {'ok': True, 'findings': '<count lint.py reported>'}
         if stage == 'taskstoissues':

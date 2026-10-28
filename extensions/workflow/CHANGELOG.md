@@ -1,5 +1,9 @@
 # Changelog
 
+## [Unreleased]
+
+- The receipt template no longer shows `"evidence": []`, which `complete` refuses with `EVIDENCE_REQUIRED`: it shows the placeholder `<existing file that proves the work>`, and a placeholder left in `evidence` is refused with `RECEIPT_PLACEHOLDER: evidence`. A lite Plan claim names `specs/<f>/evidence/plan-lint.json`, and stage-plan.md gives the `lint.py --json` command that writes it (lite re-measure R2). `EVIDENCE_REQUIRED` and `INPUT_ROLE_NOT_IN_MANIFEST` are in the error registry, so the CLI prints `explain` and `next` for them (R2, R3).
+
 ## [1.23.0] - 2026-10-28
 
 - `host --use` returns `next` naming the `migrate` commands when a feature's checkpoint needs migrating after the switch (F11). `install.py` flushes its JSON before the stderr notices, so a shell that merges the two streams shows the JSON first (F12; the notices were already on stderr).
