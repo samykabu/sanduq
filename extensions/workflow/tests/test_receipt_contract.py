@@ -332,6 +332,14 @@ class CascadeTests(Harness):
                     run.complete(claim['token'], self.receipt('specify'))
                 state = run.load(); state['active'] = None; w.write(run.path, state)
 
+    def test_a_file_tasks_md_gives_execute_is_recorded_as_consulted_before_execute(self):
+        self.write(self.feature + '/tasks.md', '- [ ] T012 Change src/service.py')
+        run, target = self.scope_with_target(None)  # no role, as a host may write it
+        self.assertEqual(run.load()['receipts']['scope']['input_roles'][target]['role'], 'consulted')
+        claim = run.claim(self.usage())
+        self.write(target, 'print(2)')
+        self.assertEqual(run.complete(claim['token'], self.receipt('specify'))['stage'], 'clarify')
+
     def test_dependency_in_any_earlier_receipt_wins(self):
         run, target = self.scope_with_target('consulted')
         claim = run.claim(self.usage())

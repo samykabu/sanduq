@@ -23,6 +23,9 @@ required artifacts always are). Without it every input is a dependency. A change
 stales the receipt (`UPSTREAM_INPUT_CHANGED_DURING_STAGE` later); a changed consulted input is
 `advisory_drift` to reread. `receipts.require_input_roles: true` requires a role for inputs
 outside `specs/<feature>/` and `.specify/memory/`.
+Before Execute, a source file that Execute will change is never a dependency: leave it out of
+`inputs` or give it the consulted role. The runtime records an input without a role as consulted
+when the feature's tasks.md names it, on every host.
 
 ## Side effects
 

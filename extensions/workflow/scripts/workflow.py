@@ -1476,6 +1476,18 @@ class Run:
                 'RECEIPT_FIELD_RESERVED: ' + ', '.join(f for f in RUNTIME_RECEIPT_FIELDS if f in receipt))
         receipt = canonical_receipt(self.root, receipt)
         validate_input_roles(self.root, self.relative, stage, receipt, self.policy, tier)
+        if BASE_STAGES.index(stage) < BASE_STAGES.index('execute'):
+            # F10: a file tasks.md hands to Execute is context before Execute, whichever host wrote the receipt;
+            # as an undeclared dependency it would refuse Execute's completion.
+            tasks = self.feature / 'tasks.md'
+            text = tasks.read_text(encoding='utf-8-sig') if tasks.is_file() else ''
+            roles = receipt.get('input_roles') or {}
+            protected = set(receipt['evidence']) | set(required_inputs(self.root, self.relative, stage, tier))
+            targets = [path for path in receipt['inputs'] if path not in roles and path not in protected
+                       and not role_exempt(self.relative, path) and portable_label(path) in text]
+            if targets:
+                receipt['input_roles'] = {**roles, **{path: {'role': 'consulted', 'because': 'tasks.md assigns '
+                                                             'this file to Execute'} for path in targets}}
         for path in receipt['evidence']:
             require(inside(self.root, path).is_file(), 'EVIDENCE_MISSING: ' + path)
         validate_evidence_snapshots(self.root, receipt)
