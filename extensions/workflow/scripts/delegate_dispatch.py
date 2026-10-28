@@ -346,13 +346,13 @@ def never_launched(directory, meta):
     return not delegation.process_alive(meta.get('supervisor_pid'))
 
 
-def task_description(root, feature, task_id):
+def task_description(root, feature, task_id, allow_done=False):
     source = root / feature / 'tasks.md'
     delegation.require(source.is_file(), 'DELEGATION_TASKS_MISSING')
     matches = [line.strip() for line in source.read_text(encoding='utf-8-sig').splitlines()
                if (found := delegation.TASK_LINE.match(line)) and found[3] == task_id]
     delegation.require(len(matches) == 1, 'DELEGATION_TASK_NOT_UNIQUE: ' + task_id)
-    delegation.require(not matches[0].startswith('- [x]') and not matches[0].startswith('- [X]'),
+    delegation.require(allow_done or not matches[0].startswith('- [x]') and not matches[0].startswith('- [X]'),
                        'DELEGATION_TASK_ALREADY_DONE: ' + task_id)
     return matches[0]
 
@@ -381,12 +381,11 @@ QA_COLLECT_ADDENDUM = (
 # actual diff may decide a detected tamper is benign.
 NO_DISPATCHER_COMMANDS = (
     'Never run delegate_dispatch.py yourself (start, collect, accept, reassign, recover, abandon, '
-    'adopt, attest-native or trust-reset) -- not on this run, another run, or another task. Those are the '
-    'dispatcher\'s own commands; trust-reset in particular is an orchestrator-only, '
+    'adopt, attest-native, record-native or trust-reset) -- not on this run, another run, or another task. '
+    'Those are the dispatcher\'s own commands; trust-reset in particular is an orchestrator-only, '
     'human-authorised decision, and adopt is orchestrator-only for the same reason -- a worker must '
-    'never be the one judging whether its own unattempted work now counts as verified. attest-native is '
-    'the top-level session\'s own attestation of a stage a native subagent carried out; a subagent never '
-    'attests itself.\n'
+    'never be the one judging whether its own unattempted work now counts as verified. attest-native and '
+    'record-native are the top-level session\'s own word; a subagent never records itself.\n'
 )
 
 
@@ -400,8 +399,8 @@ NO_DISPATCHER_COMMANDS = (
 EXECUTE_ORCHESTRATOR_DISPATCHER_COMMANDS = (
     'As the Execute orchestrator you may run delegate_dispatch.py start, collect, recover, abandon, '
     'accept, reassign or adopt for this feature\'s own T### tasks only -- that is how you dispatch and '
-    'resolve bounded workers. Never trust-reset or attest-native, and never a stage:* identity or another '
-    'feature\'s tasks; the dispatcher enforces this scope itself (DELEGATION_ORCHESTRATOR_SCOPE) and refuses '
+    'resolve bounded workers. Never trust-reset, attest-native or record-native, and never a stage:* '
+    'identity or another feature\'s tasks; the dispatcher enforces this scope itself (DELEGATION_ORCHESTRATOR_SCOPE) and refuses '
     'anything outside it. Pass accept, reassign and adopt --nonce with the dispatcher_nonce that start returned, '
     'and never put it in a worker\'s brief.\n'
 )
@@ -888,6 +887,8 @@ def candidate_start(root, feature, identity, work_type, candidates, task_path, c
                                    'started_at': stamp(), 'task_file': relative(root, task_path),
                                    'cwd': relative(root, cwd), 'timeout': timeout,
                                    'owned_paths': owned_paths, 'route_candidates': candidates,
+                                   'route_kind': 'external',
+                                   'route_reason': candidates[0].get('route_reason', 'unknown'),
                                    'driver': relative(root, status['driver']),
                                    'claim_token': claim_token, 'pinned': bool(pinned),
                                    'claim_id': lifecycle.claim_id_for(claim_token),
@@ -958,6 +959,7 @@ def candidate_start(root, feature, identity, work_type, candidates, task_path, c
                    'requested_model': selected['requested_model'], 'actual_model': None,
                    'actual_model_evidence': 'pending', 'rule': selected['rule'],
                    'choice': selected['choice'], 'candidate_index': index,
+                   'route_kind': 'external', 'route_reason': selected.get('route_reason', 'unknown'),
                    'route_candidates': candidates, 'retry_count': retry_count,
                    'read_only': selected['read_only'], 'status': 'running',
                    'allow_commit': selected['allow_commit'],
@@ -1087,6 +1089,9 @@ def start(root, feature, identity, work_type=None, task_file=None, cwd=None,
     else:
         candidates = delegation.selected_route(config, work_type, workflow.active_host(root),
                                                 full_identity)
+    # start launches an external run: a native candidate is the host's own work, never launched here.
+    candidates = delegation.external_candidates(candidates, [a for a in read_ledger(root, feature)['attempts']
+                                                             if a.get('identity') == full_identity])
     # A light-tier or qa_collect start must declare its owned paths itself
     # (finding 4, round 2): the evidence guard needs a bounded set to check
     # summary or accept file evidence against, not a silent default to the
@@ -1990,7 +1995,10 @@ def _recorded_response(attempt):
                 'token_usage': attempt.get('token_usage'), 'result_summary': attempt.get('result_summary'),
                 'changed_paths': attempt.get('changed_paths'),
                 'worker_changed_paths': attempt.get('worker_changed_paths'),
-                'dispatcher_paths_changed': attempt.get('dispatcher_paths_changed')}
+                'dispatcher_paths_changed': attempt.get('dispatcher_paths_changed'),
+                # Ledgers written before PH-05 carry neither field.
+                'route_kind': attempt.get('route_kind', 'unknown'),
+                'route_reason': attempt.get('route_reason', 'unknown')}
     if attempt.get('unverified_reason'):
         response['unverified_reason'] = attempt['unverified_reason']
     if attempt.get('accepted_evidence'):
@@ -2064,23 +2072,38 @@ def confirm_fallback(root, feature, run_id, pair):
 
 def native_attestation_fields(attempt):
     """The native-attestation label the attest response, `status` and the completed receipt share."""
+    checked = (attempt.get('accepted_evidence') or {}).get('source') == 'record-native'
     return {'kind': 'native', 'run_id': attempt['run_id'], 'requested_harness': attempt['requested_harness'],
             'requested_model': attempt['requested_model'],
             'actual_model': attempt.get('actual_model') or 'unreported',
             'actual_model_evidence': attempt['actual_model_evidence'], 'attested_by': attempt['attested_by'],
             'attested_at': attempt['attested_at'], 'session_id': attempt.get('session_id'),
-            'evidence': 'self-asserted by the top-level session; no external ledger evidence'}
+            'route_kind': 'native', 'route_reason': attempt.get('route_reason', 'unknown'),
+            **({'host_agent_id': attempt.get('host_agent_id'), 'author_lineage': attempt.get('author_lineage')}
+               if checked else {}),
+            'evidence': ('acceptance check passed: ' + str(attempt.get('command')) if checked else
+                         'self-asserted by the top-level session; no external ledger evidence')}
+
+
+def git_porcelain(root):
+    """`git status --porcelain` lines, or None when git cannot answer."""
+    result = workflow.run_git(root, 'status', '--porcelain', text=True, encoding='utf-8')
+    return result.stdout.splitlines() if result.returncode == 0 else None
+
+
+def require_top_level(verb):
+    delegation.require(not delegation.delegated_run_id() and not delegation.delegated_role() and
+                       os.environ.get('SANDUQ_ROLE') != 'worker',
+                       'NATIVE_ATTESTATION_FORBIDDEN: ' + verb + " is the top-level session's own record; a "
+                       'delegated worker, orchestrator or subagent may not give it. Report the result to the '
+                       'top-level session, which runs the command itself')
 
 
 def attest_native(root, feature, identity, token, requested_model, reported_model=None):
     """SAMY-03: record that the top-level session carried a claimed stage out with a native subagent
     of the host, so `complete` has a ledger attempt to accept. Self-asserted: no driver run and no
     external evidence back it, and every place that shows it labels it `kind: native`."""
-    delegation.require(not delegation.delegated_run_id() and not delegation.delegated_role() and
-                       os.environ.get('SANDUQ_ROLE') != 'worker',
-                       "NATIVE_ATTESTATION_FORBIDDEN: attest-native is the top-level session's own attestation; a "
-                       'delegated worker, orchestrator or subagent may not give it. Report the stage result to the '
-                       'top-level session, which runs the command itself')
+    require_top_level('attest-native')
     root = root.resolve()
     feature = feature_identity(root, feature)
     delegation.require_no_maintenance(root)
@@ -2098,6 +2121,9 @@ def attest_native(root, feature, identity, token, requested_model, reported_mode
         route = active.get('delegation')
         delegation.require(route, 'NATIVE_ATTESTATION_NOT_NEEDED: the claim of stage:' + stage + ' of ' + feature +
                            ' recorded no delegation route, so complete needs no attempt for it')
+        delegation.require(route['candidates'][0].get('route_reason') != 'native-unsupported:work-type-disabled',
+                           'NATIVE_ROUTE_DISALLOWED: delegation.native_allowed.' + str(route.get('task_type')) +
+                           ' is false, so ' + full_identity + ' runs externally')
         reserve(ledger, full_identity, None)
         now = stamp()
         attempt = {'kind': 'native', 'identity': full_identity, 'task_type': route.get('task_type'),
@@ -2107,6 +2133,9 @@ def attest_native(root, feature, identity, token, requested_model, reported_mode
                    'actual_model': reported_model.strip() if reported_model and reported_model.strip() else None,
                    'model_observed': bool(reported_model and reported_model.strip()),
                    'rule': 'native', 'choice': 'native', 'route_candidates': route.get('candidates'),
+                   'route_kind': 'native',
+                   'route_reason': 'native-first' if route['candidates'][0].get('route_kind') == 'native'
+                   else 'native-attested',
                    'attested_by': 'top-level', 'attested_at': now, 'session_id': active.get('session_id'),
                    'claim_token': token, 'claim_id': lifecycle.claim_id_for(token),
                    'status_provenance': {'primary': 'self_report', 'source': 'top-level-attestation'},
@@ -2126,6 +2155,141 @@ def attest_native(root, feature, identity, token, requested_model, reported_mode
                                           'reason': 'the top-level session attested a native subagent run'})
     return {**native_attestation_fields(attempt), 'identity': full_identity, 'status': 'successful',
             'replaces_run_id': attempt.get('replaces_run_id')}
+
+
+def record_native(root, feature, identity, token, host_agent_id, requested_model, command, expect,
+                  observed_model=None, evidence=None, parent_agent_id=None, tools=None, timeout=None, owned=None):
+    """Record a stage or task the host did natively (this session or a native subagent) as a ledger attempt.
+
+    Unlike attest-native, the status is never the session's word: the acceptance check accept and adopt run
+    (``acceptance_check``) decides it, so a failing check records a failed attempt. The entry carries the
+    provenance a reviewer needs: the agent ids and their lineage, the requested and observed model, the
+    tools granted and the porcelain git status before (taken at the claim, when it recorded one) and after.
+    """
+    require_top_level('record-native')
+    root = root.resolve()
+    feature = feature_identity(root, feature)
+    delegation.require(re.fullmatch(r'T\d{3,}|stage:[a-z_]+', identity) is not None, 'DELEGATION_IDENTITY_INVALID')
+    stage = identity.removeprefix('stage:') if identity.startswith('stage:') else None
+    delegation.require(stage is None or stage in delegation.STAGE_TYPES, 'DELEGATION_STAGE_INVALID')
+    require_not_delegated_lineage(root, feature)
+    for value, code in ((host_agent_id, 'NATIVE_AGENT_ID_REQUIRED'), (requested_model, 'DELEGATION_MODEL_INVALID')):
+        delegation.require(isinstance(value, str) and value.strip(), code)
+    delegation.require(expect in ACCEPT_EXPECTS, 'DELEGATION_ACCEPT_EXPECT_INVALID')
+    delegation.require(isinstance(command, str) and command.strip(), 'DELEGATION_ACCEPT_COMMAND_REQUIRED')
+    timeout = timeout if timeout is not None else ACCEPT_TIMEOUT_DEFAULT
+    delegation.require(type(timeout) is int and 0 < timeout <= 28800, 'DELEGATION_TIMEOUT_INVALID')
+    delegation.require(not command_targets_windows_shim(command), ACCEPT_COMMAND_IS_SHIM)
+    delegation.require_no_maintenance(root)
+    policy = workflow.load_policy(root)
+    config = policy['delegation']
+    host = workflow.active_host(root)
+    full_identity = feature + '/' + identity
+
+    def claimed():
+        """The active claim this identity belongs to: the stage's own claim, or Execute's for a task."""
+        active = workflow.read(root / feature / 'workflow/checkpoint.json', {}).get('active') or {}
+        if stage:
+            delegation.require(active.get('stage') == stage and active.get('token') == token,
+                               'DELEGATION_STAGE_CLAIM_MISMATCH')
+        else:
+            delegation.require(active.get('stage') == 'execute' and active.get('token') == token,
+                               'DELEGATION_EXECUTE_CLAIM_REQUIRED')
+        return active
+
+    active = claimed()
+    if stage:
+        # A review-kind stage claims with no route under the SEC-01 interim: it is native by instruction.
+        route = active.get('delegation') or {}
+        refused = active.get('delegation_refused') or {}
+        delegation.require(route or refused, 'NATIVE_ATTESTATION_NOT_NEEDED: the claim of stage:' + stage + ' of ' +
+                           feature + ' recorded no delegation route, so complete needs no attempt for it')
+        work_type, candidates = route.get('task_type') or refused['task_type'], route.get('candidates')
+    else:
+        lean = lean_policy.enabled(policy, lean_policy.feature_tier(root, feature))
+        # Native work is recorded once it is done, so the task may already be checked off.
+        work_type = delegation.task_type(task_description(root, feature, identity, allow_done=True), lean)
+        try:
+            candidates = delegation.selected_route(config, work_type, host, full_identity)
+        except delegation.DelegationError as exc:
+            if not str(exc).startswith('DELEGATION_REVIEW_ROUTE_UNSAFE'):
+                raise
+            candidates = None  # review work runs natively under the SEC-01 interim
+    # A route recorded before PH-05 has no route_kind; it is read as native-capable, as attest-native reads it.
+    first = (candidates or [{}])[0]
+    reason = first.get('route_reason')
+    if not config['enabled']:
+        reason = 'native-unsupported:delegation-disabled'
+    elif not config.get('native_allowed', {}).get(work_type, True):
+        reason = 'native-unsupported:work-type-disabled'
+    delegation.require(first.get('route_kind', 'native') == 'native' and
+                       not str(reason).startswith('native-unsupported'),
+                       'NATIVE_ROUTE_DISALLOWED: the route for ' + full_identity + ' is external (' + str(reason) +
+                       '), so it is not recorded as native work')
+    owned_paths = list(owned) if owned else [feature]
+    before = (active.get('delegation') or {}).get('git_status_at_claim')
+    git_before = ({'source': 'claim', 'at': active.get('claimed_at'), 'porcelain': before} if before is not None
+                  else {'source': 'unavailable', 'porcelain': None,
+                        'note': 'the claim recorded no git status; only the status after the work is known'})
+    started = stamp()
+    run, accepted = acceptance_check(command, expect, root, owned_paths, timeout, 'record-native')
+    git_after = git_porcelain(root)
+    lineage = [value.strip() for value in (parent_agent_id, host_agent_id) if value and value.strip()]
+    observed = observed_model.strip() if observed_model and observed_model.strip() else None
+    with edit_ledger(root, feature) as ledger:
+        active = claimed()
+        reserve(ledger, full_identity, None)
+        now = stamp()
+        attempt = {'kind': 'native', 'identity': full_identity, 'task_type': work_type,
+                   'run_id': 'native-' + uuid.uuid4().hex[:12], 'intent_id': uuid.uuid4().hex,
+                   'status': 'successful' if accepted else 'failed', 'started_at': started, 'ended_at': now,
+                   'requested_harness': host, 'actual_harness': host, 'requested_model': requested_model.strip(),
+                   'actual_model': observed, 'model_observed': observed is not None,
+                   'actual_model_evidence': ((evidence or '').strip() or 'unverified') if observed else 'unverified',
+                   'rule': first.get('rule', 'native'), 'choice': 'native', 'route_candidates': candidates,
+                   'route_kind': 'native', 'route_reason': 'native-first',
+                   'host_agent_id': host_agent_id.strip(),
+                   'parent_agent_id': lineage[0] if len(lineage) == 2 else None,
+                   'author_lineage': lineage, 'tools_granted': list(tools) if tools else None,
+                   'git_status_before': git_before, 'git_status_after': git_after,
+                   'attested_by': 'top-level', 'attested_at': now, 'session_id': active.get('session_id'),
+                   # A stage attempt binds to its own claim; a task to the Execute claim it ran under.
+                   'claim_token': token if stage else None,
+                   'claim_id': lifecycle.claim_id_for(token if stage else None),
+                   **({} if stage else {'execute_claim_id': lifecycle.claim_id_for(token)}),
+                   'status_provenance': {'primary': 'acceptance_check', 'source': 'record-native'},
+                   'fidelity': 'reported', 'token_usage': None, 'evidence_location': None,
+                   'cwd': '.', 'timeout': timeout, 'owned_paths': owned_paths, 'command': command, 'expect': expect,
+                   'exit_code': run['exit_code'], 'timed_out': run.get('timed_out', False),
+                   'output_truncated': run.get('truncated', False), 'output': run['output'][:ACCEPT_LEDGER_OUTPUT_CAP],
+                   'result_summary': 'native work recorded by the top-level session; acceptance check ' +
+                                     ('passed' if accepted else 'did not pass')}
+        if accepted:
+            attempt.update(accepted_evidence=accepted, accepted_at=now)
+        else:
+            attempt['failure_category'] = 'acceptance-failed'
+        author = delegation.same_lineage_author(ledger['attempts'], attempt)
+        delegation.require(author is None,
+                           'SAME_LINEAGE_REVIEW: ' + full_identity + ' is ' + work_type + ' work by agent lineage ' +
+                           ' > '.join(lineage) + ', which also authored ' + str(author) + '; have another agent '
+                           'review it')
+        # A terminal earlier attempt of this identity (and claim, for a stage) is replaced, not hidden.
+        prior = [a for a in ledger['attempts'] if a.get('identity') == full_identity and a.get('run_id') and
+                 (not stage or a.get('claim_token') == token) and not a.get('replacement_run_id')]
+        if prior:
+            latest = max(prior, key=lambda a: a.get('started_at') or '')
+            latest['replacement_run_id'] = attempt['run_id']
+            attempt['parent_run_id'] = attempt['replaces_run_id'] = latest['run_id']
+        ledger['attempts'].append(attempt)
+        ledger['route_decisions'].append({'at': now, 'identity': full_identity, 'requested': first or None,
+                                          'decision': 'native-recorded', 'run_id': attempt['run_id'],
+                                          'reason': 'acceptance check ' + ('passed' if accepted else 'failed')})
+    return {'run_id': attempt['run_id'], 'identity': full_identity, 'kind': 'native', 'status': attempt['status'],
+            'route_kind': 'native', 'route_reason': attempt['route_reason'], 'accepted': accepted is not None,
+            'evidence': accepted, 'exit_code': run['exit_code'], 'timed_out': run.get('timed_out', False),
+            'requested_model': attempt['requested_model'], 'actual_model': observed or 'unreported',
+            'actual_model_evidence': attempt['actual_model_evidence'], 'host_agent_id': attempt['host_agent_id'],
+            'author_lineage': lineage, 'replaces_run_id': attempt.get('replaces_run_id')}
 
 
 def collect(root, feature, run_id, auto_retry=True, confirm=None):
@@ -2284,7 +2448,8 @@ def attempt_to_candidate(attempt):
             'tier': next((c.get('tier') for c in attempt['route_candidates']
                           if c['harness'] == attempt['requested_harness'] and
                           c['requested_model'] == attempt['requested_model']), None),
-            'rule': attempt['rule'], 'choice': attempt['choice']}
+            'rule': attempt['rule'], 'choice': attempt['choice'],
+            'route_kind': attempt.get('route_kind', 'unknown'), 'route_reason': attempt.get('route_reason', 'unknown')}
 
 
 def classify_failure(root, feature, run_id, attribution):
@@ -2378,6 +2543,35 @@ def reassign(root, feature, run_id, reason, task_file=None, diagnosis=None):
 
 ACCEPT_EXPECTS = ('counts', 'files')
 ACCEPT_TIMEOUT_DEFAULT = 1800
+ACCEPT_COMMAND_IS_SHIM = (
+    'DELEGATION_ACCEPT_COMMAND_IS_SHIM: the acceptance command targets a .bat/.cmd '
+    'shim; Windows always runs it through cmd.exe even though this dispatcher never '
+    'uses a shell, reopening the class of injection shell=False is meant to close. '
+    'Run the underlying executable directly instead (for example "node <script>.js" '
+    'rather than an npx.cmd shim)')
+
+
+def acceptance_check(command, expect, cwd, owned_paths, timeout, source):
+    """Run one acceptance command (no shell, bounded, output capped) and judge its own output.
+
+    Returns (run, evidence): evidence is None unless the command exited 0 and its output meets ``expect``:
+    ``counts`` needs parsable total > 0 and failed == 0; ``files`` needs every listed file inside
+    ``owned_paths``. accept, adopt and record-native share it, so one check decides all three.
+    """
+    run = run_capped(build_command_argv(command), cwd, timeout)
+    text = run['output']
+    evidence = None
+    if run['exit_code'] == 0:
+        if expect == 'counts':
+            counts = parse_counts(text)
+            if counts and counts['total'] > 0 and counts['failed'] == 0:
+                evidence = {'expect': 'counts', 'source': source, 'counts': counts}
+        else:
+            paths = parse_files(text)
+            valid = validate_owned_files(cwd, owned_paths, paths) if paths else None
+            if valid:
+                evidence = {'expect': 'files', 'source': source, 'files': valid}
+    return run, evidence
 
 
 def accept(root, feature, run_id, command, expect, timeout=None, owned=None):
@@ -2425,13 +2619,8 @@ def accept(root, feature, run_id, command, expect, timeout=None, owned=None):
     cwd = (root / attempt['cwd']).resolve()
     delegation.require(cwd.is_dir() and (cwd.is_relative_to(root) or cwd in registered_worktrees(root)),
                        'DELEGATION_ACCEPT_CWD_INVALID')
-    delegation.require(not command_targets_windows_shim(command),
-                       'DELEGATION_ACCEPT_COMMAND_IS_SHIM: the acceptance command targets a .bat/.cmd '
-                       'shim; Windows always runs it through cmd.exe even though this dispatcher never '
-                       'uses a shell, reopening the class of injection shell=False is meant to close. '
-                       'Run the underlying executable directly instead (for example "node <script>.js" '
-                       'rather than an npx.cmd shim)')
-    args = build_command_argv(command)
+    delegation.require(not command_targets_windows_shim(command), ACCEPT_COMMAND_IS_SHIM)
+    build_command_argv(command)  # an empty command is refused before anything runs
     # --owned may only narrow what was declared at start, never widen it
     # (finding 4, round 2): otherwise a task started with a bounded owned set
     # could have that bound quietly lifted for one acceptance call.
@@ -2445,19 +2634,8 @@ def accept(root, feature, run_id, command, expect, timeout=None, owned=None):
             'DELEGATION_ACCEPT_OWNED_MUST_NARROW: --owned may only narrow the paths recorded at '
             'start, never widen them')
         owned_paths = owned
-    run = run_capped(args, cwd, timeout)
+    run, evidence = acceptance_check(command, expect, cwd, owned_paths, timeout, 'accept')
     text = run['output']
-    evidence = None
-    if run['exit_code'] == 0:
-        if expect == 'counts':
-            counts = parse_counts(text)
-            if counts and counts['total'] > 0 and counts['failed'] == 0:
-                evidence = {'expect': 'counts', 'source': 'accept', 'counts': counts}
-        else:
-            paths = parse_files(text)
-            valid = validate_owned_files(cwd, owned_paths, paths) if paths else None
-            if valid:
-                evidence = {'expect': 'files', 'source': 'accept', 'files': valid}
     with edit_ledger(root, feature) as ledger:
         attempt = find_run(ledger, run_id)
         delegation.require(attempt is not None and attempt.get('status') == 'unverified',
@@ -2504,6 +2682,7 @@ def recover_intent(root, feature, intent_id):
                       requested_model=meta.get('model'), actual_model=None,
                       actual_model_evidence='pending', rule=candidate['rule'],
                       choice=candidate['choice'], candidate_index=candidate_index,
+                      route_kind='external', route_reason=candidate.get('route_reason', 'unknown'),
                       status='running', read_only=meta.get('permission') == 'sandbox',
                       allow_commit=bool(meta.get('allow_commit')),
                       evidence_location='.delegate/runs/' + meta['run_id'] + '/result.json')
@@ -2686,28 +2865,11 @@ def adopt(root, feature, task_id, command, expect, timeout=None, owned=None):
     delegation.require(all(a.get('adopted') and a.get('status') == 'unverified' for a in existing),
                        'DELEGATION_ADOPT_HAS_ATTEMPT: an attempt already exists for ' + task_id +
                        '; resolve it with accept or reassign instead of adopting it')
-    delegation.require(not command_targets_windows_shim(command),
-                       'DELEGATION_ACCEPT_COMMAND_IS_SHIM: the acceptance command targets a .bat/.cmd '
-                       'shim; Windows always runs it through cmd.exe even though this dispatcher never '
-                       'uses a shell, reopening the class of injection shell=False is meant to close. '
-                       'Run the underlying executable directly instead (for example "node <script>.js" '
-                       'rather than an npx.cmd shim)')
+    delegation.require(not command_targets_windows_shim(command), ACCEPT_COMMAND_IS_SHIM)
     cwd = root
-    args = build_command_argv(command)
     owned_paths = list(owned) if owned else [feature]
-    run = run_capped(args, cwd, timeout)
+    run, evidence = acceptance_check(command, expect, cwd, owned_paths, timeout, 'adopt')
     text = run['output']
-    evidence = None
-    if run['exit_code'] == 0:
-        if expect == 'counts':
-            counts = parse_counts(text)
-            if counts and counts['total'] > 0 and counts['failed'] == 0:
-                evidence = {'expect': 'counts', 'source': 'adopt', 'counts': counts}
-        else:
-            paths = parse_files(text)
-            valid = validate_owned_files(cwd, owned_paths, paths) if paths else None
-            if valid:
-                evidence = {'expect': 'files', 'source': 'adopt', 'files': valid}
     run_id = 'adopt-' + uuid.uuid4().hex
     with edit_ledger(root, feature) as ledger:
         existing = [a for a in ledger.get('attempts', []) if a.get('identity') == full_identity]
@@ -2811,6 +2973,24 @@ def main(argv=None):
     attest_cmd.add_argument('--claim-token', required=True)
     attest_cmd.add_argument('--requested-model', required=True, help='The model the subagent was asked to run')
     attest_cmd.add_argument('--reported-model', help='The model the host reported; omitted records "unreported"')
+    record_cmd = sub.add_parser('record-native', help='Record a stage or task the host did natively; the acceptance '
+                                                      'check decides its status; top-level session only')
+    record_cmd.add_argument('--feature', required=True)
+    record_cmd.add_argument('--id', required=True, help='stage:<stage> or a task id')
+    record_cmd.add_argument('--token', '--claim-token', dest='token', required=True,
+                            help="The stage's claim token, or the Execute claim's for a task")
+    record_cmd.add_argument('--host-agent-id', required=True, help='The id of the agent that did the work')
+    record_cmd.add_argument('--parent-agent-id', help='The id of the agent that started it, when one did')
+    record_cmd.add_argument('--requested-model', required=True)
+    record_cmd.add_argument('--observed-model', help='The model the host reported; omitted records "unreported"')
+    record_cmd.add_argument('--evidence', help='Where the observed model was read; omitted records "unverified"')
+    record_cmd.add_argument('--tools', action='append', help='A tool granted to the agent (repeatable)')
+    record_cmd.add_argument('--command', required=True)
+    record_cmd.add_argument('--expect', choices=ACCEPT_EXPECTS, required=True)
+    record_cmd.add_argument('--timeout', type=int)
+    record_cmd.add_argument('--owned', action='append',
+                            help='A path (repeatable), relative to the repo root, to check "files" evidence '
+                                 'against; defaults to the feature directory')
     args = parser.parse_args(argv)
     try:
         if args.action in ('accept', 'adopt', 'reassign', 'trust-reset'):
@@ -2844,6 +3024,10 @@ def main(argv=None):
         elif args.action == 'adopt':
             result = adopt(args.root, args.feature, args.id, args.command, args.expect,
                            args.timeout, args.owned)
+        elif args.action == 'record-native':
+            result = record_native(args.root, args.feature, args.id, args.token, args.host_agent_id,
+                                   args.requested_model, args.command, args.expect, args.observed_model,
+                                   args.evidence, args.parent_agent_id, args.tools, args.timeout, args.owned)
         elif args.action == 'attest-native':
             result = attest_native(args.root, args.feature, args.id, args.claim_token,
                                    args.requested_model, args.reported_model)

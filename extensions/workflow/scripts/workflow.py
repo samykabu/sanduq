@@ -1296,7 +1296,13 @@ class Run:
                         'identity': self.relative + '/stage:' + stage,
                         'task_type': work_type,
                         'candidates': candidates,
+                        # The first candidate's kind decides: native means this session or a native subagent
+                        # does the stage and records it with delegate_dispatch.py record-native.
+                        'route_kind': candidates[0]['route_kind'],
                     }
+                    if candidates[0]['route_kind'] == 'native':
+                        from delegate_dispatch import git_porcelain
+                        state['active']['delegation']['git_status_at_claim'] = git_porcelain(self.root)
             state['active']['baseline'] = fingerprint_files(self.root, [p for r in state['receipts'].values() for p in r['fingerprints']],
                                                             feature=self.relative)
             state['status'] = 'in-progress'
@@ -1760,6 +1766,16 @@ class Run:
                     'recorded before claim_token existed has none and will never match; re-delegate the stage '
                     'once under this workflow release')
             self._validated_candidate = stage_attempt.get('run_id')
+        if self.policy['delegation']['enabled']:
+            # A native review or QA attempt of this claim (a review-kind stage records one with no route) must
+            # not come from the agent lineage that authored the work it checks.
+            from delegation import latest_attempt, ledger_attempts, same_lineage_author
+            native = stage_attempt or latest_attempt(self.root, self.relative, 'stage:' + stage)
+            if (native or {}).get('kind') == 'native' and native.get('claim_token') == token:
+                author = same_lineage_author(ledger_attempts(self.root, self.relative), native)
+                require(author is None, 'SAME_LINEAGE_REVIEW: stage:' + stage + ' was checked by agent lineage ' +
+                        ' > '.join(native.get('author_lineage') or ()) + ', which also authored ' + str(author) +
+                        '; have another agent review it and record that with delegate_dispatch.py record-native')
         self._check_stage_rules(state, stage, receipt, token, active.get('session_id'))
         if stage in SOURCE_STAGES:
             require(receipt.get('blocking_findings') == 0, 'BLOCKING_FINDINGS_REMAIN')

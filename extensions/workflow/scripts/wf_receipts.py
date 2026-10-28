@@ -161,7 +161,7 @@ def native_run_status(root, feature, state, roots):
         if fallback.get('fallback_used') or fallback.get('substitute_model'):
             run['fallback'] = fallback
         accepted = (attempt and attempt.get('status') == 'successful' and
-                    (attempt.get('accepted_evidence') or {}).get('source') in ('accept', 'adopt'))
+                    (attempt.get('accepted_evidence') or {}).get('source') in ('accept', 'adopt', 'record-native'))
         run['acceptance_verdict'] = 'accepted' if accepted else 'unknown'
         run['acceptance_provenance'] = attempt['accepted_evidence']['source'] if accepted else None
         if attempt and (attempt.get('status_provenance') or {}).get('primary') == 'self_report':
@@ -775,7 +775,8 @@ def ready_checks(root, feature, policy, state, base=None, rules=None, warnings=N
             # since delegations.json is committed but the marker is local
             # runtime state) is a warning only, and status is still enforced
             # (round 3, findings 1-2).
-            from delegation import latest_attempt, ledger_trust_state, task_line_content_sha256, task_lines
+            from delegation import (latest_attempt, ledger_attempts, ledger_trust_state, same_lineage_author,
+                                    task_line_content_sha256, task_lines)
             trust = ledger_trust_state(root, feature)
             require(trust != 'untrusted',
                     'DELEGATION_LEDGER_UNTRUSTED: the delegation ledger for ' + feature + ' was tampered '
@@ -807,11 +808,19 @@ def ready_checks(root, feature, policy, state, base=None, rules=None, warnings=N
             # or a different task entirely reusing the same id -- must not
             # ride the earlier adoption to Ready.
             current_lines = task_lines((directory / 'tasks.md').read_text(encoding='utf-8-sig'))
-            not_verified, changed = [], []
+            not_verified, changed, same_lineage = [], [], []
+            attempts = ledger_attempts(root, feature)
             for task_id in completion_tasks:
                 attempt = latest_attempt(root, feature, task_id) or {}
-                if attempt.get('status') != 'successful':
+                # A native task counts only with the acceptance check record-native ran; the session's own word
+                # (an attest-native-style self-assertion) is not enough for a task.
+                if attempt.get('status') != 'successful' or (
+                        attempt.get('kind') == 'native' and
+                        (attempt.get('accepted_evidence') or {}).get('source') != 'record-native'):
                     not_verified.append(task_id)
+                    continue
+                if same_lineage_author(attempts, attempt):
+                    same_lineage.append(task_id)
                     continue
                 if (attempt.get('adopted') and attempt.get('task_line_sha256') and
                         task_line_content_sha256(current_lines[task_id]) != attempt['task_line_sha256']):
@@ -833,6 +842,11 @@ def ready_checks(root, feature, policy, state, base=None, rules=None, warnings=N
                     warnings.append('DELEGATION_TASK_ADOPTED: ' + task_id + ' via "' +
                                     str(attempt.get('command')) + '" (' + str(attempt.get('expect')) +
                                     ', exit ' + str(attempt.get('exit_code')) + ')')
+                elif source == 'record-native':
+                    warnings.append('DELEGATION_TASK_NATIVE: ' + task_id + ' by ' +
+                                    ' > '.join(attempt.get('author_lineage') or ()) + ' via "' +
+                                    str(attempt.get('command')) + '" (' + str(attempt.get('expect')) +
+                                    ', exit ' + str(attempt.get('exit_code')) + ')')
                 elif source == 'accept':
                     resolved = next((a for a in attempt.get('acceptance_attempts', []) if a.get('accepted')),
                                     None)
@@ -843,6 +857,9 @@ def ready_checks(root, feature, policy, state, base=None, rules=None, warnings=N
             require(not not_verified, 'DELEGATION_TASK_UNVERIFIED: ' + ', '.join(sorted(not_verified)) +
                     ' - resolve with delegate_dispatch.py accept or reassign, or adopt it with an '
                     'acceptance check, before Ready')
+            require(not same_lineage, 'SAME_LINEAGE_REVIEW: ' + ', '.join(sorted(same_lineage)) +
+                    ' - review or QA work recorded by the agent lineage that authored the work it checks; have '
+                    'another agent do it and record it with delegate_dispatch.py record-native before Ready')
             require(not changed, 'DELEGATION_ADOPT_TASK_CHANGED: ' + ', '.join(sorted(changed)) +
                     ' - the task line changed since it was adopted; re-run delegate_dispatch.py adopt '
                     'with a fresh acceptance check before Ready')

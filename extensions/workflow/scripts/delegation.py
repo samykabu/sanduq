@@ -341,10 +341,16 @@ def light_tier_route_warnings(config):
 
 
 def validate_delegation(config):
-    require(isinstance(config, dict) and set(config) ==
+    require(isinstance(config, dict) and set(config) - {'native_allowed'} ==
             {'enabled', 'install_scope', 'stronger_retry', 'models', 'routes', 'overrides',
              'fixed_collection_commands'},
             'DELEGATION_POLICY_INVALID')
+    # Optional and never filled in, so an older policy keeps its digest: absent means native for every type.
+    native = config.get('native_allowed', {})
+    require(isinstance(native, dict) and set(native) <= set(TYPES) and
+            all(type(value) is bool for value in native.values()),
+            'DELEGATION_NATIVE_ALLOWED_INVALID: native_allowed maps a work type (' + ', '.join(TYPES) +
+            ') to true or false')
     require(type(config['enabled']) is bool, 'DELEGATION_SELECTION_INVALID')
     require(config['install_scope'] in ('project', 'global'), 'DELEGATION_SCOPE_INVALID')
     require(type(config['stronger_retry']) is int and config['stronger_retry'] in (0, 1),
@@ -489,14 +495,53 @@ def selected_route(config, work_type, selected_host, identity=None):
                    'fallbacks': [{'harness': 'selected', 'model': None}]}:
         rule = 'yaml:' + work_type
     require(not review_route_unsafe(work_type, route), REVIEW_ROUTE_UNSAFE)
+    unsupported = native_unsupported(config, work_type, route['preferred'], selected_host)
     candidates = []
+    if unsupported is None:
+        # Native first: the host runs the work itself on the preferred tier's pinned model; the
+        # configured candidates stay behind it as external fallbacks.
+        tier = route['preferred']['tier']
+        candidates.append({'harness': selected_host, 'requested_model': config['models'][selected_host][tier],
+                           'tier': tier, 'rule': rule, 'choice': 'preferred',
+                           'route_kind': 'native', 'route_reason': 'native-first'})
     for index, item in enumerate((route['preferred'], *route['fallbacks'])):
         harness = selected_host if item['harness'] == 'selected' else item['harness']
         model = config['models'][harness][item['tier']] if 'tier' in item else item['model']
+        reason = ('external:cross-vendor' if harness != selected_host else
+                  'native-failed:pending' if unsupported is None else 'native-unsupported:' + unsupported)
         candidates.append({'harness': harness, 'requested_model': model,
                            'tier': item.get('tier'), 'rule': rule,
-                           'choice': 'preferred' if index == 0 else 'fallback:' + str(index)})
+                           'choice': 'preferred' if index == 0 else 'fallback:' + str(index),
+                           'route_kind': 'external', 'route_reason': reason})
     return candidates
+
+
+def native_unsupported(config, work_type, preferred, selected_host):
+    """The capability that keeps a route off the native host, or None when the host can run it natively.
+
+    Native needs delegation on (the role files then pin the tier's model), the work type allowed by
+    ``native_allowed``, a preferred candidate on the selected host (a route naming the other vendor is a
+    deliberate cross-vendor route and stays external) and a tier, so the exact model is a configured one.
+    """
+    if not config['enabled']:
+        return 'delegation-disabled'
+    if not config.get('native_allowed', {}).get(work_type, True):
+        return 'work-type-disabled'
+    if preferred['harness'] not in ('selected', selected_host):
+        return 'cross-vendor-route'
+    if 'tier' not in preferred:
+        return 'model-pin'
+    return None
+
+
+def external_candidates(candidates, attempts=()):
+    """The external candidates of a route, each ``native-failed:pending`` reason resolved from the identity's
+    latest native attempt (its failure category, else its status), or ``not-attempted`` when none exists."""
+    native = [a for a in attempts if a.get('kind') == 'native']
+    latest = max(native, key=lambda a: a.get('started_at') or '') if native else None
+    category = (latest.get('failure_category') or latest.get('status') or 'unknown') if latest else 'not-attempted'
+    return [{**c, 'route_reason': 'native-failed:' + category} if c.get('route_reason') == 'native-failed:pending'
+            else c for c in candidates if c.get('route_kind') != 'native']
 
 
 def stronger_candidate(config, prior, selected_host):
@@ -511,7 +556,8 @@ def stronger_candidate(config, prior, selected_host):
         return None
     return {'harness': harness, 'requested_model': config['models'][harness][stronger],
             'tier': stronger, 'rule': 'stronger-retry:' + tier + '->' + stronger,
-            'choice': 'reassignment'}
+            'choice': 'reassignment', 'route_kind': 'external',
+            'route_reason': prior.get('route_reason') or 'unknown'}
 
 
 def read_policy(root):
@@ -622,6 +668,27 @@ def latest_attempt(root, feature, identity):
             break
         current = following
     return current
+
+
+def ledger_attempts(root, feature):
+    """Every attempt in a feature's ledger, or an empty list when it has none."""
+    path = ledger_path(root, feature)
+    return json.loads(path.read_text(encoding='utf-8')).get('attempts', []) if path.is_file() else []
+
+
+# Work that checks other work: its author must not be the agent that wrote what it checks.
+REVIEW_WORK_TYPES = ('review', 'qa_author', 'qa_collect')
+
+
+def same_lineage_author(attempts, attempt):
+    """The run id of a successful authoring attempt (any work type outside REVIEW_WORK_TYPES) of the same
+    feature that has the same author lineage as this review or QA attempt, else None."""
+    lineage = attempt.get('author_lineage')
+    if attempt.get('task_type') not in REVIEW_WORK_TYPES or not lineage:
+        return None
+    return next((a['run_id'] for a in attempts if a.get('run_id') != attempt.get('run_id') and
+                 a.get('status') == 'successful' and a.get('task_type') not in REVIEW_WORK_TYPES and
+                 a.get('author_lineage') == lineage), None)
 
 
 def active_task_ids(root, feature):
