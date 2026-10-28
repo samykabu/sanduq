@@ -803,6 +803,7 @@ def ready_checks(root, feature, policy, state, base=None, rules=None, warnings=N
             not_verified, changed, same_lineage, repinned = [], [], [], []
             attempts = ledger_attempts(root, feature)
             # Routes are fixed for a claim: a task attempt of the Execute claim must carry its delegation digest.
+            # An attempt another claim owns was checked against that claim's digest when it was recorded.
             execute = (state.get('receipts') or {}).get('execute') or {}
             for task_id in completion_tasks:
                 attempt = latest_attempt(root, feature, task_id) or {}
@@ -818,7 +819,8 @@ def ready_checks(root, feature, policy, state, base=None, rules=None, warnings=N
                     continue
                 if (execute.get('delegation_digest') and attempt.get('delegation_digest') and
                         attempt['delegation_digest'] != execute['delegation_digest'] and
-                        attempt.get('execute_claim_id', execute.get('claim_id')) == execute.get('claim_id')):
+                        (attempt.get('execute_claim_id') or attempt.get('delegation_claim_id') or
+                         execute.get('claim_id')) == execute.get('claim_id')):
                     repinned.append(task_id)
                     continue
                 if ((attempt.get('adopted') or attempt.get('kind') == 'native') and

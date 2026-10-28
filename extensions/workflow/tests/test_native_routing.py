@@ -421,6 +421,50 @@ class NativeRoutingTests(unittest.TestCase):
         state['receipts']['execute'] = {'claim_id': claim_id}
         self.assertIn('tasks', w.ready_checks(self.root, self.feature, self.policy, state, rules=TASK_GATE))
 
+    def test_ready_accepts_a_task_adopted_under_a_later_claims_policy(self):
+        """The owner changed the policy between claims; a task adopted during the later claim ran on its routes."""
+        self.tasks('- [x] T001 Implement parser\n')
+        self.enable()
+        run = self.pinned_execute_claim()
+        state = run.load()
+        execute_digest = state['active']['delegation_digest']
+        self.edit_policy({'review': False})
+        later = delegation.policy_digest(w.load_policy(self.root)['delegation'])
+        self.assertNotEqual(later, execute_digest)
+        state['receipts']['execute'] = {'claim_id': dispatch.lifecycle.claim_id_for('exec-token'),
+                                        'delegation_digest': execute_digest}
+        state['active'] = {'stage': 'review', 'token': 'review-token', 'session_id': 'test-session',
+                           'claimed_at': dispatch.stamp(), 'delegation_digest': later,
+                           'claim_id': dispatch.lifecycle.claim_id_for('review-token')}
+        w.write(run.path, state)
+        self.adopt()
+        attempt = delegation.latest_attempt(self.root, self.feature, 'T001')
+        self.assertEqual((attempt['delegation_digest'], attempt['delegation_claim_id'], attempt.get('execute_claim_id')),
+                         (later, dispatch.lifecycle.claim_id_for('review-token'), None))
+        self.assertIn('tasks', w.ready_checks(self.root, self.feature, self.policy, state, rules=TASK_GATE))
+
+    def test_the_policy_changed_remedy_releases_the_claim_and_claiming_again_adopts_the_policy(self):
+        """Pause keeps the claim, so the remedy recovers it; following its steps succeeds."""
+        self.enable()
+        run, claim = self.claim()
+        self.edit_policy({'implementation': False})
+        with self.assertRaises(delegation.DelegationError) as refused:
+            dispatch.attest_native(self.root, self.feature, 'stage:scope', claim['token'], 'gpt-6-sol')
+        for text in (str(refused.exception), w.ERRORS['DELEGATION_POLICY_CHANGED_IN_CLAIM'][2]):
+            self.assertIn('workflow.py recover --feature', text)
+            self.assertNotIn(' pause ', text)
+        self.assertIn('--force-live-owner', str(refused.exception))  # recover refuses a fresh claim without it
+        run.release_ownership(claim['token'], 'owner changed the routes between claims',
+                              force_live_owner='this session releases its own claim')
+        with patch.object(delegation, 'doctor', return_value=self.fake_doctor()), \
+             patch_runtime('doctor', return_value={'ok': True, 'errors': []}):
+            run = w.Run(self.root, self.feature)  # a new claim command reads the edited policy
+            again = run.claim({'session_id': 'test-session'})
+        self.assertEqual(run.load()['active']['delegation_digest'],
+                         delegation.policy_digest(w.load_policy(self.root)['delegation']))
+        result = dispatch.attest_native(self.root, self.feature, 'stage:scope', again['token'], 'gpt-6-sol')
+        self.assertEqual(result['status'], 'successful')
+
     def test_route_error_remedies_never_suggest_editing_the_policy(self):
         for code in ('NATIVE_ROUTE_DISALLOWED', 'DELEGATION_ADOPT_ROUTE_EXTERNAL', 'DELEGATION_TASK_SUBSTITUTED'):
             with self.subTest(code=code):

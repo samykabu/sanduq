@@ -1234,17 +1234,17 @@ def fallback_message(feature, attempt, pending):
     confirm = (DISPATCH_SCRIPT + ' collect --feature ' + feature + ' --run-id ' + attempt['run_id'] +
                ' --confirm-fallback ' + pending['pair'])
     if not pending['listed']:
-        confirm = ('the substitute is not pre-listed, and routes are fixed for the claim: with the owner\'s '
-                   'agreement, pause this claim, set allow_default_model: true on the ' + str(attempt.get('rule')) +
-                   ' route in .specify/workflow.yml, claim again, then ' + confirm)
+        confirm = ('the substitute is not pre-listed: ' +
+                   delegation.reclaim_steps('set allow_default_model: true on the ' + str(attempt.get('rule')) +
+                                            ' route', feature) + ', then ' + confirm)
     token = ' --claim-token ' + attempt['claim_token'] if attempt.get('claim_token') else ''
     others = [c for c in attempt['route_candidates'] if c['requested_model'] and
               (c['harness'], c['requested_model']) != (attempt['requested_harness'], attempt['requested_model'])]
     pick = (DISPATCH_SCRIPT + ' start --feature ' + feature + ' --id ' + identity + ' --harness ' +
             others[0]['harness'] + ' --model ' + others[0]['requested_model'] + token if others else
-            'with the owner\'s agreement, pause this claim, set delegation.models.' + attempt['requested_harness'] +
-            ' in .specify/workflow.yml to a model this account can use and claim again (routes are fixed for a '
-            'claim), then ' + DISPATCH_SCRIPT + ' start --feature ' + feature + ' --id ' + identity + token)
+            delegation.reclaim_steps('set delegation.models.' + attempt['requested_harness'] + ' to a model this '
+                                     'account can use', feature) +
+            ', then ' + DISPATCH_SCRIPT + ' start --feature ' + feature + ' --id ' + identity + token)
     native = (WORKFLOW_NATIVE_STAGE.format(script=DISPATCH_SCRIPT, feature=feature, identity=identity,
                                            token=attempt['claim_token'])
               if attempt.get('claim_token') else
@@ -1990,9 +1990,8 @@ def confirm_fallback(root, feature, run_id, pair):
         delegation.require(substitute_listed(policy['delegation'], attempt, pending['substitute']),
                            'FALLBACK_SUBSTITUTE_NOT_LISTED: ' + substitute_text(pending['substitute']) +
                            ' is not pre-listed for the ' + str(attempt.get('rule')) + ' route; pick an allowed '
-                           'model as "' + show + '" shows, or, with the owner\'s agreement, pause this claim, set '
-                           'allow_default_model: true on that route in .specify/workflow.yml and claim again '
-                           '(routes are fixed for a claim)')
+                           'model as "' + show + '" shows, or, ' +
+                           delegation.reclaim_steps('set allow_default_model: true on that route', feature))
         attempt = copy.deepcopy(attempt)
     task_path = root / attempt['task_file']
     delegation.require(task_path.is_file(), 'DELEGATION_BRIEF_MISSING_FOR_RETRY')
@@ -2054,7 +2053,7 @@ def require_top_level(verb):
 
 def claim_policy_fields(root, feature, config, task=False):
     """Refuse once the delegation policy differs from the one the active claim recorded; else the fields an
-    attempt records (the claim's digest, and for a task the Execute claim it ran under).
+    attempt records (the claim's digest and id, and for a task the Execute claim it ran under).
 
     Routes are fixed for a claim: they change only between claims. A claim recorded before the digest
     existed carries none and is not checked.
@@ -2065,9 +2064,11 @@ def claim_policy_fields(root, feature, config, task=False):
         return {}
     delegation.require(recorded == delegation.policy_digest(config),
                        delegation.POLICY_CHANGED_IN_CLAIM + ' (' + feature + ', stage ' + str(active.get('stage')) + ')')
-    fields = {'delegation_digest': recorded}
+    claim_id = active.get('claim_id') or lifecycle.claim_id_for(active.get('token'))
+    # The owning claim tells Ready which claim's digest an attempt was checked against when it was recorded.
+    fields = {'delegation_digest': recorded, 'delegation_claim_id': claim_id}
     if task and active.get('stage') == 'execute' and active.get('token'):
-        fields['execute_claim_id'] = active.get('claim_id') or lifecycle.claim_id_for(active['token'])
+        fields['execute_claim_id'] = claim_id
     return fields
 
 
@@ -2492,8 +2493,8 @@ def reassign(root, feature, run_id, reason, task_file=None, diagnosis=None):
                        'same model again. Start with another eligible candidate: ' + DISPATCH_SCRIPT + ' start '
                        '--feature ' + feature + ' --id ' + prior['identity'].removeprefix(feature + '/') +
                        ' --harness <codex|claude> --model <id> --deliverable "<artifact and acceptance result>" '
-                       '--correction-plan "<what changes>", or, with the owner\'s agreement, pause this claim, fix '
-                       'delegation.models in .specify/workflow.yml and claim again (routes are fixed for a claim)')
+                       '--correction-plan "<what changes>", or, ' +
+                       delegation.reclaim_steps('fix delegation.models', feature))
     delegation.require(lean or not prior.get('pinned'),
                        'DELEGATION_PINNED_ROUTE_NO_ESCALATION: the run was started with an explicit '
                        '--harness/--model pair; start again with another eligible pair instead')
