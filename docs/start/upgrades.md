@@ -226,6 +226,18 @@ $speckit-memory-enable Review the renewed archiving policy and approve it.
 | Project owner type | A config from an older Init for an organization board says `ownerType: user` | Rerun `$speckit-project-init`, or set `"ownerType": "org"` |
 | Scope's `scope-gate` preset changed | A managed Specify claim is no longer told to chain Clarify | Unmanaged projects run `specify preset add` again for `scope-gate`; the Workflow installer re-adds it |
 
+## Lean lite pass two (Workflow 1.24.0)
+
+Workflow 1.24.0 trims what a lite run reads and waits for. Upgrade as usual with `upgrade.py --version 1.24.0 --apply`.
+
+| Change | What you see | What to do |
+| --- | --- | --- |
+| Claims print `instructions` and `cli` | A lite claim and `status` name `references/lite.md` in `instructions` and the exact `complete` and `pause` commands in `cli` | Read only the card and run the printed commands |
+| Bounded CI check in the PR stage | The PR stage reads the remote check once with `ci_report.py --check`, a bounded poll; `queued` means no runner took the job | Record the pending state, tell the user, and do not wait on `gh pr checks --watch` |
+| PR body only through `pr_publish.py` | The body is built once, by the script | Never write, lint or send a body by hand; rerun the script after editing the explainer |
+| `RECEIPT_PLACEHOLDER: evidence` | The receipt template shows an evidence placeholder; leaving it in `evidence` is refused | Replace it with an existing file that proves the work |
+| `start --issue` accepts a bare number | `start --issue 64` binds origin's issue #64 | Nothing |
+
 ## Live-run fixes and lean lite (Workflow 1.23.0)
 
 Workflow 1.23.0 fixes what the PH-04 live runs found (F2 to F10 and the low-severity findings) and makes the
