@@ -161,7 +161,8 @@ python .specify/extensions/pr/scripts/pr_publish.py --feature <feature-dir> --ex
 
 The script detects the branch's PR, replaces the text between `<!-- speckit-pr:start -->` and
 `<!-- speckit-pr:end -->` (or appends the marked section; unpaired or repeated markers are refused),
-pins each relative image path to a verified commit URL, writes the exact UTF-8/LF body to
+pins each relative image path to a verified commit URL, adds `Closes <owner/repo>#<issue>` for the
+bound issue when the explainer does not close it already (so merging closes the issue), writes the exact UTF-8/LF body to
 `<feature-dir>/evidence/pr-body.md`, lints its closing references against the bound issue and its
 prerequisites from `scope-source.json` with the closing-reference rule Workflow's `pr-lint` also
 uses (bundled with PR, so Workflow is never required or installed merely for linting) into
@@ -169,7 +170,7 @@ uses (bundled with PR, so Workflow is never required or installed merely for lin
 `gh pr create`; it never publishes after a nonzero exit. It is the only way the body is built:
 never write, lint or send a body yourself; after editing the explainer, rerun it. It prints the PR receipt fragment (`pr_url`,
 `pr_body_file`, `pr_lint_file`, `pr_body_sha256`, `evidence`): copy it into the receipt as printed.
-Exit codes: 0 published; 1 the body closes a foreign, prerequisite or unbound issue: fix the
+Exit codes: 0 published; 1 the body closes a foreign, prerequisite or unbound issue (or never closes the bound one): fix the
 document and rerun; 2 bad input (malformed markers, an image not committed); 3 `gh` or `git` failed,
 including a PR lookup that fails (it is never read as "no PR"), a branch whose PR is merged or closed
 (that PR is never edited) and an image not on the remote: report that the PR step was skipped and why. With `--no-pr` it stops after the lint.

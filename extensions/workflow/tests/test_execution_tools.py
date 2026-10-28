@@ -227,13 +227,20 @@ class PrLintTests(unittest.TestCase):
 
     def test_bound_issue_allowed_in_all_forms(self):
         for body in ('Closes #8', 'fixes: acme/app#8', 'Resolved https://github.com/acme/app/issues/8',
-                     'No closing words, refs #3 and #9'):
+                     'Closes #8; refs #3 and #9'):
             self.assertTrue(self.lint(body)['ok'], body)
 
     def test_rejections(self):
-        self.assertEqual(self.codes('Closes #3'), ['PREREQUISITE_CLOSE'])
-        self.assertEqual(self.codes('Fixes other/repo#8'), ['FOREIGN_REPO_CLOSE'])
-        self.assertEqual(self.codes('resolves https://github.com/other/x/issues/3'), ['FOREIGN_REPO_CLOSE'])
+        self.assertEqual(self.codes('Closes #3'), ['PREREQUISITE_CLOSE', 'BOUND_ISSUE_NOT_CLOSED'])
+        self.assertEqual(self.codes('Fixes other/repo#8'), ['FOREIGN_REPO_CLOSE', 'BOUND_ISSUE_NOT_CLOSED'])
+        self.assertEqual(self.codes('resolves https://github.com/other/x/issues/3 closes #8'), ['FOREIGN_REPO_CLOSE'])
+
+    def test_a_body_that_never_closes_the_bound_issue_is_refused(self):
+        """1.24.1 N1: without a closing reference the merged PR leaves its issue open."""
+        for body in ('No closing words, refs #3 and #9', 'Mentions `Closes #8` in code only', ''):
+            result = self.lint(body)
+            self.assertFalse(result['ok'], body)
+            self.assertEqual(result['violations'][-1], {'code': 'BOUND_ISSUE_NOT_CLOSED', 'repo': 'acme/app', 'issue': 8})
         self.assertEqual(self.codes('Closes #8\nfix #9'), ['UNBOUND_ISSUE_CLOSE'])
 
     def test_code_spans_do_not_count(self):

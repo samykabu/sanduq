@@ -10,7 +10,8 @@ and `<!-- speckit-pr:end -->` or appends the marked section (a body whose marker
 repeated is refused, never appended to), rewrites each relative image path to the commit-pinned
 `https://github.com/<repo>/blob/<HEAD sha>/<path>?raw=true` after checking the file is committed at
 HEAD and readable through the contents API at that commit (pushing a new PR's branch first when it has
-no upstream or its upstream is behind), writes the exact UTF-8/LF body to
+no upstream or its upstream is behind), adds `Closes <repo>#<issue>` for the bound issue when the
+document does not close it already, writes the exact UTF-8/LF body to
 `specs/<slug>/evidence/pr-body.md`, lints closing references with the shared `sanduq_pr_lint` rule (the one Workflow's `pr-lint`
 runs) into the sibling `pr-body.lint.json`, refuses on
 findings, then `gh pr edit` or `gh pr create`. Prints the PR receipt fragment as JSON on stdout:
@@ -185,6 +186,9 @@ def publish(root, args):
         if not (args.no_pr or existing or created):
             created.append(ensure_branch(root, args))
     content = pin_images(root, content, Path(args.explained).as_posix(), push)
+    if issue is not None and not any(c['repo'] == repo.lower() and c['issue'] == int(issue)
+                                     for c in pr_lint(content, repo, issue)['closes']):
+        content += '\n\nCloses %s#%d' % (repo, int(issue))  # merging closes the bound issue (1.24.1, N1)
     section = START + '\n## ' + args.heading + '\n\n' + content + '\n' + END
     body = splice(existing['body'] if existing else '', section).replace('\r\n', '\n')
     body_path = root / feature / 'evidence' / 'pr-body.md'

@@ -244,6 +244,23 @@ class PublishTests(unittest.TestCase):
         self.explained.write_text('![x](../../../outside.png)\n', encoding='utf-8')
         self.assertEqual(self.run_script(FakeRunner(pr={'number': 12, 'url': 'u', 'body': ''}))[0], 2)
 
+    def test_the_body_closes_the_bound_issue_when_the_document_does_not(self):
+        """1.24.1 N1: the published section ends with the bound issue's closing reference, once."""
+        self.explained.write_text('# Feature X\n\nBuilds on #9.\n', encoding='utf-8')
+        code, receipt = self.run_script(FakeRunner(pr={'number': 12, 'url': 'u', 'body': 'Intro\n'}))
+        self.assertEqual(code, 0, receipt)
+        body, lint = self.body_and_lint(receipt)
+        self.assertIn('Builds on #9.\n\nCloses acme/app#10\n' + pr_publish.END, body.decode('utf-8'))
+        self.assertEqual(lint['closes'], [{'keyword': 'closes', 'repo': 'acme/app', 'issue': 10}])
+        self.assertTrue(lint['ok'])
+        code, receipt = self.run_script(FakeRunner(pr={'number': 12, 'url': 'u', 'body': ''}))  # BODY closes #10 already
+        self.assertEqual(self.body_and_lint(receipt)[0].decode('utf-8').count('#10'), 1)
+
+    def test_the_lint_refuses_a_body_without_the_bound_issue(self):
+        result = pr_publish.pr_lint('# X\n\nBuilds on #9.\n', 'acme/app', 10, [9])
+        self.assertFalse(result['ok'])
+        self.assertEqual(result['violations'], [{'code': 'BOUND_ISSUE_NOT_CLOSED', 'repo': 'acme/app', 'issue': 10}])
+
     def test_missing_document_exits_2(self):
         self.explained.unlink()
         self.assertEqual(self.run_script(FakeRunner())[0], 2)
