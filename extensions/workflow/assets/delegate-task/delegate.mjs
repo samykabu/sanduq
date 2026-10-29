@@ -1167,7 +1167,10 @@ function buildResult({
 // descendant. process_group: POSIX, the tree is signalled as a group on timeout
 // or a relay signal, but a SIGKILLed supervisor leaves it running.
 function processContainment(dir, lost) {
-  const mechanism = (readJournal(dir).filter((e) => e.state === 'contained').pop() || {}).mechanism || null;
+  // Bounded: lost-run recovery may meet a journal far larger than the heap. The
+  // bounded reader streams the whole file and keeps the latest record per state,
+  // so the one `contained` record, written before launch, survives wherever it sits.
+  const mechanism = (readJournal(dir, true).filter((e) => e.state === 'contained').pop() || {}).mechanism || null;
   const closure = mechanism !== 'windows_job' ? 'unproven' : lost ? 'closed' : 'at_supervisor_exit';
   return { mechanism, closure };
 }
