@@ -88,7 +88,7 @@ Turn budgets bound how large a worker's resident context is allowed to grow,
 because turn count, not what a worker reads at the start, explains almost all of
 its token cost. Each figure below is a policy budget on fresh input plus output
 tokens only; it excludes cache reads, which are about 96% of a worker's total
-token volume and are not part of the budget. It is not a hard stop: when
+token volume (estimated from earlier worker runs; no measurement is kept) and are not part of the budget. It is not a hard stop: when
 accepting a task, the coordinator logs any overrun, as the reporting part says,
 instead of cutting the worker off mid-task.
 
@@ -98,7 +98,7 @@ instead of cutting the worker off mid-task.
 | qa_author | ~300K | Authoring a Playwright spec, an API-sample test or a 20+-state capture; never Haiku. |
 | qa_collect | ~60K | Running an existing, stable spec or script and collecting its counts or files; Haiku-eligible only when the task line carries the `[collect]` marker or an explicit override, never by default. |
 | documentation | ~180K | QA Document, Manual Update and similar lifecycle writes. |
-| review | ~200K for a first independent pass; ~50K for the same reviewer's later pass | Reusing the reviewer by message across passes is markedly cheaper than a fresh spawn per pass. |
+| review | ~200K for a first independent pass; ~50K for the same reviewer's later pass | Reusing the reviewer by message across passes is markedly cheaper than a fresh spawn per pass (estimated from these budgets). |
 
 When a worker's own context passes roughly 150K tokens resident, plan a hand-off
 at the next safe boundary, such as a finished subtask, a passing test or a

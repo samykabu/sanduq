@@ -70,6 +70,24 @@ class CompareUnitTests(unittest.TestCase):
         self.assertEqual(benchmark_compare.delta(None, 3), 'n/a')
         self.assertEqual(benchmark_compare.delta(4, 3), '-25.0%')
 
+    def test_several_runs_print_n_median_and_spread(self):
+        def run(head, wall_ms):
+            return {'meta': {'repo': 'r', 'repo_head': head, 'tier_requested': 'lite', 'recovery_path': 'none'},
+                    'totals': {'wall_ms': wall_ms}, 'commands': [],
+                    'instructions': {'per_stage': {}, 'pointer_set_once': {}, 'linked_once': {}}}
+        before = [run('a', ms) for ms in (100, 140, 120, 90, 300)]
+        after = [run('b', ms) for ms in (60, 50, 70, 55, 65)]
+        text = benchmark_compare.render(before, after)
+        self.assertIn('n=5', text)
+        self.assertIn('| wall_ms | 120 | 90-300 | 60 | 50-70 | -50.0% |', text)
+        single = benchmark_compare.render(before[0], after[0])
+        self.assertIn('| wall_ms | 100 | - | 60 | - | -40.0% |', single)
+        self.assertIn('Comparison: like-for-like', text)
+        after[0]['totals']['stages_run'] = 9
+        for result in before:
+            result['totals']['stages_run'] = 12
+        self.assertIn('Comparison: process change (stages run 12 -> 9)', benchmark_compare.render(before, after[:1]))
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -23,7 +23,8 @@ from pathlib import Path
 
 import yaml
 
-DEFAULT = ['assure', 'user-manual', 'pr', 'project', 'illustrate', 'memory', 'progress']
+# Workflow carries Scope's commands since 2.0.0; `scope` is the retired shim (Scope 1.x before it). Every run measures both.
+DEFAULT = ['workflow', 'scope', 'assure', 'user-manual', 'pr', 'project', 'illustrate', 'memory', 'progress']
 SKILL_GLOBS = ['skills/*/SKILL.ext.md', 'skill/SKILL.md']
 INTERPRETERS = {'python', 'python3', 'node', 'bash', 'sh', 'pwsh', 'gh', 'git'}
 # Heuristic: a description whose first word is one of these opens with an imperative, not third person.

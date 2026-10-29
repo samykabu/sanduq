@@ -118,7 +118,8 @@ changes without any policy key:
   `assure_state.py status --gate`, and a reformatted config can no longer skip it. A project that kept
   its own copy with `--preserve-ci` should compare it with the shipped one.
 - **Illustrate and its consumers.** Diagram steps read the type index plus one type reference; the
-  skill's entry file is 11.7 KB instead of 34.7 KB.
+  skill's entry file is 11.7 KB instead of 34.7 KB (measured proxy: bytes of `skill/SKILL.md`, `docs/evidence/benchmarks/instructions-before.md`
+  and `instructions-after.md`).
 - **Memory.** `run.md` reads its references by step; `status` returns the next command.
 
 Opt-in keys, each off or unchanged until set:
@@ -161,7 +162,10 @@ Nothing is renamed and no policy key is added. What you notice after the upgrade
   refuses to publish when it cannot read the existing pull request.
 - **Project sync.** Repository names with dots, remotes with ports and differently cased owners now
   match; the token needs the full `project` scope.
-- **Faster runtime.** Each Workflow command reads git once, and Scope makes far fewer GitHub calls.
+- **Faster runtime.** Each Workflow command reads git once, and Scope makes far fewer GitHub calls
+  (measured proxies: fixture `git` subprocess calls per full lifecycle, 744 to 316, in
+  `docs/evidence/benchmarks/round-3-before-full.json` and `round-3-after-full.json`; fake-client GitHub API
+  calls in `extensions/workflow/tests/test_scope_github_calls.py`. Wall time against live GitHub was not measured).
   Nothing to configure.
 
 ## Upgrade to Workflow 1.16.0
