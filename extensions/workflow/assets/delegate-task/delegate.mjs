@@ -995,7 +995,7 @@ function normaliseResult(raw) {
     git_visible_after: null, dirty_paths_changed: null, files_mismatch: null,
     head_changed: null, index_changed: null, coverage_complete: false, read_only_violation: null,
     permission_requested: raw.permission || null, permission_mode_applied: null,
-    containment_evidence: null,
+    containment_evidence: null, process_containment: null,
     tokens: raw.tokens, usage_raw: null, cost_usd: raw.cost_usd ?? null,
     session_id: null, session_capture: null, envelope: null,
     exit_code: raw.exit_code, signal: null, duration_ms: raw.duration_ms, truncated_output: false,
@@ -1083,7 +1083,7 @@ function executionProgress(meta, dir, now = Date.now()) {
 
 function buildResult({
   meta, dir, parse, statusRes, self, gitCmp, roVerdict, sessionId,
-  exitCode, signal, t0, truncated, launched, repoRoot, repoId, recordsDropped,
+  exitCode, signal, t0, truncated, launched, repoRoot, repoId, recordsDropped, lost = false,
 }) {
   const h = HARNESSES[meta.harness];
   const delta = gitCmp.dirty_paths_changed;
@@ -1117,6 +1117,9 @@ function buildResult({
     containment_evidence: launched
       ? containmentEvidence(meta.permission, roVerdict, gitCmp)
       : 'the harness never launched',
+    // Whether the harness's descendants can outlive the supervisor; separate from
+    // containment_evidence, which is the filesystem posture consumers already read.
+    process_containment: launched ? processContainment(dir, lost) : null,
 
     tokens: (parse && parse.tokens) || tokens({ fidelity: 'unavailable' }),
     usage_raw: (parse && parse.usage_raw) || null,
@@ -1157,6 +1160,26 @@ function buildResult({
       journal: path.join(dir, 'journal.jsonl'),
     },
   };
+}
+
+// windows_job: the supervisor holds the only handle to a kill-on-close job the
+// harness tree runs in, so its exit (a hard kill included) ends every
+// descendant. process_group: POSIX, the tree is signalled as a group on timeout
+// or a relay signal, but a SIGKILLed supervisor leaves it running.
+function processContainment(dir, lost) {
+  const mechanism = (readJournal(dir).filter((e) => e.state === 'contained').pop() || {}).mechanism || null;
+  const closure = mechanism !== 'windows_job' ? 'unproven' : lost ? 'closed' : 'at_supervisor_exit';
+  return { mechanism, closure };
+}
+
+// Windows only: move this supervisor into a kill-on-close job before the harness
+// starts, so every process the harness creates is inside it.
+function containSupervisor() {
+  if (!WIN) return 'process_group';
+  const ps = path.join(process.env.SystemRoot || 'C:\\Windows','System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
+  const r = boundedExec(ps, ['-NoLogo', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass',
+    '-File', path.join(HERE, 'job-windows.ps1'), String(process.pid)], { timeout: 30_000 });
+  return r.ok && r.out.trim() === 'windows_job' ? 'windows_job' : 'none';
 }
 
 function containmentEvidence(perm, verdict, g) {
@@ -1378,6 +1401,8 @@ async function cmdSupervise(id) {
   const errPath = path.join(dir, 'stderr.log');
   const outFd = fs.openSync(outPath, 'a');
   const errFd = fs.openSync(errPath, 'a');
+
+  journal(dir, { state: 'contained', mechanism: containSupervisor() });
 
   // stdin 'ignore' matters: codex blocks reading stdin when it is not a TTY.
   // stdout/stderr are piped rather than redirected so session ids can be captured
@@ -1679,7 +1704,7 @@ function synthesizeLost(s, bounded = false) {
   return finalizeOnce(dir, () => buildResult({
     meta, dir, parse: parsed, self: parseEnvelope(parsed.text), gitCmp: blind,
     roVerdict: null, sessionId: sid, exitCode: null, signal: null, launched: j.some((e) => e.state === 'child_started'),
-    t0: Date.parse(meta.started_at) || Date.now(), truncated: false,
+    t0: Date.parse(meta.started_at) || Date.now(), truncated: false, lost: true,
     statusRes: {
       status: 'abandoned',
       reason: s.why || 'supervisor disappeared without writing a result',
