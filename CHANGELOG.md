@@ -4,7 +4,7 @@ All notable changes to sanduq extensions/plugins are recorded here.
 Format: [Keep a Changelog](https://keepachangelog.com/). Extensions are versioned
 independently via `<extension>-vX.Y.Z` tags.
 
-## 2026-10-29 — Workflow 2.0.4, Assure 2.7.2, Memory 2.6.3, PR 4.7.5, Project 2.7.2, User Manual 1.8.5 (pending release)
+## 2026-10-29 — Workflow 2.0.4, Assure 2.7.2, Memory 2.6.3, PR 4.7.5, Project 2.7.2, User Manual 1.8.5
 
 - Hotfix from the PH-05-T07 live runs, where most refused completions came from running `complete` on a natively done stage before recording it. A native-first claim now prints the exact `attest-native` command ahead of `complete`, and `DELEGATION_STAGE_NOT_VERIFIED` opens with it. `ACTIVE_STAGE_MUST_BE_RESOLVED` no longer suggests `pause`, which keeps the claim: complete the stage or release it with `workflow.py recover`.
 - PH-02-T13 of the October 2026 review: every shared helper a package ships from outside its own folder (`extensions/scripts/shared/*.py`, plus Workflow's `sanduq_hash.py` and `sanduq_ci.py` in Assure and User Manual) starts with an `SPDX-License-Identifier: MIT` line, and a packaging test checks it alongside each package's LICENSE and notices. No behaviour change.
