@@ -2,16 +2,16 @@
   "schema_version": 1,
   "repository": "https://github.com/samykabu/sanduq",
   "required": {
-    "project": "2.7.1",
-    "pr": "4.7.4",
+    "project": "2.7.2",
+    "pr": "4.7.5",
     "illustrate": "2.7.3"
   },
   "selected": {
     "qa": {
-      "assure": "2.7.1"
+      "assure": "2.7.2"
     },
     "user_manual": {
-      "user-manual": "1.8.4"
+      "user-manual": "1.8.5"
     }
   },
   "optional": {

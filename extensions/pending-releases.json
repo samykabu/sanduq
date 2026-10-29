@@ -1,8 +1,13 @@
 {
   "schema_version": 1,
   "versions": {
-    "workflow": "2.0.3"
+    "assure": "2.7.2",
+    "memory": "2.6.3",
+    "pr": "4.7.5",
+    "project": "2.7.2",
+    "user-manual": "1.8.5",
+    "workflow": "2.0.4"
   },
-  "status": "ready",
-  "note": "Workflow 2.0.3 hotfix: a native-first claim prints the attest-native command before complete (cli.record_native) and DELEGATION_STAGE_NOT_VERIFIED leads with it; ACTIVE_STAGE_MUST_BE_RESOLVED offers complete or recover, never pause."
+  "status": "implementation-in-progress",
+  "note": "PH-02-T13: SPDX headers on injected shared helpers (Workflow 2.0.4, Assure 2.7.2, Memory 2.6.3, PR 4.7.5, Project 2.7.2, User Manual 1.8.5). No behaviour change."
 }

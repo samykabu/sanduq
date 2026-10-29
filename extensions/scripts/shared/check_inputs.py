@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Versioned, project-declared exact check inputs. No process execution or Node dependency."""
 from __future__ import annotations
 

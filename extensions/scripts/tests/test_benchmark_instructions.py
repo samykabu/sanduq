@@ -63,5 +63,12 @@ class BenchmarkInstructionsTests(unittest.TestCase):
         self.assertEqual((plain, cond, groups), ({'references/a.md'}, set(), []))
 
 
+    def test_every_default_run_measures_workflow_and_scope(self):
+        self.assertTrue({'workflow', 'scope'} <= set(bench.DEFAULT))
+        result = bench.measure(Path(__file__).resolve().parents[3], ['workflow', 'scope'])['extensions']
+        self.assertTrue(any('scope' in name for name in result['workflow']['commands']))  # Scope's commands since 2.0.0
+        self.assertIn('scope', result)
+
+
 if __name__ == '__main__':
     unittest.main()

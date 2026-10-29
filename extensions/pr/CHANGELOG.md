@@ -1,5 +1,9 @@
 # Changelog
 
+## [4.7.5] - 2026-10-29
+
+- The packaged shared helpers (`deps.py`, `sanduq_pr_lint.py`, `sanduq_gh.py`) start with an `SPDX-License-Identifier: MIT` line. No behaviour change.
+
 ## [4.7.4] - 2026-10-28
 
 - Script comments state the rule they protect instead of citing review findings. No behaviour change.
@@ -50,7 +54,7 @@ Round 4.
 - `pr_changelog.py` finds the base through the same default-branch rule as `pr_publish.py` (origin/HEAD, else GitHub). It no longer writes "(no commits on `main..HEAD`)" on a `master` repository; when no base resolves, the commit line is left out.
 - The closing-reference lint is the shared `sanduq_pr_lint` module bundled in the archive (the rule Workflow's `pr-lint` runs). An installed Workflow's `execution_tools.py` is no longer loaded.
 - `speckit.pr.generate` reads the Assure gate through `assure_state.py status --kind document --gate --summary` instead of searching the config text, so a commented-out key no longer turns the gate on.
-- New read-only `scripts/pr_feedback.py gather`: one paged GraphQL query plus the general comments, filtered as step 1 asked. `speckit.pr.review-feedback` step 1 uses it: 3 to 4 `gh` calls instead of 7, every thread read (the old query stopped at 100), 5,201 bytes instead of 5,518.
+- New read-only `scripts/pr_feedback.py gather`: one paged GraphQL query plus the general comments, filtered as step 1 asked. `speckit.pr.review-feedback` step 1 uses it: 3 to 4 `gh` calls instead of 7 (fake-client calls, `extensions/pr/tests/test_pr_feedback.py`), every thread read (the old query stopped at 100), 5,201 bytes instead of 5,518 (command `instruction_bytes`, `docs/evidence/benchmarks/round-4-compare-instructions.md`).
 - `speckit.pr.generate` step 0 is one sentence: run `deps.py ensure illustrate` and follow its output (it prints the approval step itself).
 - `speckit.pr.generate` description: "Use when asked to 'write the PR description'". Under Workflow, `speckit.workflow.finalize` keeps "open the PR".
 

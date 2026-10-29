@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Portable UTF-8 text hashing; SQL and explicitly binary files remain byte exact.
 
 Byte-sensitive content is never rewritten. A tracked byte-sensitive file whose

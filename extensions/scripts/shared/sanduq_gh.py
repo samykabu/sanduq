@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """One `gh` transport for Scope, Workflow, Project and PR (round 5, SC8 / X22).
 
 Stdlib only: each consumer loads it without Workflow or PyYAML. Transport only: one runner, one timeout

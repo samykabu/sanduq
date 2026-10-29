@@ -1,5 +1,9 @@
 # Changelog
 
+## [1.8.5] - 2026-10-29
+
+- The packaged shared helpers (`sanduq_freshness.py`, `sanduq_hash.py`, `sanduq_ci.py`, `deps.py`) start with an `SPDX-License-Identifier: MIT` line. No behaviour change.
+
 ## [1.8.4] - 2026-10-28
 
 - The packaged `sanduq_ci.py` helper's docstrings state the rule they protect instead of citing review findings. No behaviour change.

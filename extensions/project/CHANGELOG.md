@@ -1,5 +1,9 @@
 # Changelog
 
+## [2.7.2] - 2026-10-29
+
+- The packaged shared helpers (`sanduq_remote.py`, `sanduq_gh.py`) start with an `SPDX-License-Identifier: MIT` line. No behaviour change.
+
 ## [2.7.1] - 2026-10-28
 
 - `requires.tools` declares Python `>=3.11`, the floor every Sanduq extension now states (SAMY-11).
@@ -37,7 +41,7 @@ Round 4.
 
 - A malformed `.specify/project-sync-state.json` stops the sync with a message that names the fix; it is no longer reset to empty (which made the next run create duplicate issues).
 - Before creating task sub-issues, the sync looks for existing ones with the sub-issue labels and adopts them, and it saves the state after each new sub-issue, so a rerun after an interrupted run never duplicates. A failed lookup creates nothing.
-- Remotes are read and parsed through the shared `sanduq_remote` helper bundled in the archive. The sync no longer loads an installed Workflow's `workflow.py` (about 0.14 s faster per sync, measured in process).
+- Remotes are read and parsed through the shared `sanduq_remote` helper bundled in the archive. The sync no longer loads an installed Workflow's `workflow.py` (about 0.14 s faster per sync, measured in process; one timing with no file kept, so estimated).
 - Managed syncs skip the `gh issue view` node lookup (only standalone sub-issues use it), and each label is created once per run instead of once per sub-issue.
 - Init asks GitHub for the owner's account type, so an organization board is recorded as `org` (`gh project list` accepts both). A rerun keeps the existing `parentIssue`, `subIssues` and `stateFile` settings. One `gh project view` call fewer (bash).
 - Docs: sub-issues are standalone only; `done` runs only when passed explicitly (the README promised an automatic move no code made). `config.default.json` drops the unread `subIssues.granularity`.

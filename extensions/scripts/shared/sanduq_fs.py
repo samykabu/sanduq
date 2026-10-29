@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """One file lock, one atomic JSON write and one bounded subprocess runner for Sanduq's runtimes (SAMY-01/02/09).
 
 Stdlib only: each consumer loads it without Workflow or PyYAML. Callers pass their own error type (`error=`)

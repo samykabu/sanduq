@@ -1,5 +1,9 @@
 # Changelog
 
+## [2.6.3] - 2026-10-29
+
+- The packaged shared helpers (`check_inputs.py`, `bounded_json.py`, `sanduq_fs.py`) start with an `SPDX-License-Identifier: MIT` line. No behaviour change.
+
 ## [2.6.2] - 2026-10-28
 
 - Script comments state the rule they protect instead of citing review findings. No behaviour change.
