@@ -111,11 +111,27 @@ CLARIFY_CATEGORIES = ('functional', 'data', 'interaction', 'non_functional', 'in
                       'constraints', 'terminology', 'completion', 'placeholders')
 
 
-def claim_cli(relative, token):
-    """The exact complete and pause commands for a held claim, so no `--help` look-up is needed."""
-    return {'complete': WORKFLOW_SCRIPT + ' complete --feature ' + relative + ' --token ' + token +
-                        ' --receipt <receipt.json>',
-            'pause': WORKFLOW_SCRIPT + ' pause --feature ' + relative + ' --reason "<the question or failure>"'}
+def attest_native_command(relative, active):
+    """The exact attest-native command that records a held stage claim's native attempt; the requested model is the
+    native candidate's when the route is native-first."""
+    route = active.get('delegation') or {}
+    first = (route.get('candidates') or [{}])[0]
+    model = first.get('requested_model') if first.get('route_kind') == 'native' else None
+    return ('python ' + WORKFLOW_PACKAGE_PREFIX + 'scripts/delegate_dispatch.py attest-native --feature ' + relative +
+            ' --id stage:' + str(active.get('stage')) + ' --claim-token ' + str(active.get('token')) +
+            ' --requested-model ' + (model or '<model the subagent ran>'))
+
+
+def claim_cli(relative, token, active=None):
+    """The exact commands for a held claim in the order they run, so no `--help` look-up is needed. A native-first
+    stage records its native attempt (`record_native`) before `complete`, which refuses without it."""
+    cli = {}
+    if ((active or {}).get('delegation') or {}).get('route_kind') == 'native':
+        cli['record_native'] = attest_native_command(relative, active)
+    cli['complete'] = (WORKFLOW_SCRIPT + ' complete --feature ' + relative + ' --token ' + token +
+                       ' --receipt <receipt.json>')
+    cli['pause'] = WORKFLOW_SCRIPT + ' pause --feature ' + relative + ' --reason "<the question or failure>"'
+    return cli
 
 
 def reference_text(root, stage, parts=()):
@@ -187,6 +203,14 @@ def other_feature_command(relative, active):
     """The exact recover command for another feature's active claim."""
     return (WORKFLOW_SCRIPT + ' recover --feature ' + relative + ' --token ' + str(active.get('token')) +
             ' --reason "<why that claim is abandoned>"')
+
+
+def active_stage_blocker(relative, active):
+    """ACTIVE_STAGE_MUST_BE_RESOLVED with its exact remedy. Pause keeps the claim active, so only complete or recover
+    resolves it."""
+    return ('ACTIVE_STAGE_MUST_BE_RESOLVED: ' + relative + '; complete that stage, or release the claim with ' +
+            other_feature_command(relative, active) + ' (adding --force-live-owner "<this session releases its own '
+            'claim>" when this session owns it)')
 
 
 MANUAL_INIT_NEXT = ('User Manual is selected but User-Manual/manual.yml does not exist. Run $speckit-user-manual-init '
@@ -1369,7 +1393,7 @@ class Run:
             card = self.lite_card(state)
             if card:
                 claimed['instructions'] = card
-                claimed['cli'] = claim_cli(self.relative, state['active']['token'])
+                claimed['cli'] = claim_cli(self.relative, state['active']['token'], state['active'])
                 if stage == 'clarify':
                     round_ = self.clarification_round(state, state['active']['token'], usage['session_id'])
                     if round_:
@@ -1825,16 +1849,21 @@ class Run:
                     '"delegate_dispatch.py trust-reset --feature ' + self.relative +
                     ' --reason <text> --nonce <dispatcher_nonce>" only after reviewing exactly what changed')
             stage_attempt = latest_attempt(self.root, self.relative, 'stage:' + stage)
-            require(stage_attempt is not None and stage_attempt.get('status') == 'successful' and
-                    stage_attempt.get('claim_token') == token,
-                    'DELEGATION_STAGE_NOT_VERIFIED: the latest delegate_dispatch attempt for stage:' +
-                    stage + ' is ' + (str(stage_attempt.get('status')) if stage_attempt else 'missing') +
-                    ' or was not started under this claim; collect, accept or reassign it before '
-                    'completing this stage, or, when a native subagent of the host did the stage, record '
-                    '"delegate_dispatch.py attest-native --feature ' + self.relative + ' --id stage:' + stage +
-                    ' --claim-token <token> --requested-model <m>" from the top-level session. A legacy attempt '
-                    'recorded before claim_token existed has none and will never match; re-delegate the stage '
-                    'once under this workflow release')
+            if not (stage_attempt is not None and stage_attempt.get('status') == 'successful' and
+                    stage_attempt.get('claim_token') == token):
+                attest = attest_native_command(self.relative, {**active, 'token': token})
+                found = ('the latest delegate_dispatch attempt for stage:' + stage + ' is ' +
+                         (str(stage_attempt.get('status')) if stage_attempt else 'missing') +
+                         ' or was not started under this claim')
+                legacy = ('. A legacy attempt recorded before claim_token existed has none and will never match; '
+                          're-delegate the stage once under this workflow release')
+                # Native-first: the usual cause is completing before recording the native attempt, so lead with it.
+                raise WorkflowError('DELEGATION_STAGE_NOT_VERIFIED: ' + (
+                    'record the native attempt from the top-level session first: ' + attest + ' (or record-native '
+                    'with its acceptance check), then run complete again; ' + found + legacy
+                    if active['delegation'].get('route_kind') == 'native' else
+                    found + '; collect, accept or reassign it before completing this stage, or, when a native '
+                    'subagent of the host did the stage, record it from the top-level session with ' + attest + legacy))
             self._validated_candidate = stage_attempt.get('run_id')
         if self.policy['delegation']['enabled'] and (active.get('delegation') or active.get('delegation_refused')):
             # A native review or QA attempt of this claim (a review-kind stage records one with no route) must
@@ -2335,7 +2364,7 @@ def run_command(args):
                 if card:
                     result['instructions'] = card
                     if state.get('active'):
-                        result['cli'] = claim_cli(run.relative, state['active']['token'])
+                        result['cli'] = claim_cli(run.relative, state['active']['token'], state['active'])
             elif args.action == 'claim':
                 result = run.claim(read(args.usage), args.finalize, args.verbose,
                                    confirm_invalidation=args.confirm_invalidation)

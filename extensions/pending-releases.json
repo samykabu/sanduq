@@ -1,6 +1,8 @@
 {
   "schema_version": 1,
-  "versions": {},
-  "status": "released",
-  "note": "Workflow 2.0.2 hotfix: a claim pins its delegation routes (DELEGATION_POLICY_CHANGED_IN_CLAIM on a mid-claim policy edit); route remedies never suggest editing the policy; task annotations show route_kind and route_reason."
+  "versions": {
+    "workflow": "2.0.3"
+  },
+  "status": "ready",
+  "note": "Workflow 2.0.3 hotfix: a native-first claim prints the attest-native command before complete (cli.record_native) and DELEGATION_STAGE_NOT_VERIFIED leads with it; ACTIVE_STAGE_MUST_BE_RESOLVED offers complete or recover, never pause."
 }

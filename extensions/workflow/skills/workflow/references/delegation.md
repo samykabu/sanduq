@@ -7,8 +7,9 @@ command and decisions stay in [delegation-and-decisions.md](delegation-and-decis
 
 The claim's route decides: each candidate's `route_kind` says who runs the work. Run it natively
 when the claim lists the native candidate (`route_kind: native`, `route_reason: native-first`);
-the host pins the exact model through the tier's role file. Use an external candidate only for
-the reason it records: `native-unsupported:<capability>`, `native-failed:<category>`, or
+the host pins the exact model through the tier's role file. Record the native attempt from the
+top-level session with `attest-native` or `record-native` before `complete`. Use an external
+candidate only for the reason it records: `native-unsupported:<capability>`, `native-failed:<category>`, or
 `external:cross-vendor`, the named exception for debate and consultation routes that need the
 other vendor's model. A native attempt the host cannot support selects the external candidate
 once; a temporary native failure retries natively within `lean_execution.max_attempts` before
