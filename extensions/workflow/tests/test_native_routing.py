@@ -125,6 +125,31 @@ class NativeRoutingTests(unittest.TestCase):
                           route['candidates'][0]['route_reason']), ('native', 'native', 'native-first'))
         self.assertIsInstance(route['git_status_at_claim'], list)
 
+    def test_native_first_claim_prints_the_record_command_before_complete(self):
+        """PH-05-T07: a native-first stage's claim (lite `cli`) lists the exact attest-native command ahead of
+        `complete`; a completion that skips it is refused with that same command first, and running it lets
+        complete pass."""
+        self.enable()
+        with patch.object(w.Run, 'lite_card', return_value=w.LITE_CARD):
+            run, claim = self.claim()
+        model = claim['delegation']['candidates'][0]['requested_model']
+        record = ('python .specify/extensions/workflow/scripts/delegate_dispatch.py attest-native --feature ' +
+                  self.feature + ' --id stage:scope --claim-token ' + claim['token'] + ' --requested-model ' + model)
+        self.assertEqual(list(claim['cli']), ['record_native', 'complete', 'pause'])
+        self.assertEqual(claim['cli']['record_native'], record)
+        self.assertEqual(list(w.claim_cli(self.feature, claim['token'], {'stage': 'scope'})), ['complete', 'pause'])
+        receipt = fixture.WorkflowTests.receipt(self, 'scope')
+        with self.assertRaises(w.WorkflowError) as refused:
+            run.complete(claim['token'], receipt)
+        self.assertTrue(str(refused.exception).startswith(
+            'DELEGATION_STAGE_NOT_VERIFIED: record the native attempt from the top-level session first: ' + record +
+            ' '), str(refused.exception))
+        argv = record.split()[2:]
+        with patch('sys.stdout'):
+            self.assertEqual(dispatch.main(['--root', str(self.root)] + argv), 0)
+        run.complete(claim['token'], receipt)
+        self.assertEqual(run.load()['receipts']['scope']['native_attestation']['kind'], 'native')
+
     def test_record_native_stage_is_decided_by_the_acceptance_check(self):
         self.enable()
         run, claim = self.claim()

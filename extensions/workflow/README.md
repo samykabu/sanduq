@@ -203,6 +203,14 @@ leaf at its receipt's score, and its receipt still carries the parent's approval
 receipt lists it under, the parent's approval is carried forward instead (the owner's statement
 comes from the parent's local approval record) and becomes the child's baseline. A different score,
 a split, a missing retained approval or no local record still stops with `APPROVAL_REQUIRED`.
+The fresh read gate accepts such a child when its receipt's `revision_of` chain, followed through
+this issue's local approval records, leads to the live parent's current approval; otherwise it
+stops with `SCOPE_RETAINED_PARENT_APPROVAL_MISMATCH`.
+An issue with no native parent whose receipt carries another issue's approval forward (a child
+unlinked from its parent) stops with `SCOPE_CARRIED_APPROVAL_WITHOUT_PARENT`; approve it as its own root.
+The receipt's `approval_origin` names the issue whose explicit approval it carries (each carried
+revision copies it unchanged), so the gate decides this in any checkout; where this checkout holds
+the approval records, the `revision_of` chain must agree with it.
 
 ### Readiness
 

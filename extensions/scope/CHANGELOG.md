@@ -43,9 +43,9 @@ Breaking: Scope is retired as a package. Its code, commands, skills, references 
 
 ## [1.11.0] - 2026-10-21
 
-- The prerequisite check stops at a Done prerequisite (status aliases applied) and still walks through In review ones. A full inspect reads pull-request timelines for the direct prerequisites only. A chain of N Done prerequisites now costs 3 API calls instead of 2 + 2N.
+- The prerequisite check stops at a Done prerequisite (status aliases applied) and still walks through In review ones. A full inspect reads pull-request timelines for the direct prerequisites only. A chain of N Done prerequisites now costs 3 API calls instead of 2 + 2N (measured proxy: fake-client GitHub API calls in `extensions/workflow/tests/test_scope_github_calls.py`, which counts 4 with the board read).
 - `scope.py cancel <issue>-<hash>` cancels an interrupted publish: with `--apply` it marks the journal `rolled_back` under the mutation lock, so `publish` refuses to resume it. It makes no GitHub write and prints the created issues, issue before-images, dependency before-images and catalog and issue-map backups for manual repair. A bare issue number lists that issue's operations instead. A publish journals each new issue before linking it, so an interrupted link still lists the issue.
-- The github-clarification skill holds the Clarify and Brainstorm coverage categories and the rules for placing answers in the spec (`references/analysis-json.md`), once. The Clarify and Brainstorm overlays in the scope-gate, scope-brainstorm and workflow presets are short pointers to it; both scope presets now `replace` instead of `prepend`, so an unmanaged Clarify round no longer loads the 19.5 KB upstream command.
+- The github-clarification skill holds the Clarify and Brainstorm coverage categories and the rules for placing answers in the spec (`references/analysis-json.md`), once. The Clarify and Brainstorm overlays in the scope-gate, scope-brainstorm and workflow presets are short pointers to it; both scope presets now `replace` instead of `prepend`, so an unmanaged Clarify round no longer loads the 19.5 KB upstream command (its file bytes at the time; estimated).
 - Scope's GitHub client (`GitHub`, `ProjectRest`, the GraphQL-to-REST switch) moved to `scripts/sanduq_scope_github.py` on the shared `sanduq_gh` runner. `from scope import GitHub` still works, and messages are unchanged. A failed REST GET is retried once after a 5xx or a timeout; writes and `gh project` commands never are. A `gh` timeout or a missing `gh` is a Scope error with a message.
 - The workflow policy is parsed once per file text in a process (with the C YAML loader when present), and Workflow's `workflow.py` and `decisions.py` are loaded once per process.
 
@@ -70,7 +70,7 @@ Round 4.
 - Scope reads the repository from `remote.origin.url` through the shared `sanduq_remote` helper, the same rule as Workflow and Project. It accepts every GitHub remote form Workflow accepts, compares `owner/repo` without case on the board, the board cache and native dependencies, refuses a look-alike such as `https://evil.example/github.com/acme/app`, and a missing origin is a message, not a traceback.
 - A split publish finds the issues to rewire before its first GitHub write. An unrelated issue whose "Depends on" text names no issue is skipped with one stderr line instead of failing the publish after the children exist. An issue tied to the parent with unparseable text still refuses, before any write.
 - A `gh` timeout in `clarification.py` (the `dispatch` and `plan-gate` hooks) exits 2 with a message. `accept_plan.py` stops an Illustrate step after 300 s and records it as failed.
-- `inspect --output` prints a summary under 1 KB; the snapshot keeps only the fields Scope reads (58 KB to 26 KB for one issue, three prerequisites and eight comments). Journal before-images use the same fields. Snapshots written by 1.9.0 still load.
+- `inspect --output` prints a summary under 1 KB; the snapshot keeps only the fields Scope reads (58 KB to 26 KB for one issue, three prerequisites and eight comments; estimated, a one-off measurement with no file under `docs/evidence/`). Journal before-images use the same fields. Snapshots written by 1.9.0 still load.
 - A split publish lists the repository's issues once instead of three times; paginated reads time out after 120 s instead of 30 s.
 - `scope.py reconcile <issue> --apply` updates only that issue's Scope ancestors; the after_implement hook uses it. Plain `reconcile --apply` still sweeps every parent and no longer rereads a parent it did not change.
 - The scope-gate Specify overlay keeps only the rules for both modes. The Backlog rule and the after_specify chain moved to `references/specify-standalone.md`, read only without `.specify/workflow.yml`, so a managed Specify claim is no longer told to chain Clarify.
@@ -90,10 +90,10 @@ Round 4.
 
 Optimization round 3.
 
-- Far fewer GitHub calls: publishing a three-child split with 200 unrelated issues makes 62 calls instead of 290 (dependents come from the parent's blocking list, with a full-scan fallback when that read is incomplete); `bind --apply` 4 instead of 10; a six-question clarification publish 23 instead of 27.
+- Far fewer GitHub calls: publishing a three-child split with 200 unrelated issues makes 62 calls instead of 290 (dependents come from the parent's blocking list, with a full-scan fallback when that read is incomplete); `bind --apply` 4 instead of 10; a six-question clarification publish 23 instead of 27 (measured proxy: fake-client GitHub API calls, `extensions/workflow/tests/test_scope_github_calls.py`; not live GitHub).
 - `gate` and `bind` reuse a current inspect snapshot within the board cache window.
 - `export-plan` writes waves, the critical path and a draft mapping; clarification suggests clean answers for single checked options and logs each Q/A; `inspect --skeleton` writes the analysis skeleton.
-- Shorter instruction path (the plan step no longer reads the Illustrate skill); error messages name `/speckit-scope-run`; the seven descriptions total 969 characters.
+- Shorter instruction path (the plan step no longer reads the Illustrate skill); error messages name `/speckit-scope-run`; the seven descriptions total 969 characters (`catalog_chars`, `docs/evidence/benchmarks/round-3-after-instructions.md`).
 
 ## [1.8.1] - 2026-10-19
 

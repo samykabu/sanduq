@@ -26,7 +26,8 @@ Optimization round 4. No renames.
 - Fixed: `speckit.illustrate.import` runs the SKILL.md step 7 checks on the redrawn diagram: `verify-geometry.py`,
   `self_check.py --strict` (technical-color: `--profile technical-color`) and the type's verifier.
 - `speckit.illustrate.theme` reads `theme-initialization.md` only for `create` or a theme from a design source (about
-  1.2 KB read instead of 9 KB for `init`, `set`, `list`, `resolve` and `validate`). `speckit.illustrate.generate`
+  1.2 KB read instead of 9 KB for `init`, `set`, `list`, `resolve` and `validate`; measured proxy: command
+  `instruction_bytes`, 9,017 to 1,200, `docs/evidence/benchmarks/round-4-compare-instructions.md`). `speckit.illustrate.generate`
   points to SKILL.md §12 for export, which reads `export.md` only on failure.
 
 ### Migration

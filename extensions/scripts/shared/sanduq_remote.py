@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """One reading of a repository's GitHub identity for Workflow, Project and Scope.
 
 Stdlib only: Project and Scope load it without Workflow or PyYAML. Moved from

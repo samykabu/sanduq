@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: MIT
 """Project-selected continuous integration policy and workflow asset rendering.
 
 Sanduq ships CI workflow assets, but it does not decide where a consumer project

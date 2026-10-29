@@ -68,13 +68,21 @@ python extensions/scripts/benchmark_compare.py --before docs/evidence/benchmarks
 python extensions/scripts/benchmark_compare.py --before docs/evidence/benchmarks/before-lite.json --after docs/evidence/benchmarks/after-lite.json --md docs/evidence/benchmarks/compare-lite.md
 ```
 
+`benchmark_compare.py` takes several runs per arm (`--before a1.json a2.json ... --after b1.json b2.json ...`)
+and prints, per metric, n, the median and the spread (min-max) of each arm and the delta of the medians.
+Wall time (`wall_ms`, `<action>.ms`) is quoted only as the median of at least five runs per arm, run
+alternately (before, after, before, ...) on one machine, with its spread; counts and bytes are the same in
+every run.
+
 `../sanduq-baseline` is the read-only worktree of `main` at 105508f. Each run takes a few minutes with
 750 source files; `--source-files 50` is enough for a smoke check.
 
 ## Instruction benchmark (round 2)
 
-`extensions/scripts/benchmark_instructions.py` measures the static instruction load of `assure`,
-`user-manual`, `pr`, `project`, `illustrate`, `memory` and `progress` (optimization round 2). No model is called; it reads each `extensions/<id>/extension.yml`
+`extensions/scripts/benchmark_instructions.py` measures the static instruction load of `workflow`, `scope`,
+`assure`, `user-manual`, `pr`, `project`, `illustrate`, `memory` and `progress` by default (round 2 measured
+the last seven; Workflow and Scope have been in every run's default set since PH-04-T07, and Workflow carries
+Scope's commands since 2.0.0, so `scope` is the retired shim on newer checkouts). No model is called; it reads each `extensions/<id>/extension.yml`
 and the files it points at. `instructions-before.json` and `instructions-before.md` are the BEFORE
 numbers on `feat/round-2` at its base commit 6bff750.
 
@@ -169,6 +177,24 @@ against `round-3-before-instructions.*`, which used the old count.
 ```text
 python extensions/scripts/benchmark_instructions.py --repo D:\Projects\Personal\sanduq-round3-base --extensions workflow,scope,assure,user-manual,pr,project,illustrate,memory,progress --out docs/evidence/benchmarks/round-3-before-v2-instructions.json --md docs/evidence/benchmarks/round-3-before-v2-instructions.md
 ```
+
+## Like-for-like and process-change deltas
+
+A delta is like-for-like when both sides run the same stages for the same fixture feature: it then measures
+cheaper runtime or instruction text for the same work. When the stage list changes, the delta mixes fewer
+stages with cheaper ones and is a process change. `benchmark_compare.py` prints which one it is from
+`stages_run`.
+
+| Comparison | Files | Kind |
+| --- | --- | --- |
+| Workflow 1.13.0 front-half rebuild | `compare-full.md` (25 to 17 stages), `compare-lite.md` (25 to 12) | Process change |
+| Optimization rounds 3 to 5 | `round-3-*-full.json`/`-lite.json`, `round-4-compare-*.md`, `round-5-compare-*.md` (17 and 12 stages on both sides) | Like-for-like |
+| Instruction benchmark rounds | `instructions-compare.md`, `round-3-compare-instructions.md` (against `round-3-before-v2-*`), `round-4-compare-instructions.md`, `round-5-compare-instructions.md` | Like-for-like per command; a command added or removed shows as `new` or `-` |
+| Lean lite tier (Workflow 1.23.0, 12 to 9 claims) | No result file kept; the CHANGELOG figure is estimated | Process change |
+| Paired baseline | `paired-baseline-2026-10.md`, plain host against Sanduq managed | Process change by design |
+
+Wall-time figures in the round compare files are single runs per arm; read them with the spread a
+multi-run compare would print, not as a measured speed-up.
 
 ## Paired baseline (PH-04, 2026-10-28)
 

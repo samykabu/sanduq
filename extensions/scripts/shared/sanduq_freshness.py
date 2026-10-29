@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Shared package-time source for QA/manual freshness (never hashes its own state)."""
 from __future__ import annotations
 import hashlib

@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: MIT
 """Ensure a declared Spec Kit extension dependency (e.g. `illustrate`) is installed, enabled, and
 within its declared SemVer range.
 

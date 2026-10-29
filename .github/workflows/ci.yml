@@ -217,8 +217,14 @@ jobs:
       - name: PSScriptAnalyzer PowerShell scripts
         shell: pwsh
         run: |
-          Set-PSRepository PSGallery -InstallationPolicy Trusted
-          Install-Module PSScriptAnalyzer -RequiredVersion 1.25.0 -Force -Scope CurrentUser
+          $version = '1.25.0'
+          # The home runner image ships this version; a runner without it installs it from the gallery.
+          if (-not (Get-Module -ListAvailable PSScriptAnalyzer | Where-Object Version -eq $version)) {
+            if (-not (Get-PSRepository PSGallery -ErrorAction SilentlyContinue)) { Register-PSRepository -Default }
+            Set-PSRepository PSGallery -InstallationPolicy Trusted
+            Install-Module PSScriptAnalyzer -RequiredVersion $version -Force -Scope CurrentUser
+          }
+          Import-Module PSScriptAnalyzer -RequiredVersion $version -ErrorAction Stop
           $issues = Get-ChildItem -Recurse -Filter *.ps1 | ForEach-Object {
             Invoke-ScriptAnalyzer -Path $_.FullName -Severity Error,Warning
           }

@@ -29,7 +29,7 @@ is a v1 run, written before this contract existed. It is read, not rewritten.
 | `coverage_complete` | — | `false` |
 | `harness_version`, `session_id`, `parent_run_id`, `usage_raw` | — | `null` |
 | `permission_requested` | `permission` | carried across |
-| `permission_mode_applied`, `containment_evidence` | — | `null` |
+| `permission_mode_applied`, `containment_evidence`, `process_containment` | — | `null` |
 
 A v1 run is labelled **`(v1)`** in `list` and carries a line in the printed result saying which
 fields were never measured. It is never silently presented as though it had been.
@@ -63,6 +63,7 @@ fields were never measured. It is never silently presented as though it had been
   "permission_requested": "bypass",
   "permission_mode_applied": "codex: --dangerously-bypass-approvals-and-sandbox",
   "containment_evidence": "not requested — run was write-capable",
+  "process_containment": { "mechanism": "windows_job", "closure": "at_supervisor_exit" },
 
   "tokens": { "input_total": 0, "input_fresh": 0, "cache_read": 0, "cache_write": 0,
               "output_total": 0, "reasoning": 0, "fidelity": "exact", "total": 0 },
@@ -105,6 +106,21 @@ Which prompt wrapper the run used, and therefore how much of the result can be t
 A `raw` run is lower-fidelity by construction: rule 8 of the status ladder can never fire, so a
 blocked run that exits 0 has nothing to catch it. The field exists so a raw run cannot be mistaken
 for an enveloped run whose delegate simply said nothing.
+
+## `process_containment`
+
+Whether the harness's descendants can outlive the supervisor. `null` when the harness never
+launched. `containment_evidence` is a different field: the filesystem posture of a sandbox run.
+
+| `mechanism` | Meaning |
+| --- | --- |
+| `windows_job` | the supervisor holds the only handle to a kill-on-close job object the harness tree runs in; its exit, a hard kill included, terminates every process in the job |
+| `process_group` | POSIX: the harness leads its own process group, signalled on timeout or a relay signal; a SIGKILLed supervisor leaves it running |
+| `none` | Windows, and the job could not be set up; the run went ahead uncontained |
+| `null` | the run's journal holds no containment record (a driver older than agent-tools 1.8.1) |
+
+`closure` is `closed` for a lost run under `windows_job` (the supervisor is gone, so the job closed),
+`at_supervisor_exit` for a finished one, and `unproven` for every other mechanism.
 
 ## `truncated_output` and `records_dropped`
 

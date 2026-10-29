@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """The PR closing-reference lint shared by Workflow and PR (round 4, PM21).
 
 Stdlib only: PR loads it without Workflow. Moved from `execution_tools.py` without behaviour

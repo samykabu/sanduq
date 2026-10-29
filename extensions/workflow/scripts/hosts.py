@@ -20,8 +20,8 @@ from pathlib import Path
 
 import yaml
 
-from workflow import (WORKFLOW_SCRIPT, WorkflowError, active_host, doctor, ensure_local_excludes, load_policy,
-                      locked, package_digest, read, registry, require, write)
+from workflow import (WORKFLOW_SCRIPT, WorkflowError, active_host, active_stage_blocker, doctor, ensure_local_excludes,
+                      load_policy, locked, package_digest, read, registry, require, write)
 
 # The skill folder each supported host reads.
 HOST_SKILLS = {'codex': '.agents/skills', 'claude': '.claude/skills'}
@@ -547,7 +547,7 @@ def switch(root, target, preview=False, runner=None, package_root=None, replace_
     blockers += ['DELEGATION_POLICY_NOT_VALID_FOR_HOST: ' + item for item in delegation['required_changes']]
     for feature, state in checkpoints(root):
         if state.get('active'):
-            blockers.append('ACTIVE_STAGE_MUST_BE_RESOLVED: ' + feature)
+            blockers.append(active_stage_blocker(feature, state['active']))
     if read(root / '.specify/superpowers-handoff.json', {}).get('status') in ('executing', 'blocked'):
         blockers.append('LEGACY_EXECUTOR_OWNS_FEATURE: reconcile its actual work before switching hosts')
     # Judged before any Spec Kit command runs; Spec Kit's own render counts only
@@ -593,7 +593,7 @@ def switch(root, target, preview=False, runner=None, package_root=None, replace_
     with locked(root / '.specify/workflow/runtime/dispatch.lock'), locked(root / '.specify/workflow/runtime/install.lock'):
         require(not read(root / '.specify/workflow/runtime/upgrade.lock', {}), 'WORKFLOW_UPGRADE_IN_PROGRESS')
         for feature, state in checkpoints(root):
-            require(not state.get('active'), 'ACTIVE_STAGE_MUST_BE_RESOLVED: ' + feature)
+            require(not state.get('active'), active_stage_blocker(feature, state.get('active') or {}))
         delegation_preflight(root)
         backup = root / '.specify/workflow/backups/hosts' / uuid.uuid4().hex
         before = snapshot(root, backup)

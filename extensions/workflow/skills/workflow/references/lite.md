@@ -13,7 +13,8 @@ the claim's `cli` its exact `complete` and `pause` commands; no `--help` is need
 1. Once per session: `echo '{"session_id":"<id>"}' > .specify/workflow/runtime/usage.json`.
 2. `W claim --feature F --usage .specify/workflow/runtime/usage.json`; add `--finalize` when
    `next` says `ready_to_finalize` and the user asked for the PR.
-3. Do the stage. Write the receipt from the claim's `receipt_template`, run `cli.complete`, then
+3. Do the stage; record a native-first attempt with `cli.record_native` (attest-native) before
+   `complete`. Write the receipt from the claim's `receipt_template`, run `cli.complete`, then
    the claim's `project_sync.command` when it prints one. Claim the next stage without asking.
 4. Waiting on a person or blocked: `cli.pause` with the actual question or failure, report it, stop.
 5. Resume: `W status --feature F`; finish a held claim with the `receipt_template` status prints.

@@ -28,6 +28,21 @@ class PackageLicenseTests(unittest.TestCase):
                 if extension in package.NOTICES:
                     self.assertNotIn('](vendor.lock.json)', notices)  # relative links would break outside the repo
 
+    def test_vendoring_packages_ship_notices_and_injected_helpers_carry_spdx(self):
+        # PH-02-T13: a helper injected from outside the extension's own folder starts with its SPDX line.
+        for extension in sorted(path.parent.name for path in (package.ROOT / 'extensions').glob('*/extension.yml')):
+            with self.subTest(extension=extension):
+                files = package.package_files(extension)
+                self.assertIn(extension + '/LICENSE', files)
+                if extension in package.NOTICES:
+                    self.assertIn(extension + '/THIRD_PARTY_NOTICES.md', files)
+                injected = [name for name in files if name.startswith(extension + '/scripts/') and name.endswith('.py')
+                            and not (package.ROOT / 'extensions' / name).is_file()]
+                for name in injected:
+                    lines = files[name].decode('utf-8').splitlines()
+                    self.assertEqual(lines[1 if lines[0].startswith('#!') else 0], '# SPDX-License-Identifier: MIT', name)
+        self.assertGreaterEqual(len(list((package.ROOT / 'extensions/scripts/shared').glob('*.py'))), 9)
+
     def test_extension_without_license_falls_back_to_root_license(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)

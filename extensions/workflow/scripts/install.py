@@ -23,7 +23,7 @@ from urllib.parse import quote
 import yaml
 from packaging.version import InvalidVersion, Version
 from packaging.specifiers import SpecifierSet
-from workflow import load_policy, read, write, require, inside, registry, doctor, locked, WorkflowError, RANGES, ensure_local_excludes, package_digest, active_host, github_repository, sanduq_ci, git, now, explain, other_feature_command
+from workflow import load_policy, read, write, require, inside, registry, doctor, locked, WorkflowError, RANGES, ensure_local_excludes, package_digest, active_host, github_repository, sanduq_ci, git, now, explain, active_stage_blocker
 from reconcile import reconcile
 from delegate_dispatch import maintenance_preflight
 from delegation import is_junction, is_link
@@ -416,8 +416,7 @@ CI_GATE = '.github/workflows/sanduq-workflow-gates.yml'
 
 def active_stage_blockers(root):
     """Each feature whose active claim an install or upgrade would restore files under, with its recover command."""
-    return ['ACTIVE_STAGE_MUST_BE_RESOLVED: ' + feature + '; complete or pause that stage, or run ' +
-            other_feature_command(feature, state['active']) for feature, state in checkpoints(root) if state.get('active')]
+    return [active_stage_blocker(feature, state['active']) for feature, state in checkpoints(root) if state.get('active')]
 
 
 def ci_edit_blocker(root, policy, package_root, preserve_ci):

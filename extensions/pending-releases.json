@@ -1,6 +1,13 @@
 {
   "schema_version": 1,
-  "versions": {},
-  "status": "released",
-  "note": "Workflow 2.0.2 hotfix: a claim pins its delegation routes (DELEGATION_POLICY_CHANGED_IN_CLAIM on a mid-claim policy edit); route remedies never suggest editing the policy; task annotations show route_kind and route_reason."
+  "versions": {
+    "assure": "2.7.2",
+    "memory": "2.6.3",
+    "pr": "4.7.5",
+    "project": "2.7.2",
+    "user-manual": "1.8.5",
+    "workflow": "2.0.4"
+  },
+  "status": "ready",
+  "note": "Workflow 2.0.4 (folds 2.0.3), Assure 2.7.2, Memory 2.6.3, PR 4.7.5, Project 2.7.2, User Manual 1.8.5: recover-not-pause remedy, native record before complete, retained-parent approval gate fix, SPDX headers on shipped helpers, sourced figures; every suite passed locally."
 }

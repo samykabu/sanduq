@@ -111,6 +111,10 @@ class UpgradeCITests(unittest.TestCase):
         stage, ci = result['blockers']
         self.assertTrue(stage.startswith('ACTIVE_STAGE_MUST_BE_RESOLVED: ' + self.feature))
         self.assertIn('recover --feature ' + self.feature + ' --token tok-1', stage)
+        # Pause keeps state['active'], so it never resolves the blocker; the remedy offers complete or recover only.
+        for text in (stage, w.ERRORS['ACTIVE_STAGE_MUST_BE_RESOLVED'][2]):
+            self.assertIn('--force-live-owner', text)
+            self.assertNotIn('pause', text)
         self.assertTrue(ci.startswith('CI_WORKFLOW_HAS_LOCAL_EDITS'))
         self.assertIn('--preserve-ci', ci)
         self.assertIn('--preserve-ci', w.explain(ci)['next'])

@@ -597,10 +597,13 @@ class Scope:
             parent_number = parent.get('number') if isinstance(parent, dict) else None
             # A root issue kept whole has no parent and no retained parent approval; a child that lost its parent does.
             require(parent_number or not receipt['approval'].get('child_count'), 'SCOPE_RETAINED_PARENT_APPROVAL_MISMATCH')
+            require(parent_number or self.carries_own_approval(issue, receipt['approval']),
+                    f'SCOPE_CARRIED_APPROVAL_WITHOUT_PARENT: #{issue["number"]} has no native parent, but its approval was carried '
+                    "forward from another issue's approval; re-scope it and approve it as its own root.")
             if parent_number:
                 parent_receipt = metadata(self.issue(parent_number).get('body'))
                 require(issue['number'] in parent_receipt.get('children', [])
-                        and parent_receipt.get('approval') == receipt['approval'],
+                        and self.retains_parent_approval(issue['number'], receipt['approval'], parent_number, parent_receipt.get('approval')),
                         'SCOPE_RETAINED_PARENT_APPROVAL_MISMATCH')
                 children = self.gh.api(f'{self.base}/{parent_number}/sub_issues?per_page=100', pages=True)
                 require(any(child.get('number') == issue['number'] for child in children), 'SCOPE_NATIVE_PARENT_MISMATCH')
@@ -703,7 +706,9 @@ class Scope:
                     'analysis_sha256': analysis_hash(analysis), 'fingerprint': snapshot['fingerprint'],
                     'dependencies': snapshot['dependencies'], 'child_count': child_count,
                     'approved_by': approved_by.strip(), 'approval_text': approval_text.strip(),
-                    'approved_at': datetime.now(timezone.utc).isoformat()}
+                    'approved_at': datetime.now(timezone.utc).isoformat(),
+                    # Which issue's explicit approval this is; carried revisions copy it unchanged.
+                    'approval_origin': {'issue': analysis['issue'], 'analysis_sha256': analysis_hash(analysis)}}
         write_json(self.approval_path(analysis), approval)
         # Record the approved baseline so later revisions can carry this approval forward
         # and diff against what the owner actually saw.
@@ -735,6 +740,62 @@ class Scope:
                                                fingerprint=receipt.get('fingerprint'), dependencies=receipt.get('dependencies'),
                                                approval_text=local.get('approval_text'))}
 
+    def retains_parent_approval(self, number, approval, parent_number, parent_approval):
+        """True when child `number`'s receipt approval is its live parent's approval itself, or a keep-whole
+        revision of it (`require_approval` carries it): every hop is this issue's local approval record, the
+        receipt equals the newest one, and `revision_of` leads, without a cycle, to the parent approval, whose
+        local owner record still matches it. A `carried_forward`/`revision_of` claim alone proves nothing."""
+        if not isinstance(parent_approval, dict) or not isinstance(approval, dict):
+            return False
+        if approval == parent_approval:
+            return True
+        keys = ('analysis_sha256', 'child_count', 'approved_by', 'approved_at')
+        folder = self.root / '.specify/scope/approvals'
+        root = parent_approval.get('analysis_sha256')
+        owner = read_json(folder / f'{parent_number}-{root}.json', {}) if re.fullmatch(r'[a-f0-9]{64}', str(root)) else {}
+        if not (approval.get('carried_forward') is True and approval.get('analysis_sha256') != root and owner.get('repo') == self.repo and owner.get('issue') == parent_number
+                and owner.get('approval_text') and owner.get('approved_by') and all(owner.get(k) == parent_approval.get(k) for k in keys)):
+            return False
+        sha, expected, seen = approval.get('analysis_sha256'), approval, set()
+        while sha != root:
+            ok = isinstance(sha, str) and re.fullmatch(r'[a-f0-9]{64}', sha) and sha not in seen
+            record = read_json(folder / f'{number}-{sha}.json', {}) if ok else {}
+            if not (record.get('repo') == self.repo and record.get('issue') == number and record.get('carried_forward') is True
+                    and record.get('analysis_sha256') == sha and record.get('child_count') == 0
+                    and (record.get('approved_by'), record.get('approved_at')) == (owner['approved_by'], owner['approved_at'])
+                    and all(record.get(k) == value for k, value in expected.items())):
+                return False
+            seen.add(sha)
+            sha, expected = record.get('revision_of'), {}
+        return True
+
+    def carries_own_approval(self, issue, approval):
+        """For an issue with no native parent: True unless its receipt approval is carried forward from another
+        issue's (a former parent's) approval. With this checkout's records, `revision_of` must lead, without a
+        cycle, through this issue's carried records to an approval recorded for this issue itself, and the
+        receipt's `approval_origin`, when present, must name that approval. Without the newest record (another
+        checkout), the receipt's `approval_origin` must name this issue; a receipt from before 2.0.4 has none,
+        and then the issue must not be a node another issue's publish created."""
+        if not (approval.get('carried_forward') or approval.get('revision_of')):
+            return True
+        number, folder = issue['number'], self.root / '.specify/scope/approvals'
+        sha, expected, seen = approval.get('analysis_sha256'), approval, set()
+        valid = lambda value: isinstance(value, str) and re.fullmatch(r'[a-f0-9]{64}', value)
+        origin = approval.get('approval_origin')
+        if not (valid(sha) and (folder / f'{number}-{sha}.json').is_file()):
+            if origin is not None:
+                return isinstance(origin, dict) and origin.get('issue') == number
+            return not re.search(rf'<!-- speckit-scope:node (?!{number}:)\d+:', issue.get('body') or '')
+        while True:
+            record = read_json(folder / f'{number}-{sha}.json', {}) if valid(sha) and sha not in seen else {}
+            if not (record.get('repo') == self.repo and record.get('issue') == number and record.get('analysis_sha256') == sha
+                    and all(record.get(k) == value for k, value in expected.items())):
+                return False
+            if record.get('carried_forward') is not True:
+                return origin is None or origin == {'issue': number, 'analysis_sha256': sha}
+            seen.add(sha)
+            sha, expected = record.get('revision_of'), {}
+
     def receipt_matches(self, approval, snapshot, analysis, nodes):
         """True when a stored receipt describes exactly this proposal, source and prerequisites."""
         return (approval.get('version') == 1 and
@@ -764,7 +825,8 @@ class Scope:
                     'dependencies': snapshot['dependencies'], 'child_count': 0,
                     'approved_by': 'project-policy', 'approved_at': datetime.now(timezone.utc).isoformat(),
                     'approval_text': 'Existing project keep-together preference; no new user decision.',
-                    'policy_decision': settled}
+                    'policy_decision': settled,
+                    'approval_origin': {'issue': analysis['issue'], 'analysis_sha256': analysis_hash(analysis)}}
         approval = read_json(self.approval_path(analysis), {})
         if self.receipt_matches(approval, snapshot, analysis, nodes):
             # Receipt recorded for exactly this proposal, source and prerequisite set.
@@ -798,6 +860,8 @@ class Scope:
                    'baseline_approved_at': base_approval.get('approved_at'),
                    'difference': difference,
                    'recorded_at': datetime.now(timezone.utc).isoformat()}
+        if base_approval.get('approval_origin'):  # absent on approvals recorded before 2.0.4
+            carried['approval_origin'] = base_approval['approval_origin']
         write_json(self.approval_path(analysis), carried)
         if not self.baseline_path(analysis['issue']).exists():
             # A child kept whole now has a baseline of its own; its next revision diffs against this leaf.
@@ -989,6 +1053,8 @@ class Scope:
             receipt = {'version': 2, 'score': node['score'], 'fingerprint': fingerprint(changed),
                        'dependencies': deps, 'children': children, 'prompt': prompt, 'operation': operation}
             receipt['approval'] = {k: approval.get(k) for k in ('analysis_sha256', 'child_count', 'approved_by', 'approved_at')}
+            if approval.get('approval_origin'):
+                receipt['approval']['approval_origin'] = approval['approval_origin']
             if approval.get('carried_forward'):
                 # Attributability for an unattended revision: say whose approval was carried
                 # and which approved analysis it came from.
