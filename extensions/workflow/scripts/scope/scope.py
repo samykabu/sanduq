@@ -597,6 +597,9 @@ class Scope:
             parent_number = parent.get('number') if isinstance(parent, dict) else None
             # A root issue kept whole has no parent and no retained parent approval; a child that lost its parent does.
             require(parent_number or not receipt['approval'].get('child_count'), 'SCOPE_RETAINED_PARENT_APPROVAL_MISMATCH')
+            require(parent_number or self.carries_own_approval(issue, receipt['approval']),
+                    f'SCOPE_CARRIED_APPROVAL_WITHOUT_PARENT: #{issue["number"]} has no native parent, but its approval was carried '
+                    "forward from another issue's approval; re-scope it and approve it as its own root.")
             if parent_number:
                 parent_receipt = metadata(self.issue(parent_number).get('body'))
                 require(issue['number'] in parent_receipt.get('children', [])
@@ -763,6 +766,28 @@ class Scope:
             seen.add(sha)
             sha, expected = record.get('revision_of'), {}
         return True
+
+    def carries_own_approval(self, issue, approval):
+        """For an issue with no native parent: True unless its receipt approval is carried forward from another
+        issue's (a former parent's) approval. With this checkout's records, `revision_of` must lead, without a
+        cycle, through this issue's carried records to an approval recorded for this issue itself. Without the
+        newest record (another checkout), the issue must not be a node another issue's publish created."""
+        if not (approval.get('carried_forward') or approval.get('revision_of')):
+            return True
+        number, folder = issue['number'], self.root / '.specify/scope/approvals'
+        sha, expected, seen = approval.get('analysis_sha256'), approval, set()
+        valid = lambda value: isinstance(value, str) and re.fullmatch(r'[a-f0-9]{64}', value)
+        if not (valid(sha) and (folder / f'{number}-{sha}.json').is_file()):
+            return not re.search(rf'<!-- speckit-scope:node (?!{number}:)\d+:', issue.get('body') or '')
+        while True:
+            record = read_json(folder / f'{number}-{sha}.json', {}) if valid(sha) and sha not in seen else {}
+            if not (record.get('repo') == self.repo and record.get('issue') == number and record.get('analysis_sha256') == sha
+                    and all(record.get(k) == value for k, value in expected.items())):
+                return False
+            if record.get('carried_forward') is not True:
+                return True
+            seen.add(sha)
+            sha, expected = record.get('revision_of'), {}
 
     def receipt_matches(self, approval, snapshot, analysis, nodes):
         """True when a stored receipt describes exactly this proposal, source and prerequisites."""

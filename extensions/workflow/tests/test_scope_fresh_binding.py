@@ -158,6 +158,52 @@ class FreshBindingTests(unittest.TestCase):
         self.gh.issues[number]['body'] = m.replace_block(self.gh.issues[number]['body'],
                                                          '<!-- speckit-scope:metadata ' + json.dumps(receipt) + ' -->')
 
+    def test_fresh_gate_refuses_a_carried_child_whose_native_parent_was_removed(self):
+        # The parent's approval covered #2 as its child; with the link gone it covers nothing.
+        for revisions, records in ((1, True), (2, True), (2, False)):
+            with self.subTest(revisions=revisions, records=records):
+                self.tearDown(); self.setUp()
+                analysis = self.carried_child(revisions)
+                self.gh.children = {}
+                if not records:
+                    for path in (self.root / '.specify/scope/approvals').glob('*.json'): path.unlink()
+                with self.assertRaisesRegex(m.ScopeError, 'SCOPE_CARRIED_APPROVAL_WITHOUT_PARENT'):
+                    self.fresh_gate_child(analysis)
+
+    def test_fresh_gate_accepts_a_root_kept_whole_carrying_its_own_approval(self):
+        for records in (True, False):
+            with self.subTest(records=records):
+                self.tearDown(); self.setUp()
+                snap, analysis = self.analysis(); self.publish_approved(snap, analysis)
+                for n in range(2):
+                    self.gh.issues[1]['body'] += f'\n\nOwner note {n}.'
+                    snap = self.app.inspect('1'); analysis = dict(analysis, fingerprint=snap['fingerprint'])
+                    self.app.publish(snap, analysis, True)
+                receipt = m.metadata(self.gh.issues[1]['body'])['approval']
+                self.assertTrue(receipt['carried_forward'])
+                if not records:  # gated in another checkout than the one that approved and revised it
+                    for path in (self.root / '.specify/scope/approvals').glob('*.json'): path.unlink()
+                self.gh.statuses[1] = 'Feature Specification'; self.app._board = None
+                self.prepare()
+                with patch.object(m.workflow_policy, '_decisions_module', return_value=self.decisions()):
+                    result = self.app.gate('1', feature='specs/001-new', token='owned', session='session', analysis=analysis)
+                self.assertEqual((result['parent'], result['approval']), (None, receipt))
+
+    def test_fresh_gate_refuses_a_root_whose_carried_chain_leads_to_another_issue(self):
+        snap, analysis = self.analysis(); self.publish_approved(snap, analysis)
+        self.gh.issues[1]['body'] += '\n\nOwner note.'
+        snap = self.app.inspect('1'); analysis = dict(analysis, fingerprint=snap['fingerprint'])
+        self.app.publish(snap, analysis, True)
+        receipt = m.metadata(self.gh.issues[1]['body'])['approval']
+        folder = self.root / '.specify/scope/approvals'
+        origin = folder / f'1-{receipt["revision_of"]}.json'
+        m.write_json(origin, dict(m.read_json(origin), issue=7))
+        self.gh.statuses[1] = 'Feature Specification'; self.app._board = None
+        self.prepare()
+        with patch.object(m.workflow_policy, '_decisions_module', return_value=self.decisions()):
+            with self.assertRaisesRegex(m.ScopeError, 'SCOPE_CARRIED_APPROVAL_WITHOUT_PARENT'):
+                self.app.gate('1', feature='specs/001-new', token='owned', session='session', analysis=analysis)
+
     def test_fresh_gate_refuses_forged_missing_cyclic_foreign_or_revoked_carried_lineage(self):
         folder = lambda: self.root / '.specify/scope/approvals'
         receipt = lambda: m.metadata(self.gh.issues[2]['body'])['approval']

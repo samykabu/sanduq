@@ -206,6 +206,8 @@ a split, a missing retained approval or no local record still stops with `APPROV
 The fresh read gate accepts such a child when its receipt's `revision_of` chain, followed through
 this issue's local approval records, leads to the live parent's current approval; otherwise it
 stops with `SCOPE_RETAINED_PARENT_APPROVAL_MISMATCH`.
+An issue with no native parent whose receipt carries another issue's approval forward (a child
+unlinked from its parent) stops with `SCOPE_CARRIED_APPROVAL_WITHOUT_PARENT`; approve it as its own root.
 
 ### Readiness
 
