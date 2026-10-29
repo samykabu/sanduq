@@ -208,6 +208,9 @@ this issue's local approval records, leads to the live parent's current approval
 stops with `SCOPE_RETAINED_PARENT_APPROVAL_MISMATCH`.
 An issue with no native parent whose receipt carries another issue's approval forward (a child
 unlinked from its parent) stops with `SCOPE_CARRIED_APPROVAL_WITHOUT_PARENT`; approve it as its own root.
+The receipt's `approval_origin` names the issue whose explicit approval it carries (each carried
+revision copies it unchanged), so the gate decides this in any checkout; where this checkout holds
+the approval records, the `revision_of` chain must agree with it.
 
 ### Readiness
 

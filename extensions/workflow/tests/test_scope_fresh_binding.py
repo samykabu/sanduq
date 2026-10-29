@@ -158,36 +158,78 @@ class FreshBindingTests(unittest.TestCase):
         self.gh.issues[number]['body'] = m.replace_block(self.gh.issues[number]['body'],
                                                          '<!-- speckit-scope:metadata ' + json.dumps(receipt) + ' -->')
 
+    def drop_records(self):
+        for path in (self.root / '.specify/scope/approvals').glob('*.json'): path.unlink()
+
+    def make_legacy(self, number):
+        """A receipt published before 2.0.4, without `approval_origin`."""
+        receipt = m.metadata(self.gh.issues[number]['body'])['approval']
+        self.assertIn('approval_origin', receipt)
+        self.set_receipt(number, approval={k: v for k, v in receipt.items() if k != 'approval_origin'})
+
     def test_fresh_gate_refuses_a_carried_child_whose_native_parent_was_removed(self):
         # The parent's approval covered #2 as its child; with the link gone it covers nothing.
-        for revisions, records in ((1, True), (2, True), (2, False)):
-            with self.subTest(revisions=revisions, records=records):
+        for revisions, records, legacy in ((1, True, False), (2, True, False), (2, False, False), (2, False, True)):
+            with self.subTest(revisions=revisions, records=records, legacy=legacy):
                 self.tearDown(); self.setUp()
                 analysis = self.carried_child(revisions)
+                self.assertEqual(m.metadata(self.gh.issues[2]['body'])['approval'].get('approval_origin', {}).get('issue'), 1)
                 self.gh.children = {}
-                if not records:
-                    for path in (self.root / '.specify/scope/approvals').glob('*.json'): path.unlink()
+                if not records: self.drop_records()
+                if legacy: self.make_legacy(2)
                 with self.assertRaisesRegex(m.ScopeError, 'SCOPE_CARRIED_APPROVAL_WITHOUT_PARENT'):
                     self.fresh_gate_child(analysis)
 
     def test_fresh_gate_accepts_a_root_kept_whole_carrying_its_own_approval(self):
-        for records in (True, False):
-            with self.subTest(records=records):
+        for records, legacy in ((True, False), (False, False), (False, True)):
+            with self.subTest(records=records, legacy=legacy):
                 self.tearDown(); self.setUp()
                 snap, analysis = self.analysis(); self.publish_approved(snap, analysis)
                 for n in range(2):
                     self.gh.issues[1]['body'] += f'\n\nOwner note {n}.'
                     snap = self.app.inspect('1'); analysis = dict(analysis, fingerprint=snap['fingerprint'])
                     self.app.publish(snap, analysis, True)
+                if not records:  # gated in another checkout than the one that approved and revised it
+                    self.drop_records()
+                if legacy: self.make_legacy(1)
                 receipt = m.metadata(self.gh.issues[1]['body'])['approval']
                 self.assertTrue(receipt['carried_forward'])
-                if not records:  # gated in another checkout than the one that approved and revised it
-                    for path in (self.root / '.specify/scope/approvals').glob('*.json'): path.unlink()
                 self.gh.statuses[1] = 'Feature Specification'; self.app._board = None
                 self.prepare()
                 with patch.object(m.workflow_policy, '_decisions_module', return_value=self.decisions()):
                     result = self.app.gate('1', feature='specs/001-new', token='owned', session='session', analysis=analysis)
                 self.assertEqual((result['parent'], result['approval']), (None, receipt))
+
+    def test_fresh_gate_accepts_a_former_child_approved_as_its_own_root_then_revised(self):
+        # The former parent's node marker stays in #2's body; the receipt's origin shows the approval is #2's own.
+        for records in (True, False):
+            with self.subTest(records=records):
+                self.tearDown(); self.setUp()
+                snap, analysis = self.analysis(True); self.publish_approved(snap, analysis)
+                self.gh.children = {}
+                child = self.app.inspect('2')
+                own = dict(analysis, issue=2, fingerprint=child['fingerprint'], tree=f.node('first'))
+                self.publish_approved(child, own)
+                self.gh.issues[2]['body'] += '\n\nOwner note.'
+                child = self.app.inspect('2'); own = dict(own, fingerprint=child['fingerprint'])
+                self.app.publish(child, own, True)
+                receipt = m.metadata(self.gh.issues[2]['body'])['approval']
+                self.assertTrue(receipt['carried_forward'])
+                self.assertEqual(receipt['approval_origin']['issue'], 2)
+                self.assertIn('<!-- speckit-scope:node 1:', self.gh.issues[2]['body'])
+                if not records: self.drop_records()
+                self.gh.statuses[2] = 'Feature Specification'; self.app._board = None
+                self.prepare(issue=2)
+                result = self.fresh_gate_child(own)
+                self.assertEqual((result['parent'], result['approval']), (None, receipt))
+
+    def test_fresh_gate_refuses_a_receipt_claiming_its_own_origin_against_the_records(self):
+        analysis = self.carried_child(1)
+        self.gh.children = {}
+        receipt = m.metadata(self.gh.issues[2]['body'])['approval']
+        self.set_receipt(2, approval=dict(receipt, approval_origin={'issue': 2, 'analysis_sha256': receipt['revision_of']}))
+        with self.assertRaisesRegex(m.ScopeError, 'SCOPE_CARRIED_APPROVAL_WITHOUT_PARENT'):
+            self.fresh_gate_child(analysis)
 
     def test_fresh_gate_refuses_a_root_whose_carried_chain_leads_to_another_issue(self):
         snap, analysis = self.analysis(); self.publish_approved(snap, analysis)
