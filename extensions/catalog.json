@@ -1,6 +1,6 @@
 {
   "schema_version": "1.0",
-  "updated_at": "2026-10-28T19:35:24.922719+00:00",
+  "updated_at": "2026-10-29T22:39:43.505516+00:00",
   "catalog_url": "https://raw.githubusercontent.com/samykabu/sanduq/main/catalog.json",
   "extensions": {
     "project": {
@@ -8,8 +8,8 @@
       "id": "project",
       "description": "Mirror each Spec Kit feature onto a GitHub Project (v2): create a parent feature issue, advance its Status column through the Spec Kit lifecycle (open -> analysis -> engineer-review -> ready -> in-progress -> in-review -> done), and, in standalone use, create one native sub-issue per task and close it as its task is checked off (under Sanduq Workflow, Workflow owns task issues). Board-agnostic initialization lets each repo choose required/automatic or optional/manual sync hooks. Idempotent and no-regress.",
       "author": "Samy K. Abushanab",
-      "version": "2.7.1",
-      "download_url": "https://github.com/samykabu/sanduq/releases/download/project-v2.7.1/project.zip",
+      "version": "2.7.2",
+      "download_url": "https://github.com/samykabu/sanduq/releases/download/project-v2.7.2/project.zip",
       "repository": "https://github.com/samykabu/sanduq",
       "homepage": "https://github.com/samykabu/sanduq/tree/main/extensions/project",
       "documentation": "https://github.com/samykabu/sanduq/blob/main/extensions/project/README.md",
@@ -51,21 +51,21 @@
       "downloads": 0,
       "stars": 0,
       "created_at": "2026-07-09T00:00:00Z",
-      "updated_at": "2026-10-27T23:43:03.804071+00:00",
-      "sha256": "23186d468301db66688408f0dae8125bfeba4c6cf40ebd8311e5dae5720d2c7e",
-      "inventory_sha256": "ba8db9d8bcd00c8d39a1e7c66166526ab2b9c6c23b9049cf23a4b6d1eeacd4e7"
+      "updated_at": "2026-10-29T22:39:43.289137+00:00",
+      "sha256": "eea664e17587341ab43649551147af9144e4d21c745c5e77fc90dbd5bbd0c61e",
+      "inventory_sha256": "adbb260ef9e1b4a5dc652787ccee289d02d7022031d570d18d20ebced0b36dc1"
     },
     "pr": {
       "name": "Pull Request Workflow",
       "id": "pr",
-      "version": "4.7.4",
+      "version": "4.7.5",
       "description": "Generate or update pull requests from Spec Kit artifacts, enforce installed QA and User Manual freshness policies, then process review feedback through an approval-gated fix and reply workflow.",
       "author": "Samy K. Abushanab",
       "repository": "https://github.com/samykabu/sanduq",
       "homepage": "https://github.com/samykabu/sanduq/tree/main/extensions/pr",
       "documentation": "https://github.com/samykabu/sanduq/blob/main/extensions/pr/README.md",
       "changelog": "https://github.com/samykabu/sanduq/blob/main/extensions/pr/CHANGELOG.md",
-      "download_url": "https://github.com/samykabu/sanduq/releases/download/pr-v4.7.4/pr.zip",
+      "download_url": "https://github.com/samykabu/sanduq/releases/download/pr-v4.7.5/pr.zip",
       "license": "MIT",
       "category": "process",
       "effect": "read-write",
@@ -124,9 +124,9 @@
       ],
       "verified": false,
       "created_at": "2026-07-09T20:26:15Z",
-      "updated_at": "2026-10-28T14:56:42.829377+00:00",
-      "sha256": "5d9ea20f41610bc4c09a2db6c99fadb2d0f6250cb0c28946665ede4ffa97c29d",
-      "inventory_sha256": "aba1f89901e9eb39204b81bd676f30ff7ae5c9f421d674f5fad425c95c204c3b"
+      "updated_at": "2026-10-29T22:39:43.270719+00:00",
+      "sha256": "3e61e72b9dc328ab26a4124c8a194c1e524d69b9f1127bc3d81906498fe485a0",
+      "inventory_sha256": "20477a9e39f79207b329de8f818c0251465ee0c4ac3c088b376a9ac90cab3fac"
     },
     "illustrate": {
       "name": "Illustrate",
@@ -201,14 +201,14 @@
     "assure": {
       "name": "Assure",
       "id": "assure",
-      "version": "2.7.1",
+      "version": "2.7.2",
       "description": "Make QA part of the Spec Kit lifecycle: initialize project policy, require feature test-readiness analysis before implementation, and generate a current QA test manual before pull-request creation.",
       "author": "Samy K. Abushanab",
       "repository": "https://github.com/samykabu/sanduq",
       "homepage": "https://github.com/samykabu/sanduq/tree/main/extensions/assure",
       "documentation": "https://github.com/samykabu/sanduq/blob/main/extensions/assure/README.md",
       "changelog": "https://github.com/samykabu/sanduq/blob/main/extensions/assure/CHANGELOG.md",
-      "download_url": "https://github.com/samykabu/sanduq/releases/download/assure-v2.7.1/assure.zip",
+      "download_url": "https://github.com/samykabu/sanduq/releases/download/assure-v2.7.2/assure.zip",
       "license": "MIT",
       "category": "process",
       "effect": "read-write",
@@ -251,21 +251,21 @@
       ],
       "verified": false,
       "created_at": "2026-07-18T18:35:58Z",
-      "updated_at": "2026-10-28T14:56:42.773994+00:00",
-      "sha256": "bd6b00b3eb037d2534036bbaed216715eff817b5222e0f53d4e81fcf48609977",
-      "inventory_sha256": "c361868c10c4f97f8f32266213ad930213c84dc090116e688d198fc907389322"
+      "updated_at": "2026-10-29T22:39:43.213113+00:00",
+      "sha256": "a4bb8fd90483bed45e5b7b9a39b3d1442ea083eb132d61ee819d56eb9c494621",
+      "inventory_sha256": "42cd0287f4f97bf1fad81381470eaebcd991505f71b0c52cf966bd769a681563"
     },
     "user-manual": {
       "name": "User Manual",
       "id": "user-manual",
-      "version": "1.8.4",
+      "version": "1.8.5",
       "description": "Create and incrementally maintain bilingual-ready, audience-aware application manuals in Markdown, themeable MkDocs HTML (Material, ReadTheDocs, or any installed theme), and PDF, including modules, interfaces, tutorials, screenshots, APIs, releases, migrations, infrastructure, architecture, and complete data dictionaries.",
       "author": "Samy K. Abushanab",
       "repository": "https://github.com/samykabu/sanduq",
       "homepage": "https://github.com/samykabu/sanduq/tree/main/extensions/user-manual",
       "documentation": "https://github.com/samykabu/sanduq/blob/main/extensions/user-manual/README.md",
       "changelog": "https://github.com/samykabu/sanduq/blob/main/extensions/user-manual/CHANGELOG.md",
-      "download_url": "https://github.com/samykabu/sanduq/releases/download/user-manual-v1.8.4/user-manual.zip",
+      "download_url": "https://github.com/samykabu/sanduq/releases/download/user-manual-v1.8.5/user-manual.zip",
       "license": "MIT",
       "category": "documentation",
       "effect": "read-write",
@@ -318,14 +318,14 @@
       ],
       "verified": false,
       "created_at": "2026-07-18T18:35:58Z",
-      "updated_at": "2026-10-28T14:56:42.860608+00:00",
-      "sha256": "cc544936a5deaf817c763bb5bbc9b5e3ed8f0a024345a5f1638dd6855478c7c2",
-      "inventory_sha256": "921cf5331e1b8165811b5f34f35fec7508a9c6e43d6b4db24b950a57968d9c6b"
+      "updated_at": "2026-10-29T22:39:43.319174+00:00",
+      "sha256": "3fce649a0b461b58aaf570f38d24de8795fb94ef2ee314a584e7173b98e0aa22",
+      "inventory_sha256": "5422a001f72bed0aa33accb10d779446a2f23b3316a10b3aac4cf1f4cdd46afa"
     },
     "workflow": {
       "name": "Sanduq Workflow",
       "id": "workflow",
-      "version": "2.0.2",
+      "version": "2.0.4",
       "description": "GitHub issue decisions and resumable Scope-to-PR orchestration with optional model-aware delegation, QA, User Manual, and workflow evidence CI.",
       "author": "Samy K. Abushanab",
       "license": "MIT",
@@ -333,7 +333,7 @@
       "homepage": "https://github.com/samykabu/sanduq/tree/main/extensions/workflow",
       "documentation": "https://github.com/samykabu/sanduq/blob/main/extensions/workflow/README.md",
       "changelog": "https://github.com/samykabu/sanduq/blob/main/extensions/workflow/CHANGELOG.md",
-      "download_url": "https://github.com/samykabu/sanduq/releases/download/workflow-v2.0.2/workflow.zip",
+      "download_url": "https://github.com/samykabu/sanduq/releases/download/workflow-v2.0.4/workflow.zip",
       "requires": {
         "speckit_version": ">=1.0.0,<2.0.0",
         "tools": [
@@ -367,9 +367,9 @@
       "category": "process",
       "effect": "read-write",
       "verified": false,
-      "sha256": "d974c288ab8fb91bc17e5500600f6f6e171d0d820d825a2ba702383ec1607221",
-      "updated_at": "2026-10-28T19:35:24.922577+00:00",
-      "inventory_sha256": "70ec68242333978a58e393c638b33449afe47e2a0f7b96646624ffe4c11cfaae"
+      "sha256": "6933fb646eb8f56e56c5cedcc0046d43c3220b933dc813cd90f699267ec00610",
+      "updated_at": "2026-10-29T22:39:43.505427+00:00",
+      "inventory_sha256": "e032ef12ec9b426d395761bf0013aa32c71834fd878ada816f8f14f71b35ff2a"
     },
     "scope": {
       "name": "Speckit Scope (retired)",
@@ -421,7 +421,7 @@
     "memory": {
       "name": "Sanduq Memory",
       "id": "memory",
-      "version": "2.6.2",
+      "version": "2.6.3",
       "description": "Reconcile verified feature specifications into current project memory, migrate required fixtures, and archive through scoped recoverable Git commits.",
       "author": "Samy K. Abushanab",
       "license": "MIT",
@@ -429,7 +429,7 @@
       "homepage": "https://github.com/samykabu/sanduq/tree/main/extensions/memory",
       "documentation": "https://github.com/samykabu/sanduq/blob/main/extensions/memory/README.md",
       "changelog": "https://github.com/samykabu/sanduq/blob/main/extensions/memory/CHANGELOG.md",
-      "download_url": "https://github.com/samykabu/sanduq/releases/download/memory-v2.6.2/memory.zip",
+      "download_url": "https://github.com/samykabu/sanduq/releases/download/memory-v2.6.3/memory.zip",
       "requires": {
         "speckit_version": ">=1.0.0,<2.0.0",
         "tools": [
@@ -456,9 +456,9 @@
       "category": "process",
       "effect": "read-write",
       "verified": false,
-      "sha256": "1e8b2e755a909ad604c14825ced6af609e30af271b5f201dbe50c91f4ca2dd4a",
-      "updated_at": "2026-10-28T14:56:42.811745+00:00",
-      "inventory_sha256": "bd39f2356dd6b8f29778a85c34fca959697464ec038b0f2c6310b313c5b71b02"
+      "sha256": "074dd5e42138cb8fd3981419d251b313012b7d6d6e4ab055c98cc510498dfc52",
+      "updated_at": "2026-10-29T22:39:43.252988+00:00",
+      "inventory_sha256": "138ac4b01ede1c09b39f4ad9322aa606bf351befab21edf8b99e218d3c50431e"
     },
     "progress": {
       "name": "Sanduq Progress Report",
