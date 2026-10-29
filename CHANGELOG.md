@@ -10,6 +10,7 @@ independently via `<extension>-vX.Y.Z` tags.
 
 - PH-02-T13 of the October 2026 review: every shared helper a package ships from outside its own folder (`extensions/scripts/shared/*.py`, plus Workflow's `sanduq_hash.py` and `sanduq_ci.py` in Assure and User Manual) starts with an `SPDX-License-Identifier: MIT` line, and a packaging test checks it alongside each package's LICENSE and notices. No behaviour change.
 - PH-04-T07 of the October 2026 review: quantitative claims in recent CHANGELOG entries, the upgrade guide and Workflow's execution-assign reference name their source under `docs/evidence/` (or the unit test that counts fake-client calls) and unit, or say estimated; a test keeps percentage and ratio claims labelled. `benchmark_compare.py` takes several runs per arm and prints n, median and spread, and says whether a comparison is like-for-like or a process change; `benchmark_instructions.py` measures Workflow and Scope by default.
+- Scope's fresh gate accepts a child kept whole whose revision carries the parent's approval, by following the recorded approval chain back to the live parent approval; a consumer run had stopped on SCOPE_RETAINED_PARENT_APPROVAL_MISMATCH. No migration or re-approval is needed.
 
 ## 2026-10-28 — Workflow 2.0.2
 

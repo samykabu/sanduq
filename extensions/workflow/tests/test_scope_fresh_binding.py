@@ -15,22 +15,22 @@ class FreshBindingTests(unittest.TestCase):
     analysis = f.ScopeTests.analysis
     publish_approved = f.ScopeTests.publish_approved
 
-    def prepare(self, stage='scope'):
+    def prepare(self, stage='scope', issue=1):
         identity = r.repository(self.root)
         workflow = m.workflow_policy._workflow_module()
         import yaml
         (self.root / '.specify/workflow.yml').write_text(yaml.safe_dump(workflow.default_policy(False, False)))
         feature = self.root / 'specs/001-new'; feature.mkdir(parents=True)
-        state = {'schema_version': 1, 'feature': 'specs/001-new', 'issue': 'acme/app#1',
+        state = {'schema_version': 1, 'feature': 'specs/001-new', 'issue': f'acme/app#{issue}',
                  'branch': r.git(self.root, 'branch', '--show-current'), 'repo_identity': identity,
                  'receipts': {}, 'active': {'stage': stage, 'mode': 'initial', 'token': 'owned', 'session_id': 'session'}}
         m.write_json(feature / 'workflow/checkpoint.json', state)
         return feature, state
 
-    def decisions(self, pending=False):
+    def decisions(self, pending=False, issue=1):
         # A copy: the loaded module is cached per process and must stay real for the other tests.
         module = types.SimpleNamespace(**vars(m.workflow_policy._decisions_module()))
-        module.reconcile = lambda *args, **kwargs: {'version': 1, 'feature': 'specs/001-new', 'issue': 'acme/app#1',
+        module.reconcile = lambda *args, **kwargs: {'version': 1, 'feature': 'specs/001-new', 'issue': f'acme/app#{issue}',
             'decisions': [{'id': 'SD1', 'status': 'pending', 'answers': []}] if pending else []}
         return module
 
@@ -121,6 +121,97 @@ class FreshBindingTests(unittest.TestCase):
             with patch.object(m.workflow_policy, '_decisions_module', return_value=self.decisions()):
                 with self.assertRaisesRegex(m.ScopeError, 'SCOPE_RETAINED_PARENT_APPROVAL_MISMATCH'):
                     self.app.gate('1', feature='specs/001-new', token='owned', session='session', analysis=analysis)
+
+    def carried_child(self, revisions=2):
+        """A parent approved with two children; child #2 kept whole and re-scoped after `revisions`
+        body edits, so its receipt carries the parent's approval through that many revisions."""
+        snap, analysis = self.analysis(True); self.publish_approved(snap, analysis)
+        prompt = m.metadata(self.gh.issues[2]['body'])['prompt']
+        for n in range(revisions):
+            self.gh.issues[2]['body'] += f'\n\nOwner note {n}.'
+            child = self.app.inspect('2')
+            revision = dict(analysis, issue=2, fingerprint=child['fingerprint'], tree=dict(f.node('first'), specify_prompt=prompt))
+            self.app.publish(child, revision, True)
+        self.gh.statuses[2] = 'Feature Specification'; self.app._board = None
+        self.prepare(issue=2)
+        return revision
+
+    def fresh_gate_child(self, analysis):
+        with patch.object(m.workflow_policy, '_decisions_module', return_value=self.decisions(issue=2)):
+            return self.app.gate('2', feature='specs/001-new', token='owned', session='session', analysis=analysis)
+
+    def test_fresh_gate_accepts_a_carried_child_revision_traced_to_the_live_parent_approval(self):
+        for revisions in (1, 2):
+            with self.subTest(revisions=revisions):
+                self.tearDown(); self.setUp()
+                analysis = self.carried_child(revisions)
+                parent = m.metadata(self.gh.issues[1]['body'])['approval']
+                receipt = m.metadata(self.gh.issues[2]['body'])['approval']
+                self.assertNotEqual(receipt, parent)
+                writes = list(self.gh.writes)
+                result = self.fresh_gate_child(analysis)
+                self.assertEqual((result['parent'], result['approval']), (1, receipt))
+                self.assertEqual(self.gh.writes, writes)
+
+    def set_receipt(self, number, **changes):
+        receipt = m.metadata(self.gh.issues[number]['body']); receipt.update(changes)
+        self.gh.issues[number]['body'] = m.replace_block(self.gh.issues[number]['body'],
+                                                         '<!-- speckit-scope:metadata ' + json.dumps(receipt) + ' -->')
+
+    def test_fresh_gate_refuses_forged_missing_cyclic_foreign_or_revoked_carried_lineage(self):
+        folder = lambda: self.root / '.specify/scope/approvals'
+        receipt = lambda: m.metadata(self.gh.issues[2]['body'])['approval']
+        parent = lambda: m.metadata(self.gh.issues[1]['body'])['approval']
+        head = lambda: folder() / f'2-{receipt()["analysis_sha256"]}.json'
+        middle = lambda: folder() / f'2-{receipt()["revision_of"]}.json'
+        owner = lambda: folder() / f'1-{parent()["analysis_sha256"]}.json'
+
+        def edit(path, **changes):
+            m.write_json(path, dict(m.read_json(path), **changes))
+
+        def reparent():
+            other = dict(parent(), analysis_sha256='f' * 64)
+            self.gh.add(9, body=m.replace_block('', '<!-- speckit-scope:metadata ' + json.dumps(
+                dict(m.metadata(self.gh.issues[1]['body']), children=[2], approval=other)) + ' -->'))
+            m.write_json(folder() / f'9-{"f" * 64}.json', dict(m.read_json(owner()), issue=9, analysis_sha256='f' * 64))
+            self.gh.children = {9: {2}}
+
+        cases = {
+            # Forged receipts: a skipped hop, an unrecorded hash, the parent approval relabelled as carried.
+            'skipped hop': lambda: self.set_receipt(2, approval=dict(receipt(), revision_of=parent()['analysis_sha256'])),
+            'unrecorded hash': lambda: self.set_receipt(2, approval=dict(receipt(), analysis_sha256='e' * 64)),
+            'relabelled parent': lambda: self.set_receipt(2, approval=dict(parent(), carried_forward=True, revision_of='e' * 64)),
+            'other approver': lambda: self.set_receipt(2, approval=dict(receipt(), approved_by='someone else')),
+            'forged record approver': lambda: (edit(head(), approved_by='someone else'),
+                                               self.set_receipt(2, approval=dict(receipt(), approved_by='someone else'))),
+            # Missing provenance.
+            'missing head record': lambda: head().unlink(),
+            'missing middle record': lambda: middle().unlink(),
+            'missing owner record': lambda: owner().unlink(),
+            'owner statement missing': lambda: edit(owner(), approval_text=''),
+            'broken link': lambda: edit(middle(), revision_of=None),
+            # A cycle, and a hop recorded for another issue or repository or with children.
+            'cycle': lambda: edit(middle(), revision_of=receipt()['analysis_sha256']),
+            'foreign issue hop': lambda: edit(middle(), issue=3),
+            'foreign repository hop': lambda: edit(middle(), repo='other/app'),
+            'split hop': lambda: edit(middle(), child_count=1),
+            'uncarried hop': lambda: edit(middle(), carried_forward=False),
+            # Wrong parent: the live native parent's approval is not where the lineage leads.
+            'wrong parent': reparent,
+            # The parent's approval revoked or changed since the child carried it.
+            'parent approval changed': lambda: self.set_receipt(1, approval=dict(parent(), approved_by='someone else')),
+            'parent re-approved': lambda: self.set_receipt(1, approval=dict(parent(), analysis_sha256='d' * 64)),
+            'parent child count changed': lambda: self.set_receipt(1, approval=dict(parent(), child_count=3)),
+            'owner record changed': lambda: edit(owner(), approved_at='2000-01-01T00:00:00+00:00'),
+            'child removed from parent': lambda: self.set_receipt(1, children=[3]),
+        }
+        for name, tamper in cases.items():
+            with self.subTest(name):
+                self.tearDown(); self.setUp()
+                analysis = self.carried_child(2)
+                tamper()
+                with self.assertRaisesRegex(m.ScopeError, 'SCOPE_RETAINED_PARENT_APPROVAL_MISMATCH'):
+                    self.fresh_gate_child(analysis)
 
     def test_fresh_bind_uses_explicit_feature_and_same_guard(self):
         analysis = self.prepare_published_child()

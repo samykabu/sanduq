@@ -600,7 +600,7 @@ class Scope:
             if parent_number:
                 parent_receipt = metadata(self.issue(parent_number).get('body'))
                 require(issue['number'] in parent_receipt.get('children', [])
-                        and parent_receipt.get('approval') == receipt['approval'],
+                        and self.retains_parent_approval(issue['number'], receipt['approval'], parent_number, parent_receipt.get('approval')),
                         'SCOPE_RETAINED_PARENT_APPROVAL_MISMATCH')
                 children = self.gh.api(f'{self.base}/{parent_number}/sub_issues?per_page=100', pages=True)
                 require(any(child.get('number') == issue['number'] for child in children), 'SCOPE_NATIVE_PARENT_MISMATCH')
@@ -734,6 +734,35 @@ class Scope:
         return {'version': 1, 'approval': dict(retained, repo=self.repo, issue=analysis['issue'],
                                                fingerprint=receipt.get('fingerprint'), dependencies=receipt.get('dependencies'),
                                                approval_text=local.get('approval_text'))}
+
+    def retains_parent_approval(self, number, approval, parent_number, parent_approval):
+        """True when child `number`'s receipt approval is its live parent's approval itself, or a keep-whole
+        revision of it (`require_approval` carries it): every hop is this issue's local approval record, the
+        receipt equals the newest one, and `revision_of` leads, without a cycle, to the parent approval, whose
+        local owner record still matches it. A `carried_forward`/`revision_of` claim alone proves nothing."""
+        if not isinstance(parent_approval, dict) or not isinstance(approval, dict):
+            return False
+        if approval == parent_approval:
+            return True
+        keys = ('analysis_sha256', 'child_count', 'approved_by', 'approved_at')
+        folder = self.root / '.specify/scope/approvals'
+        root = parent_approval.get('analysis_sha256')
+        owner = read_json(folder / f'{parent_number}-{root}.json', {}) if re.fullmatch(r'[a-f0-9]{64}', str(root)) else {}
+        if not (approval.get('carried_forward') is True and approval.get('analysis_sha256') != root and owner.get('repo') == self.repo and owner.get('issue') == parent_number
+                and owner.get('approval_text') and owner.get('approved_by') and all(owner.get(k) == parent_approval.get(k) for k in keys)):
+            return False
+        sha, expected, seen = approval.get('analysis_sha256'), approval, set()
+        while sha != root:
+            ok = isinstance(sha, str) and re.fullmatch(r'[a-f0-9]{64}', sha) and sha not in seen
+            record = read_json(folder / f'{number}-{sha}.json', {}) if ok else {}
+            if not (record.get('repo') == self.repo and record.get('issue') == number and record.get('carried_forward') is True
+                    and record.get('analysis_sha256') == sha and record.get('child_count') == 0
+                    and (record.get('approved_by'), record.get('approved_at')) == (owner['approved_by'], owner['approved_at'])
+                    and all(record.get(k) == value for k, value in expected.items())):
+                return False
+            seen.add(sha)
+            sha, expected = record.get('revision_of'), {}
+        return True
 
     def receipt_matches(self, approval, snapshot, analysis, nodes):
         """True when a stored receipt describes exactly this proposal, source and prerequisites."""
