@@ -4,6 +4,10 @@ All notable changes to sanduq extensions/plugins are recorded here.
 Format: [Keep a Changelog](https://keepachangelog.com/). Extensions are versioned
 independently via `<extension>-vX.Y.Z` tags.
 
+## 2026-10-29 — Workflow 2.0.4, Assure 2.7.2, Memory 2.6.3, PR 4.7.5, Project 2.7.2, User Manual 1.8.5 (pending release)
+
+- PH-02-T13 of the October 2026 review: every shared helper a package ships from outside its own folder (`extensions/scripts/shared/*.py`, plus Workflow's `sanduq_hash.py` and `sanduq_ci.py` in Assure and User Manual) starts with an `SPDX-License-Identifier: MIT` line, and a packaging test checks it alongside each package's LICENSE and notices. No behaviour change.
+
 ## 2026-10-28 — Workflow 2.0.2
 
 - Hotfix from the PH-05-T07 live measurement: a claim now pins its delegation routes. `start`, `record-native`, `adopt` and `attest-native` refuse with `DELEGATION_POLICY_CHANGED_IN_CLAIM` once `.specify/workflow.yml`'s `delegation` section changes mid-claim, Ready refuses a task attempt recorded under another policy, and `NATIVE_ROUTE_DISALLOWED` no longer suggests editing the policy. Task annotations show each task's `route_kind` and `route_reason`. Claims from before 2.0.2 are not checked.

@@ -1,5 +1,9 @@
 # Changelog
 
+## [2.7.2] - 2026-10-29
+
+- The packaged shared helpers (`sanduq_remote.py`, `sanduq_gh.py`) start with an `SPDX-License-Identifier: MIT` line. No behaviour change.
+
 ## [2.7.1] - 2026-10-28
 
 - `requires.tools` declares Python `>=3.11`, the floor every Sanduq extension now states (SAMY-11).

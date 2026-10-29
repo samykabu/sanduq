@@ -1,5 +1,9 @@
 # Changelog
 
+## [2.0.4] - 2026-10-29
+
+- The shared helpers packaged into `scripts/` and the `sanduq_hash.py` and `sanduq_ci.py` modules other packages ship start with an `SPDX-License-Identifier: MIT` line; dependency pins follow the patch releases of Project, PR, Assure and User Manual. No behaviour change. (2.0.3 is reserved for a parallel release.)
+
 ## [2.0.2] - 2026-10-28
 
 - Routes are fixed for a claim. Every claim records `delegation_digest`, the digest of the normalised `delegation` policy section `selected_route` reads, on `state.active`. `delegate_dispatch.py start` (and every external launch: retry, reassign, confirmed fallback), `record-native`, `adopt` (`accept --no-attempt`) and `attest-native` refuse with `DELEGATION_POLICY_CHANGED_IN_CLAIM` (new registry code) when the current section differs: restore `.specify/workflow.yml` to finish the claim on its recorded routes, or, to adopt the new policy, release the claim with `workflow.py recover --feature <feature> --token <token> --reason "<why>"` and claim again (`pause` keeps the claim, so a new claim would refuse with `STAGE_ALREADY_ACTIVE`). A live lite run had edited a task's override mid-claim after `record-native` refused its external route, turning it native without a trace. A claim recorded before 2.0.2 has no digest and is not checked.

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Whole-record JSON pages with byte-exact limits and content-bound cursors."""
 import hashlib
 import json

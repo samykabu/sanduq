@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Capture exact bytes using retained Git objects or immutable file proofs."""
 from __future__ import annotations
 

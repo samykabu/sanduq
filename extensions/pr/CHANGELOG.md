@@ -1,5 +1,9 @@
 # Changelog
 
+## [4.7.5] - 2026-10-29
+
+- The packaged shared helpers (`deps.py`, `sanduq_pr_lint.py`, `sanduq_gh.py`) start with an `SPDX-License-Identifier: MIT` line. No behaviour change.
+
 ## [4.7.4] - 2026-10-28
 
 - Script comments state the rule they protect instead of citing review findings. No behaviour change.
