@@ -8,6 +8,6 @@
     "user-manual": "1.8.5",
     "workflow": "2.0.4"
   },
-  "status": "implementation-in-progress",
-  "note": "PH-02-T13: SPDX headers on injected shared helpers (Workflow 2.0.4, Assure 2.7.2, Memory 2.6.3, PR 4.7.5, Project 2.7.2, User Manual 1.8.5). No behaviour change."
+  "status": "ready",
+  "note": "Workflow 2.0.4 (folds 2.0.3), Assure 2.7.2, Memory 2.6.3, PR 4.7.5, Project 2.7.2, User Manual 1.8.5: recover-not-pause remedy, native record before complete, retained-parent approval gate fix, SPDX headers on shipped helpers, sourced figures; every suite passed locally."
 }
