@@ -34,6 +34,7 @@ import evidence_snapshot
 import execution_tools
 import lifecycle
 import memory_handoff
+import receipt_log
 import wf_ownership
 try:
     import sanduq_remote
@@ -1108,7 +1109,9 @@ class Run:
             state['head'] = git(self.root, 'rev-parse', 'HEAD')
         state['stage_plan'] = {'v': 1, 'generation': state['generation'], 'stages': stages(self.policy, state_tier(state), state.get('skipped'))}
         state['next_action'] = self.evaluate_next_action(state)
+        on_disk = read(self.path, {}).get('receipts') or {}
         write(self.path, state)
+        receipt_log.record(self.feature, on_disk, state.get('receipts') or {}, state['updated_at'])
         # The queued lifecycle events were written with the state; append them now, under the caller's
         # lock. A crash here leaves them queued and the next save replays them (deduplicated by event_id).
         if lifecycle.flush(state, self.feature):

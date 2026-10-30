@@ -9,6 +9,7 @@ from pathlib import Path
 from workflow import (canonical_path, load_policy, stages, read, require, inside, git, digest, checkpoint_policy_digest, receipt_status,
                       receipt_drift, recovery_recipe, ready_checks, github_repository, verification_check, WorkflowError,
                       WORKFLOW_SCRIPT, source_fingerprints_of, state_tier, CHECKPOINT_SCHEMAS)
+import receipt_log
 import sanduq_ci
 
 
@@ -104,6 +105,7 @@ def check(root, feature, policy, base=None, rules=None, verify_ci_evidence=True,
     source = read(directory / 'scope-source.json', {})
     require(f"{source.get('repo')}#{source.get('issue')}" == state.get('issue'), 'FEATURE_BINDING_MISMATCH')
     amendments, revalidations, accepted, warnings = [], [], [], []
+    logged = None
     if rules['receipts']:
         for stage in stages(policy, state_tier(state), state.get('skipped')):
             if stage == 'pr': continue  # PR publication follows readiness; never requires a recursive PR commit.
@@ -144,6 +146,9 @@ def check(root, feature, policy, base=None, rules=None, verify_ci_evidence=True,
                                 + str(receipt['self_attested'].get('file')) + ' (local transport); no GitHub record '
                                 'vouches for them')
             if stage in ('verify','review','ready'): require(receipt.get('blocking_findings') == 0, 'BLOCKING_FINDINGS_REMAIN')
+        # A receipt edited outside the dispatcher no longer matches its logged hash.
+        logged = receipt_log.check(root, feature, state.get('receipts') or {}, base)
+        warnings += logged.pop('warnings')
     ready_checks(root, feature, policy, state, base, {'tasks': rules['tasks'], 'task_links': rules['task_links']},
                 warnings=warnings)
     if rules['decisions']:
@@ -176,7 +181,7 @@ def check(root, feature, policy, base=None, rules=None, verify_ci_evidence=True,
                  scripts_root=trusted_root)
     return {'feature': feature, 'passed': True, 'rules': [name for name, enabled in rules.items() if enabled],
             'amendments': amendments, 'revalidations': revalidations, 'accepted_drift': accepted,
-            'warnings': warnings,
+            'warnings': warnings, **({'receipt_log': logged} if logged else {}),
             'scope': 'selected committed evidence checks; live answers are checked when selected; human acceptance is separate'}
 
 
@@ -186,6 +191,8 @@ def check_index(root, feature):
     state = read(inside(root, checkpoint), {})
     require(state.get('feature') == feature, 'CHECKPOINT_MISSING_OR_WRONG_FEATURE: ' + feature)
     paths = {checkpoint, '.specify/workflow.yml'}
+    if inside(root, feature + '/' + receipt_log.LOG).is_file():
+        paths.add(feature + '/' + receipt_log.LOG)
     own_feature = Path(feature).parts[1] if Path(feature).parts[:1] == ('specs',) and len(Path(feature).parts) > 1 else None
     cross_feature = set()
     for stage, receipt in state.get('receipts', {}).items():

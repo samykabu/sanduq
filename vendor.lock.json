@@ -640,21 +640,21 @@
           ]
         ]
       },
-      "ref": "dev-tools-v1.5.0",
-      "sha": "033774a9a6b578c40eee60b01a2f492b9a405a02",
+      "ref": "dev-tools-v1.6.0",
+      "sha": "f2d6adf97b7c23eeca34e9d6a4760481b4a2182a",
       "files": {
         "extensions/user-manual/assets/github/user-manual-preview.yml": "88d70609f3f3b43672039aa69f5c58489e9e5d224b8f31db1b765a563bd47b90",
-        "extensions/user-manual/assets/github/user-manual-release.yml": "638dc2f42c09a2cf458a0b1672eb72eb06e95a3a04f523195eb5307de2cfad96",
+        "extensions/user-manual/assets/github/user-manual-release.yml": "40558696a70108ec04ec4f42d479052ac194965a8c6b135d5da903c352fadb2b",
         "extensions/user-manual/assets/scaffold/mkdocs.yml": "4d6bafb26cc87fd8d7d85d3ee4e5432c6cd8a8c30b32ab06b55b6240069bc49a",
         "extensions/user-manual/assets/scaffold/requirements.lock": "9a98e75e93ce67646c539bdeda33700bdf71031487650e42dbc31b7acd441b3d",
         "extensions/user-manual/assets/scaffold/theme/extra.css": "3bace34e967f52f172a0bb2e3bd998274d832ec2fac3a4b04d968a53416d6ec9",
         "extensions/user-manual/assets/scaffold/theme/print.css": "a46c4bbfd9ba11d26b7543535cbc797c227434ddbcfc04a457be7c6b62260ff1",
-        "extensions/user-manual/assets/scaffold/theme/rtl-generic.css": "8815adf8d931f183dc6650198d51c7698c46fa1b397818f7bd9ba3958c9dd373",
-        "extensions/user-manual/assets/scaffold/theme/rtl-readthedocs.css": "a82d60fd67d8cdba657e688d58228f2ed3387bf4da779bb91c30613318f20365",
-        "extensions/user-manual/assets/scaffold/theme/rtl.css": "94d07b18909b49b17d8d6f9a918f39cbc750d26f6be3cff7c11a86bfc371af14",
+        "extensions/user-manual/assets/scaffold/theme/rtl-generic.css": "f9b122e94393682cc7248ec04d660b895f204b7f57c8410784ff889c48ac0e97",
+        "extensions/user-manual/assets/scaffold/theme/rtl-readthedocs.css": "9aa1eb1a353624199d63b44d222aae2dda03286a5ae7db0f686eed1bac132a1f",
+        "extensions/user-manual/assets/scaffold/theme/rtl.css": "14319bf237f750394435d975a617dd346f4b664f6794a8636e854e94416a90c0",
         "extensions/user-manual/assets/scaffold/theme/theme-readthedocs.css": "a02ecd1df0b52bfc2dc829845d54263176dd8205a751f28093d50eb4721316e2",
         "extensions/user-manual/scripts/audit_manual.py": "8850b645a531ce8f11402865e2140f2608d2a99bf6ee8536500472e644f3a9b5",
-        "extensions/user-manual/scripts/build_manual.py": "e4371681f259add556194a6a2aca332b461d7f09f65efb090f6138b9b11e3df1",
+        "extensions/user-manual/scripts/build_manual.py": "7ddcd1573225a856108fd1054db2866f4868e95fd5e82f6ea6b6d83e60f322de",
         "extensions/user-manual/scripts/init_manual.py": "3fe43df0ac73defb48458c720c360505b406e17c8d9b1717b1b296449b4aab3a",
         "extensions/user-manual/skills/api-docs/references/openapi.md": "d4ff6e032f9f7d5321008959fc67edd999b1fe60a72236abf80d4dcb944a29ab",
         "extensions/user-manual/skills/preview-publishing/references/provider-contract.md": "1609a1ba809049bfe7959dc727f34151edd3fda1db8c8c9211d0bdddab83ecb3",
@@ -666,8 +666,8 @@
         "extensions/user-manual/skills/user-manual/references/data-reference.md": "abdccf95a36d5d1b2ee8fae72e42963ff3b130e3ce4f4f14d99c3046a5a458c4",
         "extensions/user-manual/skills/user-manual/references/discovery.md": "f03f42065f3dbc46a8ae072c680874bfe9cd7e28d81ca971824d19a9e242e5ac",
         "extensions/user-manual/skills/user-manual/references/incremental-update.md": "d66ef41177737e25365511719ffe7079e363a67ae42dc4c90338edcb3d33d0ed",
-        "extensions/user-manual/skills/user-manual/references/publishing.md": "527fc14dc3d0ed36841b8746c562f6c04bdb4d66518ae96a72ecb2f8aa6d5ce3",
-        "extensions/user-manual/tests/test_build_manual.py": "f731a418a5c73b217d97678ba1dc4e71f171c2e41cb13ad857e6ad61140abec0"
+        "extensions/user-manual/skills/user-manual/references/publishing.md": "342c76a3f4225e777f7433993c7d8e3f1faed18db1fa92e5af75d5620e2e2c3c",
+        "extensions/user-manual/tests/test_build_manual.py": "9703c5d1d2eb1f4bf4c42e72e50284c77422556280ef9d7497e8d8a37c672b28"
       }
     },
     "progress-report": {
