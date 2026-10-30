@@ -1,9 +1,6 @@
 {
   "schema_version": 1,
-  "versions": {
-    "user-manual": "1.9.1",
-    "workflow": "2.1.1"
-  },
-  "status": "ready",
+  "versions": {},
+  "status": "released",
   "note": "Workflow 2.1.1, User Manual 1.9.1: PDF cover without \"None\" and a contents heading in the edition's language (dev-tools 1.6.1); README drops the CI runner exception notice."
 }
