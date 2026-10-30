@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.9.0] - 2026-10-30
+
+- Arabic PDFs use the Amiri font (dev-tools 1.6.0). The RTL stylesheets set Arabic text and headings to `"Amiri", "Noto Naskh Arabic", "Noto Sans Arabic", serif`; code keeps its monospace font and English editions are unchanged. The release workflow template installs `fonts-hosny-amiri` (the Debian/Ubuntu package for Amiri) with the WeasyPrint libraries on runners that allow apt.
+- The PDF keeps the edition's `lang` and `dir`. mkdocs-to-pdf rebuilt `<html>` without them, so an Arabic PDF lost its right-to-left layout and every `html[lang="ar"]` rule; the build now writes a renderer event hook that restores both.
+- A PDF with a theme other than `material` or `mkdocs` (`readthedocs`, for example) no longer fails. mkdocs-to-pdf 0.10.1 has no handler for it and its fallback failed; the build supplies one.
+- Checked on Ubuntu 24.04 with Material, `readthedocs` and `mkdocs`: `pdffonts` lists Amiri in each Arabic PDF and none in the English ones. A manual created earlier keeps its own `User-Manual/theme/rtl*.css` copies, which the build prefers; copy the font rule into them (see the `publishing` reference).
+
 ## [1.8.5] - 2026-10-29
 
 - The packaged shared helpers (`sanduq_freshness.py`, `sanduq_hash.py`, `sanduq_ci.py`, `deps.py`) start with an `SPDX-License-Identifier: MIT` line. No behaviour change.

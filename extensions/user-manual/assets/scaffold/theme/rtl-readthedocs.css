@@ -10,6 +10,18 @@ body {
   text-align: right;
 }
 
+/* Amiri is the Arabic font of the PDF runners (fonts-hosny-amiri); code keeps its monospace font.
+ * `html` outranks the PDF renderer's own body and heading fonts. */
+html body,
+html h1,
+html h2,
+html h3,
+html h4,
+html h5,
+html h6 {
+  font-family: "Amiri", "Noto Naskh Arabic", "Noto Sans Arabic", serif;
+}
+
 /* Sidebar on the right, content beside it. */
 .wy-nav-side {
   left: auto;

@@ -276,7 +276,16 @@ def build_edition(args: argparse.Namespace, root: Path, manual: dict) -> tuple[P
         plugins: list[object] = ["search"]
         if args.pdf:
             pdf_path.parent.mkdir(parents=True, exist_ok=True)
-            plugins.append({"to-pdf": {"output_path": staged_pdf.name, "cover": True, "toc_title": "Contents"}})
+            pdf_options = {"output_path": staged_pdf.name, "cover": True, "toc_title": "Contents"}
+            if theme_name not in ("material", "mkdocs"):
+                # mkdocs-to-pdf 0.10.1 has handlers only for these two, and its generic fallback logs an error and
+                # takes the wrong arguments, so any other theme failed. This one adds nothing to the pages.
+                (temp / "pdf_theme_handler.py").write_text(
+                    "def get_stylesheet(debug_html):\n    return None\n\n\n"
+                    "def get_script_sources():\n    return []\n\n\n"
+                    "def inject_link(html, href, page, logger, options):\n    return html\n", encoding="utf-8")
+                pdf_options["theme_handler_path"] = "pdf_theme_handler.py"
+            plugins.append({"to-pdf": pdf_options})
         config = {
             "site_name": f"{product} - {AUDIENCE_TITLE.get(args.language, {}).get(args.audience, args.audience)}",
             "nav": build_nav(staged_docs, manual, args.language),
@@ -291,6 +300,15 @@ def build_edition(args: argparse.Namespace, root: Path, manual: dict) -> tuple[P
         }
         config_path = temp / "mkdocs.yml"
         config_path.write_text(yaml.safe_dump(config, sort_keys=False, allow_unicode=True), encoding="utf-8")
+        if args.pdf:
+            # mkdocs-to-pdf rebuilds <html> without the page's lang and dir; its event hook, loaded from the
+            # build folder, restores them so the RTL rules and the Arabic font apply in the PDF too.
+            direction = "rtl" if args.language in rtl_languages else "ltr"
+            (temp / "pdf_event_hook.py").write_text(
+                "def pre_pdf_render(soup, logger):\n"
+                f"    soup.html['lang'] = {args.language!r}\n"
+                f"    soup.html['dir'] = {direction!r}\n"
+                "    return soup\n", encoding="utf-8")
         site_dir.parent.mkdir(parents=True, exist_ok=True)
         command = (
             ["zensical", "build", "--strict", "--config-file", str(config_path)]

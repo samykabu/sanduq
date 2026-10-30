@@ -19,6 +19,13 @@ public repository, upload only an age-encrypted bundle and require the public re
 `USER_MANUAL_PREVIEW_AGE_RECIPIENT` Actions variable; distribute the private key out of band. Never
 upload plaintext Administrator or Technical editions to a public artifact store.
 
+PDF needs WeasyPrint's system libraries and, for Arabic, the Amiri font. On Debian or Ubuntu:
+`libpango-1.0-0 libharfbuzz0b libpangoft2-1.0-0 libharfbuzz-subset0 fonts-hosny-amiri`. The RTL
+stylesheets set Arabic text to `"Amiri", "Noto Naskh Arabic", "Noto Sans Arabic", serif`, and the PDF
+keeps the edition's `lang` and `dir`. A manual created before dev-tools 1.6.0 has its own copies of
+`rtl.css`, `rtl-generic.css` and `rtl-readthedocs.css` in `User-Manual/theme/`, which the build uses
+instead; copy the font rule from the shipped stylesheets into them.
+
 Use `build_manual.py --module <approved-module-id> --pdf` for an on-demand module-specific PDF.
 PDF generation is a deterministic renderer responsibility, so it stays in the core publishing
 script instead of loading a separate reasoning skill.
