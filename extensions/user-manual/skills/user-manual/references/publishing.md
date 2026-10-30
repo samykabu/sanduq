@@ -6,7 +6,7 @@ one `--module`):
 1. **Assemble.** Select the edition's pages, rewrite links between them, copy only the assets they
    reach, and write `edition.json` (title, language, direction, version, pages in reading order, the
    navigation tree, brand values) and `metadata.yml` (title, subtitle, author, `lang`, `dir`,
-   `toc-title`, in the form Pandoc reads). Needs only Python and PyYAML.
+   `toc-title`, in the form Pandoc reads). Needs only Python, PyYAML and markdown-it-py (which tells code examples from links).
 2. **Render** with `renderer.kind` in `manual.yml`. `--renderer` overrides it for one build.
 
 | `renderer.kind` | Output in `site/<version>/<lang>/<audience>/` | Install |

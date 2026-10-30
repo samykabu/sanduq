@@ -548,6 +548,87 @@ class LinkFormTests(unittest.TestCase):
             self.assertEqual({'a.png', 'b c.png', 'd.json'}, {p.name for p in (root / 'out/assets').iterdir()})
 
 
+class FencedCodeTests(unittest.TestCase):
+    """Code examples are never links or syntax to translate."""
+
+    def test_a_code_example_that_looks_like_a_link_is_left_alone(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp).resolve()
+            source = root / 'docs/en'
+            source.mkdir(parents=True)
+            body = ('---\naudiences: [technical]\n---\n```js\nconst routes = {\n  [region]: endpoint,\n};\n'
+                    '![x](gone.png)\n```\n\n- Step:\n  ~~~text\n  [id]: also-gone.md\n  ~~~\n')
+            (source / 'index.md').write_text(body, encoding='utf-8')
+            builder.copy_pages(source, root / 'out', 'technical', None)
+            self.assertEqual(body.split('---\n', 2)[2], (root / 'out/index.md').read_text(encoding='utf-8'))
+
+    def test_list_fences_and_inline_code_spans_do_not_hide_the_rest_of_the_page(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp).resolve()
+            source = root / 'docs/en'
+            (root / 'docs/assets').mkdir(parents=True)
+            (root / 'docs/assets/screen.png').write_bytes(b'x')
+            source.mkdir(parents=True)
+            (source / 'index.md').write_text(
+                '---\naudiences: [end-user]\n---\n- ```text\n  code\n  ```\n\n```example``` is a span.\n\n'
+                '![Screen](../assets/screen.png)\n', encoding='utf-8')
+            builder.copy_pages(source, root / 'out', 'end-user', None)
+            self.assertIn('![Screen](assets/screen.png)', (root / 'out/index.md').read_text(encoding='utf-8'))
+            unclosed = '```\nnever closed\n[x]: y\n'
+            self.assertEqual([(0, len(unclosed))], builder.code_blocks(unclosed), 'CommonMark runs it to the page end')
+            example = '````markdown\n- ```\n````\n'
+            self.assertEqual([(0, len(example))], builder.code_blocks(example + '\nprose\n'),
+                             'a list marker before backticks inside code does not close the block')
+
+    def test_indented_code_and_a_list_items_unclosed_fence_end_where_markdown_ends_them(self):
+        page = ('    ```text\n\n![Screen](../assets/screen.png)\n\n- step\n  ```\n  [x]: y\n\n'
+                '![Again](../assets/screen.png)\n\n```python\nprint(1)\n```\n')
+        blocks = builder.code_blocks(page)
+        self.assertEqual(3, len(blocks), blocks)
+        covered = ''.join(page[start:end] for start, end in blocks)
+        self.assertNotIn('![Screen]', covered)
+        self.assertNotIn('![Again]', covered)
+        self.assertIn('[x]: y', covered)
+
+    def test_a_longer_closing_fence_ends_the_block(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp).resolve()
+            source = root / 'docs/en'
+            (root / 'docs/assets').mkdir(parents=True)
+            (root / 'docs/assets/screen.png').write_bytes(b'x')
+            source.mkdir(parents=True)
+            (source / 'index.md').write_text('---\naudiences: [end-user]\n---\n```\ncode\n````\n\n'
+                                             '![Screen](../assets/screen.png)\n', encoding='utf-8')
+            builder.copy_pages(source, root / 'out', 'end-user', None)
+            self.assertIn('![Screen](assets/screen.png)', (root / 'out/index.md').read_text(encoding='utf-8'))
+            self.assertTrue((root / 'out/assets/screen.png').is_file())
+
+    def test_an_alert_containing_code_is_converted_whole(self):
+        text = '> [!NOTE]\n> Run:\n> ```python\n> print(1)\n> ```\n> Then <details> opens.\n'
+        self.assertEqual('!!! note "Note"\n    Run:\n    ```python\n    print(1)\n    ```\n'
+                         '    Then <details markdown="1"> opens.\n\n', builder.mkdocs_markdown(text, 'en'))
+
+    def test_html_and_svg_assets_keep_every_link_whatever_their_indentation(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp).resolve()
+            source = root / 'docs/en'
+            (root / 'docs/assets').mkdir(parents=True)
+            (root / 'docs/assets/screen.png').write_bytes(b'x')
+            (root / 'docs/assets/flow.svg').write_text(
+                '<svg xmlns="http://www.w3.org/2000/svg">\n\n    <image href="screen.png"/>\n</svg>\n', encoding='utf-8')
+            source.mkdir(parents=True)
+            (source / 'index.md').write_text('---\naudiences: [end-user]\n---\n![Flow](../assets/flow.svg)\n',
+                                             encoding='utf-8')
+            builder.copy_pages(source, root / 'out', 'end-user', None)
+            self.assertTrue((root / 'out/assets/screen.png').is_file())
+
+    def test_mkdocs_translation_skips_code_blocks(self):
+        text = '```markdown\n> [!NOTE]\n> Example.\n<details>\n```\n> [!TIP]\n> Real.\n'
+        converted = builder.mkdocs_markdown(text, 'en')
+        self.assertTrue(converted.startswith('```markdown\n> [!NOTE]\n> Example.\n<details>\n```\n'), converted)
+        self.assertIn('!!! tip "Tip"', converted)
+
+
 class BrandTests(unittest.TestCase):
     def test_the_title_defaults_to_the_product_and_a_missing_logo_fails(self):
         with tempfile.TemporaryDirectory() as tmp:

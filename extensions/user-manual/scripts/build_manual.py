@@ -27,8 +27,9 @@ from urllib.parse import unquote, urlsplit
 
 try:
     import yaml
-except ImportError:
-    raise SystemExit("PyYAML is required; install User-Manual/requirements.lock")
+    from markdown_it import MarkdownIt
+except ImportError as missing:
+    raise SystemExit(f"{missing.name} is required; install User-Manual/requirements.lock")
 
 
 RENDERERS = ("markdown", "command", "mkdocs")
@@ -53,6 +54,26 @@ LINK = re.compile(
     r'|(?P<hb>(?:src|href)=["\'])(?P<hv>[^"\']+)(?P<ha>["\'])',
     re.M,
 )
+COMMONMARK = MarkdownIt("commonmark")
+
+
+def code_blocks(text: str) -> list[tuple[int, int]]:
+    """(start, end) offsets of the fenced and indented code blocks of a page, found by a CommonMark parser (the
+    block rules GitHub uses, list items and unclosed fences included), so code examples are never read as
+    links or syntax."""
+    starts = [0] + [match.end() for match in re.finditer("\n", text)]
+    offset = lambda line: starts[line] if line < len(starts) else len(text)  # noqa: E731
+    return [(offset(token.map[0]), offset(token.map[1])) for token in COMMONMARK.parse(text)
+            if token.type in ("fence", "code_block") and token.map]
+
+
+def outside_fences(text: str, change) -> str:
+    """`change` applied to the text outside code blocks; the blocks stay exactly as written."""
+    parts, at = [], 0
+    for start, end in code_blocks(text):
+        parts += [change(text[at:start]), text[start:end]]
+        at = end
+    return "".join(parts + [change(text[at:])])
 
 
 def copy_pages(source: Path, target: Path, audience: str, module: str | None, page_suffix: str = ".md",
@@ -121,7 +142,9 @@ def copy_pages(source: Path, target: Path, audience: str, module: str | None, pa
             if titles is not None and title:
                 titles[output.relative_to(target).as_posix()] = str(title)
             text = text.split("---\n", 2)[2].lstrip("\n")
-        output.write_text(LINK.sub(link, text), encoding="utf-8")
+        # Only a Markdown page has code blocks; every link in an HTML or SVG asset is processed.
+        output.write_text(outside_fences(text, lambda part: LINK.sub(link, part)) if path.suffix == ".md"
+                          else LINK.sub(link, text), encoding="utf-8")
 
     for page in sorted(selected):
         copy(page)
@@ -434,16 +457,26 @@ ALERT_TITLE = {
 
 def mkdocs_markdown(text: str, language: str) -> str:
     """GitHub-flavoured constructs in the form MkDocs renders: alerts as admonitions, and `<details>`
-    blocks marked so the Markdown inside them is rendered (md_in_html).
-    shortcut: an alert or <details> written inside a fenced code block is converted too."""
+    blocks marked so the Markdown inside them is rendered (md_in_html). A construct shown inside a code
+    example stays as written; an alert that contains a code example is converted whole."""
     titles = ALERT_TITLE.get(language, ALERT_TITLE["en"])
+    blocks = code_blocks(text)
+
+    def in_code(match: re.Match) -> bool:
+        return any(start <= match.start() < end for start, end in blocks)
 
     def alert(match: re.Match) -> str:
+        if in_code(match):
+            return match.group(0)
         body = [re.sub(r"^> ?", "", line) for line in match.group(2).splitlines()]
         lines = "".join(("    " + line if line.strip() else "") + "\n" for line in body)
         return f'!!! {ADMONITION[match.group(1)]} "{titles[match.group(1)]}"\n{lines}\n'
 
-    return re.sub(r"<details(?![^>]*\bmarkdown=)", '<details markdown="1"', ALERT.sub(alert, text))
+    # <details> first: an alert's converted body is indented, which a parser would read as indented code.
+    text = re.sub(r"<details(?![^>]*\bmarkdown=)",
+                  lambda match: match.group(0) if in_code(match) else '<details markdown="1"', text)
+    blocks = code_blocks(text)
+    return ALERT.sub(alert, text)
 
 
 PDF_COVER = (

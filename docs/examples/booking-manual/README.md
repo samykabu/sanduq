@@ -12,7 +12,7 @@ From the Sanduq repository root, create an isolated renderer environment:
 
 ```powershell
 python -m venv dist/manual-renderer
-dist/manual-renderer/Scripts/python -m pip install -r extensions/user-manual/assets/scaffold/requirements.lock
+dist/manual-renderer/Scripts/python -m pip install -r extensions/user-manual/assets/scaffold/requirements-mkdocs.lock
 ```
 
 The gallery runner needs PyYAML, Playwright, and installed Chromium in its own Python environment.

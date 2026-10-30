@@ -15,7 +15,7 @@ Install only the tools your [adoption level](../reference/glossary.md#adoption-l
 | GitHub CLI (`gh`) with Project scopes | Workflow, Scope (required); Project, PR (optional) | Unverified |
 | GitHub Project (v2) board with seven statuses | Managed Workflow ([board setup](../scenarios/managed-workflow.md#board)) | Live runs on Claude Code |
 | Playwright and Chromium | Illustrate PNG export; User Manual screenshots | Playwright 1.63.0 |
-| PyYAML; MkDocs, Material for MkDocs and the PDF libraries only for the MkDocs renderer | User Manual builds (`markdown` and `command` renderers need only PyYAML and your own tool) | Material 9.7.6, `mkdocs-to-pdf` 0.10.1 |
+| PyYAML and markdown-it-py; MkDocs, Material for MkDocs and the PDF libraries only for the MkDocs renderer | User Manual builds (`markdown` and `command` renderers need only those two and your own tool) | Material 9.7.6, `mkdocs-to-pdf` 0.10.1 |
 | `age` | User Manual previews in a public repository | Unverified |
 | SuperSpec | Workflow, optional task generator and executor | 1.0.2, commit `c20ac6c` |
 | Superpowers Bridge | Optional; Workflow routes around an existing Bridge run | Unverified |
@@ -123,7 +123,7 @@ User Manual Init writes three install files. Install the one your `renderer.kind
 
 | File | Pins | For |
 | --- | --- | --- |
-| `requirements.lock` | `PyYAML` | Every build; enough for the `markdown` (default) and `command` renderers |
+| `requirements.lock` | `PyYAML` and `markdown-it-py` | Every build; enough for the `markdown` (default) and `command` renderers |
 | `requirements-mkdocs.lock` | adds `mkdocs` (1.6 or later, below 2) and `mkdocs-material` 9.7.6 | The `mkdocs` renderer's HTML site |
 | `requirements-pdf.lock` | adds `mkdocs-to-pdf` 0.10.1 | `--pdf` with the `mkdocs` renderer |
 

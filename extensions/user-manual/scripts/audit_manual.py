@@ -12,8 +12,9 @@ from urllib.parse import unquote
 
 try:
     import yaml
-except ImportError:
-    raise SystemExit("PyYAML is required; install User-Manual/requirements.lock")
+    from markdown_it import MarkdownIt
+except ImportError as missing:
+    raise SystemExit(f"{missing.name} is required; install User-Manual/requirements.lock")
 
 AUDIENCES = {"end-user", "administrator", "technical"}
 CONTENT_TYPES = {"tutorial", "how-to", "reference", "explanation", "release-notes", "migration-guide"}
@@ -21,6 +22,19 @@ REQUIRED_META = {"title", "module", "audiences", "language", "content_type", "so
 SECRET = re.compile(r"(?i)(api[_-]?key|client[_-]?secret|password|access[_-]?token|refresh[_-]?token)\s*[:=]\s*[\"']?([^\s\"']{8,})")
 # Inline links and images (optional "title", <angle-bracketed> targets) and reference definitions.
 LINK = re.compile(r'!?\[[^\]]*\]\((<[^>\n]+>|[^\s)]+)(?:\s+"[^"\n]*")?\)|^[ ]{0,3}\[(?!\^)[^\]\n]+\]:[ \t]*(<[^>\n]+>|\S+)', re.M)
+COMMONMARK = MarkdownIt("commonmark")
+
+
+def prose_only(text: str) -> str:
+    """The page with its fenced and indented code blocks blanked out (line count kept), found by a CommonMark
+    parser as build_manual.code_blocks does: code examples are never links or syntax to check."""
+    lines = text.split("\n")
+    for token in COMMONMARK.parse(text):
+        if token.type in ("fence", "code_block") and token.map:
+            lines[token.map[0]:token.map[1]] = [""] * (token.map[1] - token.map[0])
+    return "\n".join(lines)
+
+
 # MkDocs-only syntax shows as raw text on GitHub; each has a GitHub form the build translates.
 MKDOCS_ONLY = (
     (re.compile(r"^[ \t]*(?:!!!|\?\?\?\+?)[ \t]+\w", re.M), 'a GitHub alert ("> [!NOTE]", "> [!WARNING]", ...) or <details>'),
@@ -104,10 +118,11 @@ def main() -> None:
             value = match.group(2).lower()
             if not any(marker in value for marker in ("redacted", "example", "placeholder", "<", "${")):
                 errors.append(f"{relative}: possible secret assigned to {match.group(1)}")
+        prose = prose_only(body)
         for pattern, replacement in MKDOCS_ONLY:
-            if pattern.search(body):
+            if pattern.search(prose):
                 warnings.append(f"{relative}: MkDocs-only syntax shows as raw text on GitHub; use {replacement}")
-        for match in LINK.finditer(body):
+        for match in LINK.finditer(prose):
             target = (match.group(1) or match.group(2)).strip("<>")
             clean = target.split("#", 1)[0].split("?", 1)[0]
             if not clean or re.match(r"^[a-z]+://", clean) or clean.startswith(("mailto:", "#")):
