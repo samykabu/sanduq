@@ -92,16 +92,14 @@ Skills have no dependencies on each other. Each skill checks its own tools when 
   [compatibility](../reference/compatibility.md).
 - Skills do not add lifecycle hooks. For hooks, use the extensions.
 
-## The eight skills
+## The four skills
 
 ### Contents
 
 - [Illustrate](#illustrate)
-- [User Manual](#user-manual)
-- [API documentation](#user-manual-api-docs)
-- [Release documentation](#user-manual-release-docs)
-- [UI screenshots](#user-manual-ui-screenshots)
-- [Preview publishing](#user-manual-preview-publishing)
+- [User Manual](#user-manual), including [API documentation](#api-documentation),
+  [release documentation](#release-documentation), [UI screenshots](#ui-screenshots) and
+  [previews](#previews-and-releases)
 - [Delegate Task](#delegate-task)
 - [Progress Report](#progress-report)
 
@@ -160,7 +158,10 @@ approval, create the manual, including refund request and approval tutorials. Us
 ```
 
 Expected result: `User-Manual/manual.yml`, approved modules, audience-specific Markdown, asset
-coverage, and an audit. Build HTML/PDF through the skill's scripts after the audit passes. Newly
+coverage, and an audit. Pages use GitHub's own syntax, so they read correctly on GitHub. After the
+audit passes, the build assembles each edition and renders it with `renderer.kind` in `manual.yml`:
+`markdown` (the default), `command` (your own tool and templates, such as Pandoc or Quarto), or
+`mkdocs` (an HTML site and PDF). Newly
 discovered modules remain proposed until approved. Document evidenced entities, columns,
 relationships, constraints, and enumerations in the technical edition.
 
@@ -173,16 +174,20 @@ report unresolved coverage gaps.
 ```
 
 The core scripts are `init_manual.py`, `audit_manual.py`, and `build_manual.py` in the installed
-skill's `scripts/` directory. Install its pinned build requirements before rendering.
+skill's `scripts/` directory. Install `User-Manual/requirements.lock`, plus
+`requirements-mkdocs.lock` or `requirements-pdf.lock` for the MkDocs renderer.
 
-## user-manual-api-docs
+The same skill handles the specialised work below. It loads the matching reference only when the
+task needs it; the prompts start with `$user-manual`.
 
-Use this module when a contract or API reference is the main task. It inventories callers and
+### API documentation
+
+Use this when a contract or API reference is the main task. It inventories callers and
 audiences before rendering; an `/api/` route does not establish public access.
-[Source](https://github.com/samykabu/sanduq-skills/blob/main/skills/dev-tools/skills/user-manual-api-docs/SKILL.md).
+[Source](https://github.com/samykabu/sanduq-skills/blob/main/skills/dev-tools/skills/user-manual/references/api-docs.md).
 
 ```text
-$user-manual-api-docs Document refund requests and approval from our checked-in contracts and
+$user-manual Document refund requests and approval from our checked-in contracts and
 tests. Put customer operations in the appropriate edition and operator approval in the secured
 administrator reference. Include synthetic payloads, permission failures, and duplicate approval.
 ```
@@ -192,13 +197,13 @@ concepts, parameters, responses, and evidenced errors. Internal/debug operations
 public output. If contracts are unreliable, label the reference a draft and record the gap.
 Supported surfaces include OpenAPI, AsyncAPI, GraphQL, RPC, webhooks, and code APIs.
 
-## user-manual-release-docs
+### Release documentation
 
-Use this module for release-visible changes or an upgrade requiring action.
-[Source](https://github.com/samykabu/sanduq-skills/blob/main/skills/dev-tools/skills/user-manual-release-docs/SKILL.md).
+Use this for release-visible changes or an upgrade requiring action.
+[Source](https://github.com/samykabu/sanduq-skills/blob/main/skills/dev-tools/skills/user-manual/references/release-docs.md).
 
 ```text
-$user-manual-release-docs Compare the booking application's actual v2.4.0 and v3.0.0 tags.
+$user-manual Compare the booking application's actual v2.4.0 and v3.0.0 tags.
 Document delivered refund approval changes for customers, operators, and technical readers.
 Create migration instructions only where contracts, schemas, or configuration require action.
 Include verification and evidenced rollback steps.
@@ -208,13 +213,13 @@ Expected result: audience-specific release notes and, when needed, a migration g
 who must act, rollout order, and success checks. Stop and report missing tags or evidence rather
 than inventing release dates, compatibility promises, or migration steps.
 
-## user-manual-ui-screenshots
+### UI screenshots
 
-Use this module when a manual needs repeatable UI evidence.
-[Source](https://github.com/samykabu/sanduq-skills/blob/main/skills/dev-tools/skills/user-manual-ui-screenshots/SKILL.md).
+Use this when a manual needs repeatable UI evidence.
+[Source](https://github.com/samykabu/sanduq-skills/blob/main/skills/dev-tools/skills/user-manual/references/ui-screenshots.md).
 
 ```text
-$user-manual-ui-screenshots Use our existing UI runner to capture refund requested, approved,
+$user-manual Use our existing UI runner to capture refund requested, approved,
 rejected, and permission-denied states. Use deterministic synthetic bookings. Fix viewport,
 locale, timezone, fonts, theme, and reduced motion; capture English and Arabic only when enabled.
 Mask personal data and add task-focused captions and alt text.
@@ -224,13 +229,13 @@ Expected result: a role/state capture matrix, images under their owning module/l
 coverage metadata tied to source tests. Prefer the existing Playwright runner for web; use the
 existing mobile runner for native apps. A missing runnable application is an evidence gap.
 
-## user-manual-preview-publishing
+### Previews and releases
 
-Use this module to configure or repair preview and release delivery.
-[Source](https://github.com/samykabu/sanduq-skills/blob/main/skills/dev-tools/skills/user-manual-preview-publishing/SKILL.md).
+Use this to configure or repair preview and release delivery.
+[Source](https://github.com/samykabu/sanduq-skills/blob/main/skills/dev-tools/skills/user-manual/references/preview-publishing.md).
 
 ```text
-$user-manual-preview-publishing Prepare private CI preview artifacts for the refund manual PR.
+$user-manual Prepare private CI preview artifacts for the refund manual PR.
 Read User-Manual/manual.yml before considering hosted previews. Use only an approved provider;
 keep Administrator and Technical editions authenticated and update the existing PR comment.
 ```

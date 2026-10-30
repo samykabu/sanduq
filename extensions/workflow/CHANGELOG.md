@@ -1,5 +1,9 @@
 # Changelog
 
+## [2.2.0] - 2026-10-30
+
+- Requires User Manual 2.x (`>=2.0,<3`) and pins User Manual 2.0.0: Markdown-first editions with pluggable renderers (`markdown`, `command`, `mkdocs`) and one `user-manual` skill. Workflow's own behaviour is unchanged; a project on User Manual 1.x upgrades it with Workflow.
+
 ## [2.1.1] - 2026-10-30
 
 - Depends on User Manual 1.9.1 (PDF cover without "None", contents heading in the edition's language). No behaviour change.

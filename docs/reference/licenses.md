@@ -19,7 +19,7 @@ carries its own `LICENSE` file, and each built package ships it.
 | `workflow` | Preset | MIT ([LICENSE](../../presets/workflow/LICENSE)) |
 | `scope-gate` | Preset | MIT ([LICENSE](../../presets/scope-gate/LICENSE)) |
 | `scope-brainstorm` | Preset | MIT ([LICENSE](../../presets/scope-brainstorm/LICENSE)) |
-| Illustrate, User Manual (5 skills), Delegate Task, Progress Report | Portable skills in [sanduq-skills](https://github.com/samykabu/sanduq-skills) | MIT |
+| Illustrate, User Manual, Delegate Task, Progress Report | Portable skills in [sanduq-skills](https://github.com/samykabu/sanduq-skills) | MIT |
 
 The repository itself is covered by the root [LICENSE](../../LICENSE) (MIT).
 

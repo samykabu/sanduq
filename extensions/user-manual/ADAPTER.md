@@ -1,7 +1,7 @@
 # Portable to extension adapter
 
-The portable skills in [samykabu/sanduq-skills](https://github.com/samykabu/sanduq-skills)
-(`skills/dev-tools/skills/user-manual*`) are the canonical source. `extensions/scripts/vendor.py`
+The portable `user-manual` skill in [samykabu/sanduq-skills](https://github.com/samykabu/sanduq-skills)
+(`skills/dev-tools/skills/user-manual`) is the canonical source. `extensions/scripts/vendor.py`
 copies the files in section 1 byte for byte and applies the rewrites in section 2; the pinned commit
 and file hashes are in `vendor.lock.json`. Files in sections 3 to 5 are owned here. Paths in the
 "Portable" column are relative to `skills/dev-tools/skills/` in sanduq-skills; paths in the
@@ -15,12 +15,9 @@ stored as `SKILL.ext.md` and restored to `SKILL.md` by `extensions/scripts/packa
 | `user-manual/scripts/audit_manual.py` | `scripts/audit_manual.py` |
 | `user-manual/scripts/build_manual.py` | `scripts/build_manual.py` |
 | `user-manual/tests/test_build_manual.py` | `tests/test_build_manual.py` |
+| `user-manual/tests/test_audit_manual.py` | `tests/test_audit_manual.py` |
 | `user-manual/assets/scaffold/**` | `assets/scaffold/**` |
-| `user-manual/references/*.md` | `skills/user-manual/references/*.md` |
-| `user-manual-api-docs/references/*.md` | `skills/api-docs/references/*.md` |
-| `user-manual-preview-publishing/references/*.md` | `skills/preview-publishing/references/*.md` |
-| `user-manual-release-docs/references/*.md` | `skills/release-docs/references/*.md` |
-| `user-manual-ui-screenshots/references/*.md` | `skills/ui-screenshots/references/*.md` |
+| `user-manual/references/*.md` (including the API, release, screenshot and preview references) | `skills/user-manual/references/*.md` |
 
 ## 2. Content rewrites
 
@@ -36,11 +33,7 @@ stored as `SKILL.ext.md` and restored to `SKILL.md` by `extensions/scripts/packa
 | Extension file | Portable counterpart | Reason |
 | --- | --- | --- |
 | `scripts/manual_state.py` | `user-manual/scripts/manual_state.py` | Extension delegates to the shared `sanduq_freshness` helper (Spec Kit feature dirs, Workflow checkpoint `target_branch` default for `--base-ref`, `.specify/` and `workflow/`/`evidence/` exclusions, `tasks.md` checkbox normalization, `sanduq_hash.portable_files` EOL handling). Portable is a self-contained equivalent with the same CLI (`record`/`status`, `--feature`, `--repo-root`, `--base-ref`, `--output`, `--summary`, `--json`), state schema 2 shape and exit codes |
-| `skills/user-manual/SKILL.md` | `user-manual/SKILL.md` | Front matter `description` names `speckit.user-manual.init/analyze/update/release`; routes to companions by `../api-docs/SKILL.md` etc.; no standalone/workflow section, no example, rule 7 names Illustrate. Portable is standalone, routes to `user-manual-*` skills, documents `scripts/*.py`, `User-Manual/tools/` and has rule 9 (cross-audience links) |
-| `skills/api-docs/SKILL.md` | `user-manual-api-docs/SKILL.md` | `name: api-docs`; Spec Kit wording ("add a task"); no example |
-| `skills/preview-publishing/SKILL.md` | `user-manual-preview-publishing/SKILL.md` | `name: preview-publishing`; no example |
-| `skills/release-docs/SKILL.md` | `user-manual-release-docs/SKILL.md` | `name: release-docs`; grounds items in Spec Kit artifacts; no example |
-| `skills/ui-screenshots/SKILL.md` | `user-manual-ui-screenshots/SKILL.md` | `name: ui-screenshots`; no example |
+| `skills/user-manual/SKILL.md` | `user-manual/SKILL.md` | Front matter `description` names `speckit.user-manual.init/analyze/update/release`; no standalone/workflow section, no example, rule 7 names Illustrate. Portable is standalone, documents `scripts/*.py`, `User-Manual/tools/`, a routing table and rule 9 (cross-audience links). Both route API, release, screenshot and preview work to the same `references/*.md` files |
 | `tests/test_manual_state.py` | `user-manual/tests/test_manual_state.py` | Tests the checkpoint `--base-ref` default (Spec Kit only) |
 
 ## 4. Portable-only files (drop in the extension build)

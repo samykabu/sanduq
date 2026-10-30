@@ -155,7 +155,7 @@ when Scope is installed without the full managed workflow. Their public command 
 
 ## Portable skills
 
-Use the [standalone skill guide](../scenarios/skills-only.md) for all eight skills, their setup, expected outputs, and refund examples. Internal extension skills are mapped in the [command reference](../reference/commands.md#internal-skills-and-overlays).
+Use the [standalone skill guide](../scenarios/skills-only.md) for all four skills, their setup, expected outputs, and refund examples. Internal extension skills are mapped in the [command reference](../reference/commands.md#internal-skills-and-overlays).
 
 ## Keep customizations through upgrades
 

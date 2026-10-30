@@ -1,0 +1,9 @@
+# What every renderer shows: the HTML site, the PDF cover, and the metadata a renderer command reads.
+# Paths are relative to User-Manual/. Remove a line to leave it out.
+title: null        # defaults to product_name in manual.yml
+subtitle: null     # defaults to the edition's audience, e.g. "User Guide"
+author: null
+copyright: null
+logo: null         # e.g. theme/logo.svg
+colors:
+  primary: null    # e.g. "#1f6f78"

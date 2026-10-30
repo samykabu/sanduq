@@ -25,10 +25,16 @@ jobs:
         with:
           python-version: "__sanduq_python_version__"
           cache: pip
-          cache-dependency-path: User-Manual/requirements.lock
+          cache-dependency-path: User-Manual/requirements*.lock
       # sanduq:endif
-      - name: Install documentation toolchain
-        run: python -m pip install -r User-Manual/requirements.lock
+      - name: Install the manual tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install -r User-Manual/requirements.lock
+          kind="$(python .specify/extensions/user-manual/scripts/build_manual.py --root User-Manual --print-renderer)"
+          # A renderer command's own tool is installed on the runner (or in a step here).
+          if [ "$kind" = mkdocs ]; then python -m pip install -r User-Manual/requirements-mkdocs.lock; fi
       - name: Audit manual
         run: python .specify/extensions/user-manual/scripts/audit_manual.py --root User-Manual
       - name: Build private previews

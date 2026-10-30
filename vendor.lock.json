@@ -584,6 +584,10 @@
           "extensions/user-manual/tests/test_build_manual.py"
         ],
         [
+          "skills/dev-tools/skills/user-manual/tests/test_audit_manual.py",
+          "extensions/user-manual/tests/test_audit_manual.py"
+        ],
+        [
           "skills/dev-tools/skills/user-manual/assets/scaffold",
           "extensions/user-manual/assets/scaffold"
         ],
@@ -598,22 +602,6 @@
         [
           "skills/dev-tools/skills/user-manual/references",
           "extensions/user-manual/skills/user-manual/references"
-        ],
-        [
-          "skills/dev-tools/skills/user-manual-api-docs/references",
-          "extensions/user-manual/skills/api-docs/references"
-        ],
-        [
-          "skills/dev-tools/skills/user-manual-preview-publishing/references",
-          "extensions/user-manual/skills/preview-publishing/references"
-        ],
-        [
-          "skills/dev-tools/skills/user-manual-release-docs/references",
-          "extensions/user-manual/skills/release-docs/references"
-        ],
-        [
-          "skills/dev-tools/skills/user-manual-ui-screenshots/references",
-          "extensions/user-manual/skills/ui-screenshots/references"
         ]
       ],
       "replace": {
@@ -640,34 +628,41 @@
           ]
         ]
       },
-      "ref": "dev-tools-v1.6.1",
-      "sha": "7c90a556b55ee1e8264178f6c1ca72fee3b351a5",
+      "ref": "dev-tools-v2.0.2",
+      "sha": "93539aed14c3020718d6ddf456485eebb4783668",
       "files": {
-        "extensions/user-manual/assets/github/user-manual-preview.yml": "88d70609f3f3b43672039aa69f5c58489e9e5d224b8f31db1b765a563bd47b90",
-        "extensions/user-manual/assets/github/user-manual-release.yml": "40558696a70108ec04ec4f42d479052ac194965a8c6b135d5da903c352fadb2b",
-        "extensions/user-manual/assets/scaffold/mkdocs.yml": "4d6bafb26cc87fd8d7d85d3ee4e5432c6cd8a8c30b32ab06b55b6240069bc49a",
-        "extensions/user-manual/assets/scaffold/requirements.lock": "9a98e75e93ce67646c539bdeda33700bdf71031487650e42dbc31b7acd441b3d",
+        "extensions/user-manual/assets/github/user-manual-preview.yml": "065fc4ad322ce26725bc3035bbedf5485a71ce33e560607a860f99edd7c2b35b",
+        "extensions/user-manual/assets/github/user-manual-release.yml": "787595b30b10cb74f9a9bc8fafcc63dc23b2824d764f7ac520183aed64c01d32",
+        "extensions/user-manual/assets/scaffold/brand.yml": "b7f245b9057fee12bc0f628e2715aaf13b362f97ee50cd7381854cbd5fa64277",
+        "extensions/user-manual/assets/scaffold/requirements-mkdocs.lock": "686b90dba04d61dc7560cb0828adbe994ee6cc0fdc83d1fce52973517a8d706f",
+        "extensions/user-manual/assets/scaffold/requirements-pdf.lock": "8ff967373ea342842bdf624182133ce699039475f133797e83dc305b27755f6d",
+        "extensions/user-manual/assets/scaffold/requirements.lock": "bdfc5fa743f39a9f0a20f835a8b65e64384d502dbf73519ba2f9fc434a41581a",
         "extensions/user-manual/assets/scaffold/theme/extra.css": "3bace34e967f52f172a0bb2e3bd998274d832ec2fac3a4b04d968a53416d6ec9",
         "extensions/user-manual/assets/scaffold/theme/print.css": "a46c4bbfd9ba11d26b7543535cbc797c227434ddbcfc04a457be7c6b62260ff1",
         "extensions/user-manual/assets/scaffold/theme/rtl-generic.css": "f9b122e94393682cc7248ec04d660b895f204b7f57c8410784ff889c48ac0e97",
         "extensions/user-manual/assets/scaffold/theme/rtl-readthedocs.css": "9aa1eb1a353624199d63b44d222aae2dda03286a5ae7db0f686eed1bac132a1f",
-        "extensions/user-manual/assets/scaffold/theme/rtl.css": "14319bf237f750394435d975a617dd346f4b664f6794a8636e854e94416a90c0",
+        "extensions/user-manual/assets/scaffold/theme/rtl.css": "2889ae04e84456e90f1ff85dd2e13d614b0e1dc2a0ce85d270e2098ef9f9560b",
         "extensions/user-manual/assets/scaffold/theme/theme-readthedocs.css": "a02ecd1df0b52bfc2dc829845d54263176dd8205a751f28093d50eb4721316e2",
-        "extensions/user-manual/scripts/audit_manual.py": "8850b645a531ce8f11402865e2140f2608d2a99bf6ee8536500472e644f3a9b5",
-        "extensions/user-manual/scripts/build_manual.py": "42ee6c77d72b5ee75798e59b7d112afaaf696cc226aa5715175d67f1af7e022f",
-        "extensions/user-manual/scripts/init_manual.py": "3fe43df0ac73defb48458c720c360505b406e17c8d9b1717b1b296449b4aab3a",
-        "extensions/user-manual/skills/api-docs/references/openapi.md": "d4ff6e032f9f7d5321008959fc67edd999b1fe60a72236abf80d4dcb944a29ab",
-        "extensions/user-manual/skills/preview-publishing/references/provider-contract.md": "1609a1ba809049bfe7959dc727f34151edd3fda1db8c8c9211d0bdddab83ecb3",
-        "extensions/user-manual/skills/release-docs/references/migration-guides.md": "4c3d0634a3871937cf8abe78bdc8d059162bdf9b822f536b9618e12d3e5aa01c",
-        "extensions/user-manual/skills/release-docs/references/release-notes.md": "5c336d567226e035f97b31c42e49a2485e2c5ec275a46d99b935d7379cbc48af",
-        "extensions/user-manual/skills/ui-screenshots/references/capture-matrix.md": "0d9292d6e53e821385864ce5f3828068e19d7730a6db1cade6f7b59c06ee6e9c",
+        "extensions/user-manual/scripts/audit_manual.py": "9aff40c1a29254df8cfbec54ac9c3c4af202a34193f2d9f4350583671d1b0be1",
+        "extensions/user-manual/scripts/build_manual.py": "6434f280f5fc182b5a8512a8668b6321dfa2fb3f48dfabbdc0bb887d36dfcd70",
+        "extensions/user-manual/scripts/init_manual.py": "81c10e20af74454d5cbf90344818cc5c406c222a4c3ecd60944025b9232fa3f2",
+        "extensions/user-manual/skills/user-manual/references/api-docs.md": "c83927def1cf8bc1a3268e46cb30f0906bd18d29252f2428565b77b7a3c88cc1",
         "extensions/user-manual/skills/user-manual/references/audience-language.md": "0d0aa9b6c8adf1c684b9becba154685105f9ac626252572db3decc3c8c3aa879",
-        "extensions/user-manual/skills/user-manual/references/content-model.md": "1e3ea3b54f941a7b9a2b59007c3e9dd36f0a051c85ecaae0fcb54a5faca64cc6",
+        "extensions/user-manual/skills/user-manual/references/capture-matrix.md": "0d9292d6e53e821385864ce5f3828068e19d7730a6db1cade6f7b59c06ee6e9c",
+        "extensions/user-manual/skills/user-manual/references/content-model.md": "97acdb18fe8effa31a4192e200fc0729b7a23c17d88b2975e26af50dbf544d21",
         "extensions/user-manual/skills/user-manual/references/data-reference.md": "abdccf95a36d5d1b2ee8fae72e42963ff3b130e3ce4f4f14d99c3046a5a458c4",
         "extensions/user-manual/skills/user-manual/references/discovery.md": "f03f42065f3dbc46a8ae072c680874bfe9cd7e28d81ca971824d19a9e242e5ac",
         "extensions/user-manual/skills/user-manual/references/incremental-update.md": "d66ef41177737e25365511719ffe7079e363a67ae42dc4c90338edcb3d33d0ed",
-        "extensions/user-manual/skills/user-manual/references/publishing.md": "342c76a3f4225e777f7433993c7d8e3f1faed18db1fa92e5af75d5620e2e2c3c",
-        "extensions/user-manual/tests/test_build_manual.py": "26bbd6864b9ee6e5e3a482913c175033c9b5c39a9b6df767641e6532fd89f061"
+        "extensions/user-manual/skills/user-manual/references/migration-guides.md": "4c3d0634a3871937cf8abe78bdc8d059162bdf9b822f536b9618e12d3e5aa01c",
+        "extensions/user-manual/skills/user-manual/references/openapi.md": "d4ff6e032f9f7d5321008959fc67edd999b1fe60a72236abf80d4dcb944a29ab",
+        "extensions/user-manual/skills/user-manual/references/preview-publishing.md": "76cafe10c45c13e1f3941fefbe5d28b856a8229c6e54ca2782e8e6e199dad3a4",
+        "extensions/user-manual/skills/user-manual/references/provider-contract.md": "1609a1ba809049bfe7959dc727f34151edd3fda1db8c8c9211d0bdddab83ecb3",
+        "extensions/user-manual/skills/user-manual/references/publishing.md": "b841fc86cad6f2f858c33a2878263bffccd5f571142da1ff8153f188a13c7c12",
+        "extensions/user-manual/skills/user-manual/references/release-docs.md": "dbf02f814c4d271aefb675e84ca364fd6e20e61e2ba9bcf06076e2289287418d",
+        "extensions/user-manual/skills/user-manual/references/release-notes.md": "5c336d567226e035f97b31c42e49a2485e2c5ec275a46d99b935d7379cbc48af",
+        "extensions/user-manual/skills/user-manual/references/ui-screenshots.md": "9f969072acfeaac597457847a3990373e6a7e5786a90d95bb0b7d0e4bcd04c1a",
+        "extensions/user-manual/tests/test_audit_manual.py": "b36fe76490aee47f539d4686d149852dae10961e5e9b03162d54a162c481481e",
+        "extensions/user-manual/tests/test_build_manual.py": "7fb8ec85a42619e3e643e645e1a6f04db00a8c759311ffa3422b5bdb326c999a"
       }
     },
     "progress-report": {

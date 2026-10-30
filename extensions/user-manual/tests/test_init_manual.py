@@ -33,7 +33,7 @@ class InitManualTest(unittest.TestCase):
         self.init()
         self.assertEqual(home.read_text(encoding='utf-8'), '# My authored home page\n')
 
-    def test_fresh_run_writes_the_stub_modules_and_css(self):
+    def test_fresh_run_writes_the_stub_modules_brand_file_and_markdown_renderer(self):
         self.init('--enable-arabic')
         for language in ('en', 'ar'):
             with self.subTest(language=language):
@@ -41,9 +41,11 @@ class InitManualTest(unittest.TestCase):
                 self.assertIn('title: "Shop"', home)
                 self.assertIn(f'language: {language}', home)
                 self.assertTrue((self.manual / f'docs/{language}/modules/billing/index.md').is_file())
-                self.assertTrue((self.manual / f'docs/{language}/assets/stylesheets/extra.css').is_file())
-        self.assertIn('id: "billing"', (self.manual / 'manual.yml').read_text(encoding='utf-8'))
-        self.assertTrue((self.manual / 'theme/rtl.css').is_file())
+        config = (self.manual / 'manual.yml').read_text(encoding='utf-8')
+        self.assertIn('id: "billing"', config)
+        self.assertIn('  kind: markdown\n', config)
+        self.assertTrue((self.manual / 'theme/brand.yml').is_file())
+        self.assertFalse((self.manual / 'theme/rtl.css').exists(), 'the build uses the shipped stylesheets')
         self.assertTrue((self.root / '.github/workflows/user-manual-preview.yml').is_file())
         # The command passes --no-tools: the extension runs its scripts from .specify/extensions/user-manual/.
         self.assertFalse((self.manual / 'tools').exists())

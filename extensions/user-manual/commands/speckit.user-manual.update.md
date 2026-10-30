@@ -56,7 +56,7 @@ Flags: `--feature <path>`, `--full`, `--module <id>`, `--skip-runtime`, `--no-bu
    `python .specify/extensions/user-manual/scripts/build_manual.py --all` once; it builds every
    configured audience and language. Deploy an ephemeral preview only when `manual.yml` names an
    approved provider; in that case add `--archive` to that build (the provider publishes the
-   archives; CI builds its own), load `skills/preview-publishing/SKILL.md`, validate its
+   archives; CI builds its own), read `skills/user-manual/references/preview-publishing.md`, validate its
    checked-in provider descriptor, and preserve the private artifact even when hosted deployment
    succeeds or is skipped.
 9. Record freshness:

@@ -108,7 +108,7 @@ class Bench:
             p.write_text('schema_version: "1.0"\n', encoding='utf-8')
         w.write(root / '.specify/presets/.registry',
                 {'presets': {p: {'enabled': True} for p in ('workflow', 'scope-gate', 'scope-brainstorm')}})
-        versions = {'project': '2.2.0', 'pr': '4.2.0', 'assure': '2.2.0', 'user-manual': '1.2.0'}
+        versions = {'project': '2.2.0', 'pr': '4.2.0', 'assure': '2.2.0', 'user-manual': '2.0.0'}
         if 'scope' in w.RANGES:  # a Workflow from before 2.0.0 needs the separate Scope package
             versions['scope'] = '1.11.0'
         w.write(root / '.specify/extensions/.registry',

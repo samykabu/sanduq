@@ -3,7 +3,7 @@
   "repository": "https://github.com/samykabu/sanduq",
   "required": {
     "project": "2.7.2",
-    "pr": "4.7.5",
+    "pr": "4.7.6",
     "illustrate": "2.7.3"
   },
   "selected": {
@@ -11,7 +11,7 @@
       "assure": "2.7.2"
     },
     "user_manual": {
-      "user-manual": "1.9.1"
+      "user-manual": "2.0.0"
     }
   },
   "optional": {

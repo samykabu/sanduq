@@ -233,10 +233,7 @@ These skills ship inside extensions; they are not additional `npx skills` instal
 | [speckit-scope alias](../../extensions/workflow/skills/speckit-scope/SKILL.ext.md) | The short entry routes issue 412 into the managed dispatcher. |
 | [Bridge alias](../../extensions/workflow/skills/speckit-superpowers-bridge/SKILL.ext.md) | Routes continuation to its current owner and prevents a competing executor. |
 | [user-manual](../../extensions/user-manual/skills/user-manual/SKILL.ext.md) | Manual commands own module discovery and incremental refund documentation. |
-| [api-docs](../../extensions/user-manual/skills/api-docs/SKILL.ext.md) | Manual Update loads safe refund contracts only when API work is needed. |
-| [release-docs](../../extensions/user-manual/skills/release-docs/SKILL.ext.md) | Manual Release loads actual application release/migration evidence. |
-| [ui-screenshots](../../extensions/user-manual/skills/ui-screenshots/SKILL.ext.md) | Capture deterministic approved/refused refund states. |
-| [preview-publishing](../../extensions/user-manual/skills/preview-publishing/SKILL.ext.md) | Use the approved provider for the private manual preview. |
+| [user-manual references](../../extensions/user-manual/skills/user-manual/references/) | Loaded only when a task needs them: `api-docs.md` (safe refund contracts), `release-docs.md` (release and migration evidence), `ui-screenshots.md` (approved/refused refund states), `preview-publishing.md` (the approved private preview). |
 | [Illustrate package skill](../../extensions/illustrate/skill/SKILL.md) | Generate/export useful refund diagrams through extension commands. |
 | [Delegate Task (vendored)](../../extensions/workflow/assets/delegate-task/SKILL.md) | Workflow dispatches bounded worker tasks through this driver, vendored from [sanduq-skills](https://github.com/samykabu/sanduq-skills). |
 

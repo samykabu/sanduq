@@ -37,7 +37,7 @@ The map shows each extension and what it requires; arrows point to the dependenc
 | [Illustrate](docs/extensions/illustrate.md) | Themed diagrams and charts, 44 types | Any, on request | Yes | Nothing | Codex, Claude Code (unverified) |
 | [Memory](docs/extensions/memory.md) | Project memory and recoverable spec archiving | Before Specify and Analyze; after merge | Yes | Python 3.11+, Git | Claude Code (live run through Workflow); Codex (unverified) |
 | [Progress](docs/extensions/progress.md) | Live feature progress report with lanes, blockers and decisions | Tasks to Implement; native host hooks | Yes | Python 3.11+, Spec Kit 1.1.1+ | Claude Code (live run through Workflow); Codex (unverified) |
-| [Portable skills](https://github.com/samykabu/sanduq-skills) | Illustrate, User Manual (5 skills), Delegate Task, Progress Report | No Spec Kit needed | Yes | Per skill | Codex, Claude Code, Claude Desktop (unverified) |
+| [Portable skills](https://github.com/samykabu/sanduq-skills) | Illustrate, User Manual, Delegate Task, Progress Report | No Spec Kit needed | Yes | Per skill | Codex, Claude Code, Claude Desktop (unverified) |
 
 "Standalone" means it works without Workflow. "Requires" lists hard dependencies; Spec Kit does not
 install them for you. See [who enforces dependencies](docs/start/prerequisites.md#who-enforces-dependencies).
