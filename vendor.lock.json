@@ -640,8 +640,8 @@
           ]
         ]
       },
-      "ref": "dev-tools-v1.6.0",
-      "sha": "f2d6adf97b7c23eeca34e9d6a4760481b4a2182a",
+      "ref": "dev-tools-v1.6.1",
+      "sha": "7c90a556b55ee1e8264178f6c1ca72fee3b351a5",
       "files": {
         "extensions/user-manual/assets/github/user-manual-preview.yml": "88d70609f3f3b43672039aa69f5c58489e9e5d224b8f31db1b765a563bd47b90",
         "extensions/user-manual/assets/github/user-manual-release.yml": "40558696a70108ec04ec4f42d479052ac194965a8c6b135d5da903c352fadb2b",
@@ -654,7 +654,7 @@
         "extensions/user-manual/assets/scaffold/theme/rtl.css": "14319bf237f750394435d975a617dd346f4b664f6794a8636e854e94416a90c0",
         "extensions/user-manual/assets/scaffold/theme/theme-readthedocs.css": "a02ecd1df0b52bfc2dc829845d54263176dd8205a751f28093d50eb4721316e2",
         "extensions/user-manual/scripts/audit_manual.py": "8850b645a531ce8f11402865e2140f2608d2a99bf6ee8536500472e644f3a9b5",
-        "extensions/user-manual/scripts/build_manual.py": "7ddcd1573225a856108fd1054db2866f4868e95fd5e82f6ea6b6d83e60f322de",
+        "extensions/user-manual/scripts/build_manual.py": "42ee6c77d72b5ee75798e59b7d112afaaf696cc226aa5715175d67f1af7e022f",
         "extensions/user-manual/scripts/init_manual.py": "3fe43df0ac73defb48458c720c360505b406e17c8d9b1717b1b296449b4aab3a",
         "extensions/user-manual/skills/api-docs/references/openapi.md": "d4ff6e032f9f7d5321008959fc67edd999b1fe60a72236abf80d4dcb944a29ab",
         "extensions/user-manual/skills/preview-publishing/references/provider-contract.md": "1609a1ba809049bfe7959dc727f34151edd3fda1db8c8c9211d0bdddab83ecb3",
@@ -667,7 +667,7 @@
         "extensions/user-manual/skills/user-manual/references/discovery.md": "f03f42065f3dbc46a8ae072c680874bfe9cd7e28d81ca971824d19a9e242e5ac",
         "extensions/user-manual/skills/user-manual/references/incremental-update.md": "d66ef41177737e25365511719ffe7079e363a67ae42dc4c90338edcb3d33d0ed",
         "extensions/user-manual/skills/user-manual/references/publishing.md": "342c76a3f4225e777f7433993c7d8e3f1faed18db1fa92e5af75d5620e2e2c3c",
-        "extensions/user-manual/tests/test_build_manual.py": "9703c5d1d2eb1f4bf4c42e72e50284c77422556280ef9d7497e8d8a37c672b28"
+        "extensions/user-manual/tests/test_build_manual.py": "26bbd6864b9ee6e5e3a482913c175033c9b5c39a9b6df767641e6532fd89f061"
       }
     },
     "progress-report": {

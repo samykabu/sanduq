@@ -70,3 +70,9 @@ names each module in the edition's language. The content contract remains portab
 compatibility build is supported for the Material theme because Material is in maintenance mode. Generated
 HTML, ZIP, and PDF files are CI/release artifacts; Markdown, configuration, approved screenshots,
 and diagrams are committed.
+
+PDFs build with every theme. Arabic (right-to-left) PDFs keep their right-to-left layout and use the Amiri
+font, which the build machine needs installed (`fonts-hosny-amiri` on Ubuntu; see
+[prerequisites](../../docs/start/prerequisites.md)). The contents heading follows the edition's language,
+and the cover shows only the values that are set. A manual created before User Manual 1.9.0 keeps its own
+`User-Manual/theme/rtl*.css` copies and does not switch to Amiri on its own.

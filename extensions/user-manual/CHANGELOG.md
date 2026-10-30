@@ -1,5 +1,9 @@
 # Changelog
 
+## [1.9.1] - 2026-10-30
+
+- The PDF cover no longer prints "None" for an unset subtitle, author or copyright: the build supplies its own cover template that omits them. The contents heading follows the edition's language ("المحتويات" in Arabic, "Contents" otherwise). Vendored from sanduq-skills `dev-tools-v1.6.1`.
+
 ## [1.9.0] - 2026-10-30
 
 - Arabic PDFs use the Amiri font (dev-tools 1.6.0). The RTL stylesheets set Arabic text and headings to `"Amiri", "Noto Naskh Arabic", "Noto Sans Arabic", serif`; code keeps its monospace font and English editions are unchanged. The release workflow template installs `fonts-hosny-amiri` (the Debian/Ubuntu package for Amiri) with the WeasyPrint libraries on runners that allow apt.

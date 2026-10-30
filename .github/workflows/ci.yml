@@ -10,6 +10,8 @@ on:
     - cron: '17 2 * * *'
   workflow_dispatch:
 
+# Runners: every job runs on homek8-general except the windows-latest matrix legs (the home runners are Linux
+# pods) and jobs of pull requests from forks (ubuntu-latest: fork code never runs inside the home cluster).
 jobs:
   # Decides which expensive jobs run. Skipped jobs count as success for the release gate.
   changes:
