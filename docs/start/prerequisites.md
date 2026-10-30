@@ -130,9 +130,13 @@ PDF builds also need native text-layout libraries:
 
 | OS | Command |
 | --- | --- |
-| Linux (Debian, Ubuntu) | `sudo apt-get install libpango-1.0-0 libharfbuzz0b libpangoft2-1.0-0 libharfbuzz-subset0` |
+| Linux (Debian, Ubuntu) | `sudo apt-get install libpango-1.0-0 libharfbuzz0b libpangoft2-1.0-0 libharfbuzz-subset0 fonts-hosny-amiri` |
 | macOS | `brew install pango` |
 | Windows | Unverified. Install the Pango libraries for your Python, or build PDFs in CI on Linux. |
+
+Arabic PDFs use the Amiri font (`fonts-hosny-amiri` above). On macOS, install Amiri from
+[Google Fonts](https://fonts.google.com/specimen/Amiri); without it the PDF falls back to Noto Naskh Arabic
+or another Arabic font the system has.
 
 Public repositories publish encrypted previews and need `age` in CI. See
 [the docs pack](install-by-host.md#docs-pack).

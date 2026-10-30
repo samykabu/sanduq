@@ -295,3 +295,56 @@ class NavTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class PdfDocumentTests(unittest.TestCase):
+    """mkdocs-to-pdf rebuilds <html> without lang and dir, and fails on themes it has no handler for."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.root = Path(self.tmp.name).resolve()
+        (self.root / 'docs/ar').mkdir(parents=True)
+        (self.root / 'docs/ar/index.md').write_text('---\naudiences: [end-user]\n---\n# الرئيسية\n', encoding='utf-8')
+        patcher = mock.patch.object(builder, 'installed_themes', return_value={'material', 'readthedocs'})
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def build(self, theme):
+        manual = {'languages': {'required': ['ar'], 'rtl': ['ar']}, 'renderer': {'theme': theme}}
+        seen = {}
+
+        def fake_run(command, cwd=None, check=False, **kwargs):
+            if cwd:  # the renderer, not the WeasyPrint preflight
+                build = Path(cwd)
+                seen.update({p.name: p.read_text(encoding='utf-8') for p in build.glob('pdf_*.py')})
+                seen['config'] = builder.yaml.safe_load((build / 'mkdocs.yml').read_text(encoding='utf-8'))
+                (build / 'site').mkdir()
+                (build / 'site/end-user-ar.pdf').write_bytes(b'%PDF')
+            return builder.subprocess.CompletedProcess(command, 0, stdout='')
+
+        args = builder.argparse.Namespace(language='ar', audience='end-user', module=None, version='v1',
+                                          renderer='material', pdf=True, archive=False)
+        # theme_config reads MkDocs' theme locales; these tests need no MkDocs.
+        with mock.patch.object(builder.subprocess, 'run', side_effect=fake_run), \
+                mock.patch.object(builder, 'theme_config', side_effect=lambda name, *_: {'name': name}):
+            builder.build_edition(args, self.root, manual)
+        return seen
+
+    def test_the_pdf_keeps_the_edition_language_and_direction(self):
+        seen = self.build('material')
+        namespace = {}
+        exec(seen['pdf_event_hook.py'], namespace)
+        html = type('Html', (dict,), {})()
+        namespace['pre_pdf_render'](type('Soup', (), {'html': html})(), None)
+        self.assertEqual({'lang': 'ar', 'dir': 'rtl'}, dict(html))
+        self.assertNotIn('pdf_theme_handler.py', seen)
+        self.assertNotIn('theme_handler_path', seen['config']['plugins'][1]['to-pdf'])
+
+    def test_a_theme_without_a_renderer_handler_gets_one(self):
+        seen = self.build('readthedocs')
+        self.assertEqual('pdf_theme_handler.py', seen['config']['plugins'][1]['to-pdf']['theme_handler_path'])
+        namespace = {}
+        exec(seen['pdf_theme_handler.py'], namespace)
+        self.assertEqual('<p>x</p>', namespace['inject_link']('<p>x</p>', 'a.pdf', None, None, None))
+        self.assertIsNone(namespace['get_stylesheet'](False))

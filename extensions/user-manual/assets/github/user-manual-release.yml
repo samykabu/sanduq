@@ -24,7 +24,7 @@ jobs:
       - name: Install PDF system dependencies
         run: >-
           sudo apt-get update && sudo apt-get install -y
-          libpango-1.0-0 libharfbuzz0b libpangoft2-1.0-0 libharfbuzz-subset0
+          libpango-1.0-0 libharfbuzz0b libpangoft2-1.0-0 libharfbuzz-subset0 fonts-hosny-amiri
       # sanduq:endif
       - name: Install documentation toolchain
         run: python -m pip install -r User-Manual/requirements.lock

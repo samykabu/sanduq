@@ -3,6 +3,17 @@ html[lang="ar"] body {
   text-align: right;
 }
 
+/* Amiri is the Arabic font of the PDF runners (fonts-hosny-amiri); code keeps its monospace font. */
+html[lang="ar"] body,
+html[lang="ar"] h1,
+html[lang="ar"] h2,
+html[lang="ar"] h3,
+html[lang="ar"] h4,
+html[lang="ar"] h5,
+html[lang="ar"] h6 {
+  font-family: "Amiri", "Noto Naskh Arabic", "Noto Sans Arabic", serif;
+}
+
 html[lang="ar"] pre,
 html[lang="ar"] code,
 html[lang="ar"] .highlight,
