@@ -60,19 +60,32 @@ audiences plus the unmatched changed paths, and records the list under `impact` 
 
 ## Builds
 
-Material for MkDocs is the default theme and is pinned for reproducible HTML builds. Set
-`renderer.theme` in `User-Manual/manual.yml` to `readthedocs`, `mkdocs` or any other installed MkDocs
-theme, with optional `renderer.theme_options` passed to the theme. Right-to-left editions
-(`languages.rtl`) get `rtl-<theme>.css`, or `rtl-generic.css` when no theme-specific file exists, and
-`theme-<theme>.css` applies to every language of that theme; a file of the same name in
-`User-Manual/theme/` overrides the shipped copy. Navigation follows the `manual.yml` module order and
-names each module in the edition's language. The content contract remains portable and a Zensical
-compatibility build is supported for the Material theme because Material is in maintenance mode. Generated
-HTML, ZIP, and PDF files are CI/release artifacts; Markdown, configuration, approved screenshots,
-and diagrams are committed.
+`build_manual.py` works in two steps per edition. It assembles the edition as Markdown (the pages that
+audience receives, their links rewritten, only the assets they reach, plus `edition.json` and a
+Pandoc-style `metadata.yml`), then renders it with `renderer.kind` in `User-Manual/manual.yml`:
 
-PDFs build with every theme. Arabic (right-to-left) PDFs keep their right-to-left layout and use the Amiri
-font, which the build machine needs installed (`fonts-hosny-amiri` on Ubuntu; see
+| `renderer.kind` | Output |
+| --- | --- |
+| `markdown` (default) | The assembled edition, readable on GitHub or a wiki |
+| `command` | Your own tool and templates run on the edition, for example `pandoc {pages} --metadata-file {metadata} --reference-doc theme/word.docx -o {output}/manual.docx`, from `User-Manual/` |
+| `mkdocs` | An MkDocs HTML site; `--pdf` adds a PDF |
+
+Pages use GitHub's own syntax (`> [!NOTE]` alerts, `<details>`), so they read correctly on GitHub; the
+MkDocs renderer converts them, and the audit warns about MkDocs-only syntax. `theme/brand.yml` (title,
+subtitle, author, copyright, logo, primary colour) reaches every renderer. The full placeholder list
+is in the skill's `references/publishing.md`.
+
+For `mkdocs`, Material for MkDocs is the default theme and is pinned for reproducible HTML builds. Set
+`renderer.theme` to `readthedocs`, `mkdocs` or any other installed MkDocs theme, with optional
+`renderer.theme_options`; `renderer.custom_dir` is a theme override folder relative to `User-Manual/`.
+Right-to-left editions (`languages.rtl`) get `rtl-<theme>.css`, or `rtl-generic.css` when no
+theme-specific file exists, and `theme-<theme>.css` applies to every language of that theme; a file of
+the same name in `User-Manual/theme/` overrides the shipped copy. Navigation follows the `manual.yml`
+module order and names each module in the edition's language.
+
+PDFs build with every MkDocs theme. Arabic (right-to-left) PDFs keep their right-to-left layout and use
+the Amiri font, which the build machine needs installed (`fonts-hosny-amiri` on Ubuntu; see
 [prerequisites](../../docs/start/prerequisites.md)). The contents heading follows the edition's language,
-and the cover shows only the values that are set. A manual created before User Manual 1.9.0 keeps its own
-`User-Manual/theme/rtl*.css` copies and does not switch to Amiri on its own.
+and the cover shows only the values that are set; `theme/pdf/cover.html` replaces it. Generated output
+in `site/` and `pdf/` is a CI/release artifact; Markdown, configuration, `theme/`, approved screenshots,
+and diagrams are committed.

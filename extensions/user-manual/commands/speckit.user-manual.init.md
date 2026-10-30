@@ -39,7 +39,7 @@ Flags: `--non-interactive`, `--module <name>`, `--enable-arabic`, `--provider <i
    when enabled; record missing translations without blocking the English build.
 7. Generate system-level architecture and ER overviews. Generate smaller module ER diagrams only
    for modules with data ownership. Never include secret values or production records.
-8. When a hosted provider was selected, load `skills/preview-publishing/SKILL.md` and create the
+8. When a hosted provider was selected, read `skills/user-manual/references/preview-publishing.md` and create the
    provider descriptor and pinned CI adapter for explicit approval. A provider name in `manual.yml`
    alone never authorizes deployment.
 9. Validate with `audit_manual.py` and report the module map, missing evidence, translation coverage,

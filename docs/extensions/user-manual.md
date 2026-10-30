@@ -1,8 +1,10 @@
 # User Manual
 
 **Purpose:** create an application manual once, then update only the affected pages as each
-feature ships. One Markdown source produces End User, Administrator/Operator and Technical
-Reference editions in HTML and PDF.
+feature ships. One Markdown source, written so it reads correctly on GitHub, produces End User,
+Administrator/Operator and Technical Reference editions. Each edition renders the way the project
+chooses: as Markdown (the default), through the project's own templates and tools (Pandoc, Quarto, a
+script), or as an MkDocs HTML site and PDF.
 
 | | |
 | --- | --- |
@@ -13,7 +15,8 @@ Reference editions in HTML and PDF.
 | Standalone | Yes |
 | License | MIT |
 
-The manual skills are [vendored](../../vendor.lock.json) from
+The `user-manual` skill and its references (API, release, screenshot and preview work) are
+[vendored](../../vendor.lock.json) from
 [sanduq-skills](https://github.com/samykabu/sanduq-skills).
 
 ## Setup
@@ -28,10 +31,11 @@ $speckit-user-manual-init Discover Booking, Payments and Operations modules; int
 ```
 
 Init interviews you and proposes a module map. Nothing is scaffolded until you approve the map. Init
-then writes `User-Manual/requirements.lock`; install it with
-`python -m pip install -r User-Manual/requirements.lock`. In the managed Workflow, select the manual
-through `$speckit-workflow-init`. PDF builds need the libraries in
-[prerequisites](../start/prerequisites.md#mkdocs-and-pdf-libraries).
+then writes `User-Manual/manual.yml` with `renderer.kind: markdown`, `theme/brand.yml` and three
+install files; install `python -m pip install -r User-Manual/requirements.lock`, plus
+`requirements-mkdocs.lock` or `requirements-pdf.lock` for the `mkdocs` renderer. In the managed
+Workflow, select the manual through `$speckit-workflow-init`. MkDocs PDF builds need the libraries in
+[prerequisites](../start/prerequisites.md#user-manual-renderers-mkdocs-and-pdf-libraries).
 
 ## Example
 

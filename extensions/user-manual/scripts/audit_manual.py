@@ -8,6 +8,7 @@ import json
 import re
 import sys
 from pathlib import Path
+from urllib.parse import unquote
 
 try:
     import yaml
@@ -18,7 +19,13 @@ AUDIENCES = {"end-user", "administrator", "technical"}
 CONTENT_TYPES = {"tutorial", "how-to", "reference", "explanation", "release-notes", "migration-guide"}
 REQUIRED_META = {"title", "module", "audiences", "language", "content_type", "source_evidence", "last_verified", "status"}
 SECRET = re.compile(r"(?i)(api[_-]?key|client[_-]?secret|password|access[_-]?token|refresh[_-]?token)\s*[:=]\s*[\"']?([^\s\"']{8,})")
-LINK = re.compile(r"!?\[[^\]]*\]\(([^)]+)\)")
+# Inline links and images (optional "title", <angle-bracketed> targets) and reference definitions.
+LINK = re.compile(r'!?\[[^\]]*\]\((<[^>\n]+>|[^\s)]+)(?:\s+"[^"\n]*")?\)|^[ ]{0,3}\[(?!\^)[^\]\n]+\]:[ \t]*(<[^>\n]+>|\S+)', re.M)
+# MkDocs-only syntax shows as raw text on GitHub; each has a GitHub form the build translates.
+MKDOCS_ONLY = (
+    (re.compile(r"^[ \t]*(?:!!!|\?\?\?\+?)[ \t]+\w", re.M), 'a GitHub alert ("> [!NOTE]", "> [!WARNING]", ...) or <details>'),
+    (re.compile(r'^[ \t]*===[ \t]+"', re.M), "<details><summary>...</summary> sections"),
+)
 
 
 def front_matter(path: Path) -> tuple[dict, str]:
@@ -97,11 +104,15 @@ def main() -> None:
             value = match.group(2).lower()
             if not any(marker in value for marker in ("redacted", "example", "placeholder", "<", "${")):
                 errors.append(f"{relative}: possible secret assigned to {match.group(1)}")
-        for target in LINK.findall(body):
+        for pattern, replacement in MKDOCS_ONLY:
+            if pattern.search(body):
+                warnings.append(f"{relative}: MkDocs-only syntax shows as raw text on GitHub; use {replacement}")
+        for match in LINK.finditer(body):
+            target = (match.group(1) or match.group(2)).strip("<>")
             clean = target.split("#", 1)[0].split("?", 1)[0]
             if not clean or re.match(r"^[a-z]+://", clean) or clean.startswith(("mailto:", "#")):
                 continue
-            if not (path.parent / clean).resolve().exists():
+            if not (path.parent / unquote(clean)).resolve().exists():
                 errors.append(f"{relative}: missing linked file {target}")
 
     for language in required_languages:

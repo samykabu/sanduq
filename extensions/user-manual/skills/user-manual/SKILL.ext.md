@@ -1,6 +1,6 @@
 ---
 name: user-manual
-description: Create, organize, incrementally update, validate, and publish a complete application User Manual for web, mobile, API, infrastructure, architecture, and data surfaces. Use for speckit.user-manual.init, analyze, update, or release; MkDocs/Material documentation; bilingual English and Arabic manuals; audience editions; tutorials; system documentation; diagrams; and documentation coverage.
+description: Create, organize, incrementally update, validate, and publish a complete application User Manual for web, mobile, API, infrastructure, architecture, and data surfaces. Use for speckit.user-manual.init, analyze, update, or release; bilingual English and Arabic manuals; audience editions; tutorials; API references; release notes and migration guides; screenshots; previews; diagrams; documentation coverage; and rendering editions as Markdown, through the project's own templates, or as MkDocs HTML and PDF.
 ---
 
 # User Manual
@@ -15,11 +15,11 @@ for end users, administrators/operators, and technical readers.
 - Audience or language writing: read [audience-language.md](references/audience-language.md).
 - Feature update: read [incremental-update.md](references/incremental-update.md).
 - Entities, columns, enumerations, or ER diagrams: read [data-reference.md](references/data-reference.md).
-- Theme, HTML, PDF, RTL, preview, or release build: read [publishing.md](references/publishing.md).
-- API work: load `../api-docs/SKILL.md`.
-- Release notes or migration guides: load `../release-docs/SKILL.md`.
-- UI screenshots: load `../ui-screenshots/SKILL.md`.
-- Approved hosted preview: load `../preview-publishing/SKILL.md`.
+- Renderers, templates, brand, HTML, PDF, RTL, or release build: read [publishing.md](references/publishing.md).
+- API work: read [api-docs.md](references/api-docs.md).
+- Release notes or migration guides: read [release-docs.md](references/release-docs.md).
+- UI screenshots: read [ui-screenshots.md](references/ui-screenshots.md).
+- Previews and hosted preview: read [preview-publishing.md](references/preview-publishing.md).
 
 ## Non-negotiable rules
 
@@ -32,7 +32,8 @@ for end users, administrators/operators, and technical readers.
    records, or unredacted personal data.
 5. Store the approved module map in `User-Manual/manual.yml`. Add later discoveries as `proposed`
    until approved.
-6. Keep Markdown canonical. Generate HTML, archives, and PDF through scripts.
+6. Keep Markdown canonical and write GitHub's own syntax (alerts, `<details>`), so pages read correctly on
+   GitHub. Generate every other format through `build_manual.py` and the renderer `manual.yml` selects.
 7. Generate only useful diagrams. Reuse Illustrate and keep system overviews separate from readable
    module-level detail.
 8. Preserve hand-authored content outside owned markers and converge on rerun.

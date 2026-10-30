@@ -20,10 +20,8 @@ publishing:
   ephemeral_provider: null
   commit_build_outputs: false
 renderer:
-  primary: mkdocs-material
-  material_version: "9.7.6"
-  mkdocs_constraint: ">=1.6,<2"
-  compatibility: zensical
+  # markdown (default), command (your own tool), or mkdocs. The gallery builds the MkDocs themes.
+  kind: mkdocs
   # material (default), readthedocs, mkdocs, or any installed MkDocs theme.
   theme: material
   theme_options: {}

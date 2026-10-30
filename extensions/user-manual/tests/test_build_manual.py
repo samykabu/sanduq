@@ -1,6 +1,7 @@
 """Portable build_manual: edition staging, asset privacy, theme selection and navigation."""
 import importlib.util
 import io
+import sys
 import tempfile
 import unittest
 from unittest import mock
@@ -95,8 +96,9 @@ class CopyPagesTests(unittest.TestCase):
         page.write_text(page.read_text(encoding='utf-8') + '\n[Diagram](../../../assets/diagrams/home.html)\n',
                         encoding='utf-8')
         builder.copy_pages(self.source, self.target, 'technical', None)
-        staged = (self.target / 'assets/diagrams/home.html').read_text(encoding='utf-8')
-        self.assertIn('tech.html', staged)
+        self.assertIn('tech.md', (self.target / 'assets/diagrams/home.html').read_text(encoding='utf-8'))
+        builder.copy_pages(self.source, self.root / 'site', 'technical', None, '.html')
+        self.assertIn('tech.html', (self.root / 'site/assets/diagrams/home.html').read_text(encoding='utf-8'))
 
 
 
@@ -158,7 +160,8 @@ class BuildOutputTests(unittest.TestCase):
         (self.root / 'docs/en').mkdir(parents=True)
         (self.root / 'docs/en/index.md').write_text('---\naudiences: [end-user, administrator, technical]\n---\n# Home\n',
                                                      encoding='utf-8')
-        (self.root / 'manual.yml').write_text('languages:\n  required: [en]\n', encoding='utf-8')
+        (self.root / 'manual.yml').write_text('languages:\n  required: [en]\nrenderer:\n  kind: mkdocs\n',
+                                              encoding='utf-8')
         patcher = mock.patch.object(builder, 'installed_themes', return_value={'material'})
         patcher.start()
         self.addCleanup(patcher.stop)
@@ -252,19 +255,24 @@ class ThemeTests(unittest.TestCase):
             self.assertEqual(theme_dir / 'rtl-generic.css', builder.stylesheet_source(theme_dir, 'rtl-generic.css'))
 
     def test_resolve_theme_defaults_to_material(self):
-        self.assertEqual(('material', {}), builder.resolve_theme({}, 'material'))
+        self.assertEqual(('material', {}), builder.resolve_theme({}, Path('.')))
 
     def test_resolve_theme_refuses_an_uninstalled_theme(self):
-        with self.assertRaises(SystemExit):
-            builder.resolve_theme({'renderer': {'theme': 'no-such-theme'}}, 'material')
-
-    def test_zensical_only_checks_material(self):
-        with self.assertRaises(SystemExit):
-            builder.resolve_theme({'renderer': {'theme': 'readthedocs'}}, 'zensical')
+        with self.assertRaisesRegex(SystemExit, 'requirements-mkdocs.lock'):
+            builder.resolve_theme({'theme': 'no-such-theme'}, Path('.'))
 
     def test_theme_options_must_be_a_mapping(self):
         with self.assertRaises(SystemExit):
-            builder.resolve_theme({'renderer': {'theme': 'readthedocs', 'theme_options': ['x']}}, 'material')
+            builder.resolve_theme({'theme': 'readthedocs', 'theme_options': ['x']}, Path('.'))
+
+    def test_a_project_relative_custom_dir_works_from_the_temporary_build_folder(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / 'theme/overrides').mkdir(parents=True)
+            _, options = builder.resolve_theme({'custom_dir': 'theme/overrides'}, root)
+            self.assertEqual(str(root / 'theme/overrides'), options['custom_dir'])
+            with self.assertRaisesRegex(SystemExit, 'custom_dir not found'):
+                builder.resolve_theme({'theme_options': {'custom_dir': 'theme/missing'}}, root)
 
 
 class NavTests(unittest.TestCase):
@@ -293,10 +301,6 @@ class NavTests(unittest.TestCase):
                           'modules/payments/technical.md'], sections[0]['Payments'])
 
 
-if __name__ == '__main__':
-    unittest.main()
-
-
 class PdfDocumentTests(unittest.TestCase):
     """mkdocs-to-pdf rebuilds <html> without lang and dir, and fails on themes it has no handler for."""
 
@@ -311,7 +315,7 @@ class PdfDocumentTests(unittest.TestCase):
         self.addCleanup(patcher.stop)
 
     def build(self, theme):
-        manual = {'languages': {'required': ['ar'], 'rtl': ['ar']}, 'renderer': {'theme': theme}}
+        manual = {'languages': {'required': ['ar'], 'rtl': ['ar']}, 'renderer': {'kind': 'mkdocs', 'theme': theme}}
         seen = {}
 
         def fake_run(command, cwd=None, check=False, **kwargs):
@@ -325,7 +329,7 @@ class PdfDocumentTests(unittest.TestCase):
             return builder.subprocess.CompletedProcess(command, 0, stdout='')
 
         args = builder.argparse.Namespace(language='ar', audience='end-user', module=None, version='v1',
-                                          renderer='material', pdf=True, archive=False)
+                                          renderer=None, pdf=True, archive=False)
         # theme_config reads MkDocs' theme locales; these tests need no MkDocs.
         with mock.patch.object(builder.subprocess, 'run', side_effect=fake_run), \
                 mock.patch.object(builder, 'theme_config', side_effect=lambda name, *_: {'name': name}):
@@ -364,3 +368,190 @@ class PdfDocumentTests(unittest.TestCase):
         exec(seen['pdf_theme_handler.py'], namespace)
         self.assertEqual('<p>x</p>', namespace['inject_link']('<p>x</p>', 'a.pdf', None, None, None))
         self.assertIsNone(namespace['get_stylesheet'](False))
+
+    def test_the_brand_reaches_the_cover_and_the_logo(self):
+        (self.root / 'theme').mkdir()
+        (self.root / 'theme/logo.svg').write_text('<svg/>', encoding='utf-8')
+        (self.root / 'theme/brand.yml').write_text(
+            'title: Booking Demo\nauthor: Platform team\nlogo: theme/logo.svg\ncolors: {primary: "#1f6f78"}\n',
+            encoding='utf-8')
+        seen = self.build('material')
+        options = seen['config']['plugins'][1]['to-pdf']
+        self.assertEqual(('Booking Demo', 'دليل المستخدم', 'Platform team'),
+                         (options['cover_title'], options['cover_subtitle'], options['author']))
+        self.assertTrue(options['cover_logo'].startswith('file:') and options['cover_logo'].endswith('logo.svg'))
+        self.assertIn('assets/stylesheets/brand.css', seen['config']['extra_css'])
+
+    def test_the_projects_own_pdf_templates_replace_the_defaults(self):
+        (self.root / 'theme/pdf').mkdir(parents=True)
+        (self.root / 'theme/pdf/cover.html').write_text('<article id="doc-cover">Mine</article>', encoding='utf-8')
+        self.assertIn('Mine', self.build('material')['cover'])
+
+
+def edition_root(tmp):
+    root = Path(tmp).resolve()
+    for language, title in (('en', 'Home'), ('ar', 'الرئيسية')):
+        (root / f'docs/{language}/modules/booking').mkdir(parents=True)
+        (root / f'docs/{language}/index.md').write_text(
+            f'---\ntitle: {title}\naudiences: [end-user]\nmodule: system\n---\n# {title}\n\n'
+            '[Book](modules/booking/index.md)\n', encoding='utf-8')
+        (root / f'docs/{language}/modules/booking/index.md').write_text(
+            '---\naudiences: [end-user]\nmodule: booking\n---\n# Booking\n', encoding='utf-8')
+    (root / 'manual.yml').write_text(
+        'product_name: Booking Demo\nlanguages:\n  required: [en]\n  optional: [ar]\n  rtl: [ar]\n'
+        'modules:\n  - id: booking\n    name: Booking\n', encoding='utf-8')
+    return root
+
+
+def edition_args(language='en', **extra):
+    return builder.argparse.Namespace(**{'language': language, 'audience': 'end-user', 'module': None,
+                                         'version': 'v1', 'renderer': None, 'pdf': False, 'archive': False, **extra})
+
+
+class MarkdownRendererTests(unittest.TestCase):
+    """The default renderer: the assembled edition is the output, readable on GitHub."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.root = edition_root(self.tmp.name)
+        self.manual = builder.yaml.safe_load((self.root / 'manual.yml').read_text(encoding='utf-8'))
+
+    def test_the_edition_is_markdown_with_a_manifest_in_reading_order(self):
+        site, archive, pdf = builder.build_edition(edition_args('ar', archive=True), self.root, self.manual)
+        self.assertEqual(self.root / 'site/v1/ar/end-user', site)
+        self.assertIsNone(pdf)
+        manifest = builder.json.loads((site / 'edition.json').read_text(encoding='utf-8'))
+        self.assertEqual(['index.md', 'modules/booking/index.md'], manifest['pages'])
+        self.assertEqual(('rtl', 'المحتويات', 'Booking Demo - دليل المستخدم'),
+                         (manifest['direction'], manifest['toc_title'], manifest['title']))
+        page = (site / 'index.md').read_text(encoding='utf-8')
+        self.assertIn('(modules/booking/index.md)', page)
+        self.assertTrue(page.startswith('# الرئيسية'), 'front matter is source metadata, not output')
+        metadata = builder.yaml.safe_load((site / 'metadata.yml').read_text(encoding='utf-8'))
+        self.assertEqual(('ar', 'rtl', 'Booking Demo'), (metadata['lang'], metadata['dir'], metadata['title']))
+        self.assertTrue(archive.is_file())
+
+    def test_pages_nested_below_the_navigation_stay_in_reading_order(self):
+        tasks = self.root / 'docs/en/modules/booking/tasks'
+        tasks.mkdir()
+        (tasks / 'refund.md').write_text('---\naudiences: [end-user]\nmodule: booking\n---\n# Refund\n', encoding='utf-8')
+        (self.root / 'docs/en/modules/aaa').mkdir()
+        (self.root / 'docs/en/modules/aaa/index.md').write_text('---\naudiences: [end-user]\nmodule: aaa\n---\n# A\n',
+                                                               encoding='utf-8')
+        site, _, _ = builder.build_edition(edition_args(), self.root, self.manual)
+        manifest = builder.json.loads((site / 'edition.json').read_text(encoding='utf-8'))
+        self.assertEqual(['index.md', 'modules/booking/index.md', 'modules/booking/tasks/refund.md',
+                          'modules/aaa/index.md'], manifest['pages'])
+
+    def test_markdown_is_the_default_and_has_no_pdf(self):
+        self.assertEqual('markdown', builder.renderer_settings({})['kind'])
+        with self.assertRaisesRegex(SystemExit, 'renderer.kind: mkdocs'):
+            builder.build_edition(edition_args(pdf=True), self.root, self.manual)
+        with self.assertRaisesRegex(SystemExit, 'renderer.kind must be one of'):
+            builder.renderer_settings({'renderer': {'kind': 'sphinx'}})
+
+    def test_print_renderer_reports_the_selected_kind(self):
+        argv = ['build_manual.py', '--root', str(self.root), '--print-renderer']
+        with mock.patch('sys.argv', argv), mock.patch('sys.stdout', new_callable=io.StringIO) as out:
+            builder.main()
+        self.assertEqual('markdown', out.getvalue().strip())
+
+
+RECORDER = (
+    'import json, os, sys\n'
+    'json.dump({"cwd": os.getcwd(), "args": sys.argv[2:]}, open(os.path.join(sys.argv[1], "call.json"), "w"))\n'
+)
+
+
+class CommandRendererTests(unittest.TestCase):
+    """renderer.kind: command runs the project's own tool on the assembled edition."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.root = edition_root(self.tmp.name)
+
+    def manual(self, command):
+        return {**builder.yaml.safe_load((self.root / 'manual.yml').read_text(encoding='utf-8')),
+                'renderer': {'kind': 'command', 'command': command}}
+
+    def test_placeholders_and_pages_reach_the_command_which_runs_from_the_manual_root(self):
+        command = [sys.executable, '-c', RECORDER, '{output}', '{pages}', '--lang={language}', '{metadata}']
+        site, _, _ = builder.build_edition(edition_args(), self.root, self.manual(command))
+        call = builder.json.loads((site / 'call.json').read_text(encoding='utf-8'))
+        self.assertEqual(str(self.root), call['cwd'])
+        self.assertEqual(['index.md', 'modules/booking/index.md'],
+                         [Path(arg).as_posix().split('/edition/', 1)[1] for arg in call['args'][:2]])
+        self.assertEqual('--lang=en', call['args'][2])
+        self.assertTrue(call['args'][3].endswith('metadata.yml'))
+
+    def test_a_string_command_is_split_like_a_shell(self):
+        self.assertEqual(['pandoc', '/e/a.md', '/e/b.md', '-o', '/out/My Manual.docx'],
+                         builder.command_argv('pandoc {pages} -o "{output}/My Manual.docx"',
+                                              {'output': '/out'}, ['/e/a.md', '/e/b.md']))
+
+    def test_a_failing_silent_or_missing_command_stops_the_build(self):
+        failing = [sys.executable, '-c', 'import sys; print("template missing"); sys.exit(3)']
+        with mock.patch('sys.stderr', new_callable=io.StringIO) as err, self.assertRaises(SystemExit) as stop:
+            builder.build_edition(edition_args(), self.root, self.manual(failing))
+        self.assertEqual(3, stop.exception.code)
+        self.assertIn('template missing', err.getvalue())
+        with self.assertRaisesRegex(SystemExit, 'wrote nothing'):
+            builder.build_edition(edition_args(), self.root, self.manual([sys.executable, '-c', 'pass']))
+        with self.assertRaisesRegex(SystemExit, 'command not found'):
+            builder.build_edition(edition_args(), self.root, self.manual(['no-such-renderer-tool']))
+        with self.assertRaisesRegex(SystemExit, 'non-empty string or list'):
+            builder.build_edition(edition_args(), self.root, self.manual(None))
+
+
+class GitHubSyntaxTests(unittest.TestCase):
+    """Pages use GitHub's own syntax; the MkDocs renderer translates it."""
+
+    def test_alerts_become_admonitions_titled_in_the_editions_language(self):
+        text = '> [!WARNING]\n> Back up first.\n>\n> Then restore.\n\nAfter.\n'
+        self.assertEqual('!!! warning "Warning"\n    Back up first.\n\n    Then restore.\n\n\nAfter.\n',
+                         builder.mkdocs_markdown(text, 'en'))
+        self.assertIn('!!! note "ملاحظة"', builder.mkdocs_markdown('> [!NOTE]\n> سجّل الدخول.\n', 'ar'))
+
+    def test_details_blocks_render_their_markdown(self):
+        self.assertEqual('<details markdown="1">\n<summary>Web</summary>\n',
+                         builder.mkdocs_markdown('<details>\n<summary>Web</summary>\n', 'en'))
+        self.assertEqual('<details markdown="1">', builder.mkdocs_markdown('<details markdown="1">', 'en'))
+
+
+class LinkFormTests(unittest.TestCase):
+    """Titled links, <angle-bracketed> targets and reference definitions are staged like plain links."""
+
+    def test_every_link_form_is_rewritten_and_its_asset_copied(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp).resolve()
+            source = root / 'docs/en'
+            (root / 'docs/assets').mkdir(parents=True)
+            for name in ('a.png', 'b c.png', 'd.json'):
+                (root / 'docs/assets' / name).write_bytes(b'x')
+            source.mkdir(parents=True)
+            (source / 'index.md').write_text(
+                '---\naudiences: [end-user]\n---\n![A](../assets/a.png "Shot")\n![B](<../assets/b c.png>)\n'
+                '[data][d]\n\n[d]: ../assets/d.json "Sample"\n[^1]: Explanation\n', encoding='utf-8')
+            builder.copy_pages(source, root / 'out', 'end-user', None)
+            staged = (root / 'out/index.md').read_text(encoding='utf-8')
+            self.assertIn('![A](assets/a.png "Shot")', staged)
+            self.assertIn('![B](<assets/b c.png>)', staged)
+            self.assertIn('[d]: assets/d.json "Sample"', staged)
+            self.assertEqual({'a.png', 'b c.png', 'd.json'}, {p.name for p in (root / 'out/assets').iterdir()})
+
+
+class BrandTests(unittest.TestCase):
+    def test_the_title_defaults_to_the_product_and_a_missing_logo_fails(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self.assertEqual({'title': 'Demo'}, builder.load_brand(root, {'product_name': 'Demo'}))
+            (root / 'theme').mkdir()
+            (root / 'theme/brand.yml').write_text('title: null\nauthor: Team\nlogo: theme/gone.svg\n', encoding='utf-8')
+            with self.assertRaisesRegex(SystemExit, 'brand logo not found'):
+                builder.load_brand(root, {'product_name': 'Demo'})
+
+
+if __name__ == '__main__':
+    unittest.main()

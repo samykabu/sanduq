@@ -72,13 +72,10 @@ def manual_yaml(product: str, modules: list[dict[str, object]], arabic: bool, pr
         f"  ephemeral_provider: {q(provider) if provider else 'null'}",
         "  commit_build_outputs: false",
         "renderer:",
-        "  primary: mkdocs-material",
-        '  material_version: "9.7.6"',
-        '  mkdocs_constraint: ">=1.6,<2"',
-        "  compatibility: zensical",
-        "  # material (default), readthedocs, mkdocs, or any installed MkDocs theme.",
-        "  theme: material",
-        "  theme_options: {}",
+        "  # markdown (default): the assembled Markdown editions, readable on GitHub.",
+        "  # command: your own tool on each edition, e.g. command: pandoc {pages} --metadata-file {metadata} -o {output}/manual.docx",
+        "  # mkdocs: an MkDocs site (theme: material, readthedocs, mkdocs or any installed theme) and --pdf.",
+        "  kind: markdown",
         "lifecycle:",
         "  # all: update and analyze read the whole manual; evidence: start from the pages an impact tool lists.",
         "  impact_scope: all",
@@ -191,20 +188,16 @@ def main() -> None:
                 description = str(module["description_ar"] if language == "ar" else module["description"])
                 module_page.write_text(page(module_name, str(module["id"]), language, description), encoding="utf-8")
 
-    for name in ("mkdocs.yml", "requirements.lock"):
+    for name in ("requirements.lock", "requirements-mkdocs.lock", "requirements-pdf.lock"):
         copy_if_missing(skill_root / "assets" / "scaffold" / name, manual_root / name)
-    for name in ("rtl-readthedocs.css", "rtl-generic.css", "theme-readthedocs.css"):
-        copy_if_missing(skill_root / "assets" / "scaffold" / "theme" / name, manual_root / "theme" / name)
-    for name in ("extra.css", "rtl.css", "print.css"):
-        copy_if_missing(skill_root / "assets" / "scaffold" / "theme" / name, manual_root / "theme" / name)
-        for language in (["en", "ar"] if args.enable_arabic else ["en"]):
-            copy_if_missing(
-                skill_root / "assets" / "scaffold" / "theme" / name,
-                manual_root / "docs" / language / "assets" / "stylesheets" / name,
-            )
+    # No stylesheets in theme/: the build uses the shipped ones unless User-Manual/theme/ has its own.
+    copy_if_missing(skill_root / "assets" / "scaffold" / "brand.yml", manual_root / "theme" / "brand.yml")
     if not args.no_tools:
         for name in ("audit_manual.py", "build_manual.py", "manual_state.py"):
             copy_if_missing(skill_root / "scripts" / name, manual_root / "tools" / name)
+        # The copied build_manual.py finds the shipped stylesheets beside it, in tools/theme/.
+        for css in sorted((skill_root / "assets" / "scaffold" / "theme").glob("*.css")):
+            copy_if_missing(css, manual_root / "tools" / "theme" / css.name)
     # CI assets are templates: render the project's recorded runner selection.
     ci = sanduq_ci.load_ci(args.ci_policy or root)
     for name in ("user-manual-preview.yml", "user-manual-release.yml"):

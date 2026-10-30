@@ -26,9 +26,9 @@ Flags: `--feature <path>`, `--report-only`.
    run `python .specify/extensions/user-manual/scripts/manual_impact.py --feature <feature-path>`
    and start from its `modules`, `pages` and `audiences`; propose modules for its `unmatched` paths.
 5. Load specialist skills only when applicable:
-   - API surface: `skills/api-docs/SKILL.md`.
-   - UI or mobile screens: `skills/ui-screenshots/SKILL.md`.
-   - Compatibility, upgrade, or release behavior: `skills/release-docs/SKILL.md`.
+   - API surface: `skills/user-manual/references/api-docs.md`.
+   - UI or mobile screens: `skills/user-manual/references/ui-screenshots.md`.
+   - Compatibility, upgrade, or release behavior: `skills/user-manual/references/release-docs.md`.
    - Diagrams: run `python .specify/extensions/user-manual/scripts/deps.py ensure illustrate`
      first; on a non-zero exit report its line, follow it and add no diagram task. When it exits
      zero, pass on any "newer compatible release available" note, read

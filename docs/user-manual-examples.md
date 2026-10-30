@@ -1,7 +1,9 @@
 # User Manual: themes and a rendered example
 
-The same manual content can have different navigation, typography, and colors. Choose a renderer
-that supports your theme, then audit and build the audience edition. These screenshots come from
+The same manual content can have different navigation, typography, and colors. This guide covers the
+`mkdocs` renderer (`renderer.kind: mkdocs`) and its themes. The default `markdown` renderer and a
+`command` renderer with your own templates are described in the User Manual
+[README](../extensions/user-manual/README.md#builds). These screenshots come from
 the actual extension builder, using the checked-in synthetic Booking, Payments, and Operations manual.
 
 ## Table of contents
@@ -14,14 +16,12 @@ the actual extension builder, using the checked-in synthetic Booking, Payments, 
 
 ## Supported themes
 
-| Builder | Theme support | Customization |
-| --- | --- | --- |
-| Portable User Manual skill | Material; Zensical as an HTML compatibility renderer | Project `theme/extra.css`, `rtl.css`, `print.css`; theme name/palette fixed in the builder |
-| Spec Kit User Manual extension | Material by default; built-in ReadTheDocs and MkDocs; other installed MkDocs themes | `renderer.theme`, `renderer.theme_options`, project CSS, and template overrides |
-
-The extension's `--renderer material` selects the MkDocs build path even when its configured theme
-is `readthedocs`, `mkdocs`, or another installed theme. `--renderer zensical` requires Material.
-PDF generation has its own native dependency checks; this gallery verifies HTML only.
+The portable skill and the Spec Kit extension run the same builder, so both support the same themes:
+Material by default, the built-in ReadTheDocs and MkDocs themes, and any other installed MkDocs theme.
+Customize through `renderer.theme`, `renderer.theme_options`, `renderer.custom_dir`, project CSS in
+`User-Manual/theme/`, and `theme/brand.yml`. The build writes its own MkDocs configuration for each
+edition, so a `mkdocs.yml` in the manual is not read. PDF generation has its own native dependency
+checks; this gallery verifies HTML only.
 
 ## Screenshot gallery
 
@@ -81,9 +81,8 @@ options. To reproduce the custom screenshot, add this to `User-Manual/theme/extr
 
 Both builders copy project CSS. Material selectors apply to Material; another theme needs its own
 selectors. For template changes, put an override such as `main.html` in `User-Manual/theme/overrides/`
-and set extension `theme_options.custom_dir` to that directory's **resolved absolute path**. The
-builder stages its config in a temporary directory, so an ordinary project-relative path resolves
-there. Use [Material's documented override blocks](https://squidfunk.github.io/mkdocs-material/customization/).
+and set `renderer.custom_dir: theme/overrides`. The path is relative to `User-Manual/`; the builder
+resolves it before it stages its config in a temporary directory. Use [Material's documented override blocks](https://squidfunk.github.io/mkdocs-material/customization/).
 
 ## Install your own theme
 

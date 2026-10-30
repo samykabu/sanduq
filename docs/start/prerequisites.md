@@ -15,7 +15,7 @@ Install only the tools your [adoption level](../reference/glossary.md#adoption-l
 | GitHub CLI (`gh`) with Project scopes | Workflow, Scope (required); Project, PR (optional) | Unverified |
 | GitHub Project (v2) board with seven statuses | Managed Workflow ([board setup](../scenarios/managed-workflow.md#board)) | Live runs on Claude Code |
 | Playwright and Chromium | Illustrate PNG export; User Manual screenshots | Playwright 1.63.0 |
-| MkDocs, Material for MkDocs and the PDF libraries | User Manual HTML and PDF builds | Material 9.7.6, `mkdocs-to-pdf` 0.10.1 |
+| PyYAML; MkDocs, Material for MkDocs and the PDF libraries only for the MkDocs renderer | User Manual builds (`markdown` and `command` renderers need only PyYAML and your own tool) | Material 9.7.6, `mkdocs-to-pdf` 0.10.1 |
 | `age` | User Manual previews in a public repository | Unverified |
 | SuperSpec | Workflow, optional task generator and executor | 1.0.2, commit `c20ac6c` |
 | Superpowers Bridge | Optional; Workflow routes around an existing Bridge run | Unverified |
@@ -116,17 +116,24 @@ python -m playwright install chromium
 
 On Linux, add `--with-deps` to the second command to install Chromium's system libraries.
 
-## MkDocs and PDF libraries
+## User Manual renderers, MkDocs and PDF libraries
 
-User Manual Init writes `User-Manual/requirements.lock`. It pins `mkdocs` (1.6 or later, below 2),
-`mkdocs-material` 9.7.6, `mkdocs-to-pdf` 0.10.1, `PyYAML` and `zensical` 0.0.51. Install it in your
-project:
+User Manual Init writes three install files. Install the one your `renderer.kind` in
+`User-Manual/manual.yml` needs:
+
+| File | Pins | For |
+| --- | --- | --- |
+| `requirements.lock` | `PyYAML` | Every build; enough for the `markdown` (default) and `command` renderers |
+| `requirements-mkdocs.lock` | adds `mkdocs` (1.6 or later, below 2) and `mkdocs-material` 9.7.6 | The `mkdocs` renderer's HTML site |
+| `requirements-pdf.lock` | adds `mkdocs-to-pdf` 0.10.1 | `--pdf` with the `mkdocs` renderer |
 
 ```bash
 python -m pip install -r User-Manual/requirements.lock
 ```
 
-PDF builds also need native text-layout libraries:
+A `command` renderer runs your own tool (for example Pandoc or Quarto); install it on the build
+machine or the CI runner. PDF builds with the `mkdocs` renderer also need native text-layout
+libraries:
 
 | OS | Command |
 | --- | --- |

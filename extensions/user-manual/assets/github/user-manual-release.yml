@@ -18,24 +18,36 @@ jobs:
         with:
           python-version: "__sanduq_python_version__"
           cache: pip
-          cache-dependency-path: User-Manual/requirements.lock
+          cache-dependency-path: User-Manual/requirements*.lock
       # sanduq:endif
+      - name: Install the manual tools
+        id: renderer
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install -r User-Manual/requirements.lock
+          kind="$(python .specify/extensions/user-manual/scripts/build_manual.py --root User-Manual --print-renderer)"
+          echo "kind=$kind" >> "$GITHUB_OUTPUT"
+          # The mkdocs renderer builds PDFs; a renderer command's own tool is installed on the runner (or in a step here).
+          if [ "$kind" = mkdocs ]; then python -m pip install -r User-Manual/requirements-pdf.lock; fi
       # sanduq:if system_packages_apt
       - name: Install PDF system dependencies
+        if: steps.renderer.outputs.kind == 'mkdocs'
         run: >-
           sudo apt-get update && sudo apt-get install -y
           libpango-1.0-0 libharfbuzz0b libpangoft2-1.0-0 libharfbuzz-subset0 fonts-hosny-amiri
       # sanduq:endif
-      - name: Install documentation toolchain
-        run: python -m pip install -r User-Manual/requirements.lock
       - name: Audit and build release editions
         shell: bash
+        env:
+          RENDERER: ${{ steps.renderer.outputs.kind }}
         run: |
           set -euo pipefail
           version="${GITHUB_REF_NAME}"
           python .specify/extensions/user-manual/scripts/audit_manual.py --root User-Manual
-          python .specify/extensions/user-manual/scripts/build_manual.py \
-            --root User-Manual --all --version "$version" --archive --pdf
+          pdf=""
+          if [ "$RENDERER" = mkdocs ]; then pdf="--pdf"; fi
+          python .specify/extensions/user-manual/scripts/build_manual.py --root User-Manual --all --version "$version" --archive $pdf
       - name: Upload release build artifact
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
@@ -49,6 +61,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
+          mkdir -p "User-Manual/pdf/$GITHUB_REF_NAME"  # only the mkdocs renderer writes PDFs
           if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
             find "User-Manual/site/$GITHUB_REF_NAME" "User-Manual/pdf/$GITHUB_REF_NAME" -type f \
               \( -name '*.zip' -o -name '*.pdf' \) -print0 | xargs -0 -r gh release upload "$GITHUB_REF_NAME" --clobber

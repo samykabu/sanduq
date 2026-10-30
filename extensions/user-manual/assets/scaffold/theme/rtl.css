@@ -25,3 +25,14 @@ html[lang="ar"] [dir="ltr"] {
 html[lang="ar"] table {
   direction: rtl;
 }
+
+/* Admonition titles start on the right: the icon sits in the right padding (the PDF does not mirror it). */
+html[lang="ar"] .md-typeset .admonition > .admonition-title {
+  padding-left: 0.6rem;
+  padding-right: 2rem;
+}
+
+html[lang="ar"] .md-typeset .admonition > .admonition-title::before {
+  left: auto;
+  right: 0.6rem;
+}
