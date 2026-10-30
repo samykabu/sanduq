@@ -1,6 +1,8 @@
 {
   "schema_version": 1,
-  "versions": {},
-  "status": "released",
+  "versions": {
+    "workflow": "2.1.0"
+  },
+  "status": "implementation-in-progress",
   "note": "Workflow 2.0.4 (folds 2.0.3), Assure 2.7.2, Memory 2.6.3, PR 4.7.5, Project 2.7.2, User Manual 1.8.5: recover-not-pause remedy, native record before complete, retained-parent approval gate fix, SPDX headers on shipped helpers, sourced figures; every suite passed locally."
 }

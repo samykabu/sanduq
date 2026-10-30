@@ -140,6 +140,12 @@ Optional fields added in 1.6.0 and later (all backward-compatible):
 | `ready_checks` | Runtime only. Lite Verify: the Ready checks its completion or `revalidate --stage verify` ran (`tasks`, `task_links:skipped (...)`, `documentation:<script>[:skipped (...)]`). |
 | `delegation_ledger_trust` | `trusted` or `unverified-local`, recorded when a delegated stage completes. |
 
+Every save also appends one line per changed or removed receipt to
+`specs/<feature>/workflow/receipt-log.jsonl` (Workflow 2.1.0): `{"at", "by", "sha256", "stage", "v": 1}`,
+where `sha256` hashes the receipt's JSON with sorted keys (`null` for a removed receipt) and `by` is
+`dispatcher`, or `outside-edit` for a receipt the save found changed on disk since it was logged. Commit
+it with the checkpoint and never edit it; the CI gate compares each receipt with its newest line.
+
 The rules behind these fields are in [Receipt contract](state-files.md#receipt-contract-160) and
 [Source drift and CI evidence](runner-policy.md#source-drift-and-ci-evidence-160).
 

@@ -226,3 +226,10 @@ already have one. Spec Kit itself does not enforce `requires.extensions`.
   default `advisory` mode it warns and does not block the PR. Set `ci.gate.mode: required` once the
   first feature has passed, and treat the PR review as the control. See
   [SECURITY.md](../../SECURITY.md).
+- Since Workflow 2.1.0 every save appends the hash of each receipt it changed to
+  `specs/<feature>/workflow/receipt-log.jsonl`, committed with the checkpoint. The gate refuses a
+  receipt that is not the one the dispatcher last logged (`RECEIPT_EDITED_OUTSIDE_DISPATCHER`) and a
+  PR that changes or drops log entries already merged on the base branch. A save that finds a
+  hand-edited receipt logs it as an `outside-edit` instead of adopting it. Someone who also writes a
+  matching log line by hand still gets through; the gate result lists every entry the PR added
+  (`receipt_log.added`) for the reviewer.

@@ -231,6 +231,19 @@ $speckit-memory-enable Review the renewed archiving policy and approve it.
 | Project owner type | A config from an older Init for an organization board says `ownerType: user` | Rerun `$speckit-project-init`, or set `"ownerType": "org"` |
 | Scope's `scope-gate` preset changed | A managed Specify claim is no longer told to chain Clarify | Unmanaged projects run `specify preset add` again for `scope-gate`; the Workflow installer re-adds it |
 
+## Workflow 2.1.0: receipt log
+
+Each feature gets `specs/<feature>/workflow/receipt-log.jsonl`, an append-only list of the receipt hashes the
+dispatcher wrote. Commit it with the checkpoint. Nothing to migrate: a feature in progress starts its log on its
+next save (its next `claim` or `complete`). Until then the gate passes it with the warning
+`RECEIPT_LOG_ABSENT`. Receipts recorded before the upgrade are logged as they are at that save.
+
+| Change | What you see | What to do |
+| --- | --- | --- |
+| A receipt edited by hand | The gate fails `RECEIPT_EDITED_OUTSIDE_DISPATCHER: <stage>`; a later save logs the edit as `outside-edit` | Revert the edit, or claim and complete the stage again; a reviewer can waive the `receipts` rule on the PR |
+| Merged log entries changed or the log deleted | `RECEIPT_LOG_REWRITTEN` or `RECEIPT_LOG_MISSING` | Restore the file from the base branch |
+| The pre-publish index check | `EVIDENCE_NOT_PORTABLE` names `receipt-log.jsonl` | `git add` it with the checkpoint |
+
 ## Workflow 2.0.0: Scope is part of Workflow
 
 Breaking: Scope is no longer a separate extension. Its code, commands, skills and references ship in Workflow

@@ -54,7 +54,9 @@ that reads the nonce file or escapes its process tree
 Workers and the dispatcher share one checkout and one set of permissions. Receipts and the
 delegation ledger are self-asserted, and the ledger's tamper markers detect accidental edits only
 (review decision DEC-11); a worker that wants to lie can. The CI gate checks that receipts are
-present, passing and current, and in its default `advisory` mode it warns without blocking
+present, passing and current, and that each receipt is the one the dispatcher last logged in the
+feature's `receipt-log.jsonl`, so a direct edit of a receipt is flagged. A forger who also writes the
+log line gets through. In its default `advisory` mode the gate warns without blocking
 ([limits](docs/scenarios/managed-workflow.md#limits)). The control is the pull request review.
 
 ## Tokens and logs
