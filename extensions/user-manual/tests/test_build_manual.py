@@ -319,6 +319,7 @@ class PdfDocumentTests(unittest.TestCase):
                 build = Path(cwd)
                 seen.update({p.name: p.read_text(encoding='utf-8') for p in build.glob('pdf_*.py')})
                 seen['config'] = builder.yaml.safe_load((build / 'mkdocs.yml').read_text(encoding='utf-8'))
+                seen['cover'] = (build / 'pdf_templates/cover.html').read_text(encoding='utf-8')
                 (build / 'site').mkdir()
                 (build / 'site/end-user-ar.pdf').write_bytes(b'%PDF')
             return builder.subprocess.CompletedProcess(command, 0, stdout='')
@@ -340,6 +341,21 @@ class PdfDocumentTests(unittest.TestCase):
         self.assertEqual({'lang': 'ar', 'dir': 'rtl'}, dict(html))
         self.assertNotIn('pdf_theme_handler.py', seen)
         self.assertNotIn('theme_handler_path', seen['config']['plugins'][1]['to-pdf'])
+
+    def test_the_cover_omits_unset_fields_and_the_contents_heading_follows_the_language(self):
+        seen = self.build('material')
+        options = seen['config']['plugins'][1]['to-pdf']
+        self.assertEqual('المحتويات', options['toc_title'])
+        self.assertEqual('pdf_templates', options['custom_template_path'])
+        try:
+            import jinja2
+        except ImportError:
+            self.skipTest('jinja2 is not installed')
+        page = jinja2.Template(seen['cover']).render(cover_title='دليل', cover_subtitle=None, author=None,
+                                                    copyright=None)
+        self.assertIn('<h1>دليل</h1>', page)
+        self.assertNotIn('None', page)
+        self.assertIn('<p id="author">Team</p>', jinja2.Template(seen['cover']).render(cover_title='x', author='Team'))
 
     def test_a_theme_without_a_renderer_handler_gets_one(self):
         seen = self.build('readthedocs')

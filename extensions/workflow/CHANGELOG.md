@@ -1,5 +1,9 @@
 # Changelog
 
+## [2.1.1] - 2026-10-30
+
+- Depends on User Manual 1.9.1 (PDF cover without "None", contents heading in the edition's language). No behaviour change.
+
 ## [2.1.0] - 2026-10-30
 
 - Receipt log (PH-04-T09). Every checkpoint save appends one line per receipt it changed or removed to `specs/<feature>/workflow/receipt-log.jsonl`: the stage, the SHA-256 of the receipt's JSON with sorted keys (`null` when removed), the time and `by: dispatcher`. A save that finds a receipt on disk that differs from its newest line logs it as `by: outside-edit` before writing, so a hand edit is never adopted silently. The CI gate (receipts rule) refuses a receipt whose newest line is not the dispatcher's hash of it with the new registered `RECEIPT_EDITED_OUTSIDE_DISPATCHER`, a PR that changes or drops lines already merged on the base branch with `RECEIPT_LOG_REWRITTEN`, a deleted log with `RECEIPT_LOG_MISSING`, and a damaged line with `RECEIPT_LOG_INVALID`; all four are waivable under `receipts`. A stage edited by hand and then re-recorded passes with `RECEIPT_OUTSIDE_EDIT_SUPERSEDED`. The gate result lists the entries the PR added as `receipt_log.added`, and the pre-publish index check requires the log next to the checkpoint. A feature started before 2.1.0 passes with `RECEIPT_LOG_ABSENT` until its next save starts the log. Limit: the log lives in the same checkout, so someone who also writes a matching line by hand gets through; review sees every added line.

@@ -170,6 +170,7 @@ def rtl_stylesheet(theme_dir: Path, name: str) -> str | None:
 
 PAGE_ORDER = ("index.md", "user-guide.md", "admin-guide.md", "technical.md")
 MODULES_TITLE = {"en": "Modules", "ar": "الوحدات"}
+TOC_TITLE = {"en": "Contents", "ar": "المحتويات"}
 AUDIENCE_TITLE = {
     "ar": {"end-user": "دليل المستخدم", "administrator": "دليل الإدارة", "technical": "المرجع التقني"},
 }
@@ -276,7 +277,19 @@ def build_edition(args: argparse.Namespace, root: Path, manual: dict) -> tuple[P
         plugins: list[object] = ["search"]
         if args.pdf:
             pdf_path.parent.mkdir(parents=True, exist_ok=True)
-            pdf_options = {"output_path": staged_pdf.name, "cover": True, "toc_title": "Contents"}
+            pdf_options = {"output_path": staged_pdf.name, "cover": True,
+                           "toc_title": TOC_TITLE.get(args.language, TOC_TITLE["en"]),
+                           "custom_template_path": "pdf_templates"}
+            # The plugin's default cover prints "None" for an unset subtitle, author or copyright; this one omits them.
+            (temp / "pdf_templates").mkdir()
+            (temp / "pdf_templates" / "cover.html").write_text(
+                '<article id="doc-cover">\n<div class="wrapper"></div>\n<div class="wrapper">\n'
+                '<h1>{{ cover_title | e }}</h1>\n'
+                '{% if cover_subtitle %}<h2>{{ cover_subtitle | e }}</h2>{% endif %}\n</div>\n'
+                '<div class="properties"><address>\n'
+                '{% if author %}<p id="author">{{ author | e }}</p>{% endif %}\n'
+                '{% if copyright %}<p id="copyright">{{ copyright | e }}</p>{% endif %}\n'
+                '</address></div>\n</article>\n', encoding="utf-8")
             if theme_name not in ("material", "mkdocs"):
                 # mkdocs-to-pdf 0.10.1 has handlers only for these two, and its generic fallback logs an error and
                 # takes the wrong arguments, so any other theme failed. This one adds nothing to the pages.

@@ -19,12 +19,6 @@ interruption. If you do not use Spec Kit, the same diagram, manual and delegatio
 available as portable agent skills in [sanduq-skills](https://github.com/samykabu/sanduq-skills).
 The [product brief](docs/start/product-brief.md) says who Sanduq is for and how its success is measured.
 
-> $${\color{red}\text{CI runner exception: every job runs on the home office runner homek8-general except two cases. The windows-latest legs of the regression, memory-installation and project-init matrices in .github/workflows/ci.yml run on GitHub-hosted Windows, and every ci.yml job of a pull request from a fork runs on ubuntu-latest.}}$$
->
-> $${\color{red}\text{Why: Windows legs: the home office runners are Linux pods. Fork pull requests: this repository is public, and code from a fork must not run inside the home office cluster, so jobs of pull requests from forks run on ubuntu-latest.}}$$
->
-> $${\color{red}\text{Removal: Windows legs: register a self-hosted Windows runner for samykabu/sanduq and point the windows-latest legs at it. Fork pull requests: none planned; this exception is a security boundary, not a missing runner.}}$$
-
 ## Products
 
 ![Product map: nine Spec Kit extensions in this repository; Scope is part of Workflow, and its own package is a retired shim. Workflow, Assure, PR and User Manual require Illustrate; PR uses Assure and User Manual when installed; Workflow uses Progress when installed; Project, Memory and Progress stand alone. The sanduq-skills repository supplies the Illustrate, User Manual and Delegate Task skills, copied into extensions and listed by the sanduq marketplace.](docs/diagrams/product-map.animated.svg)
