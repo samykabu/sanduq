@@ -56,7 +56,7 @@ jobs:
           fi
 
       - name: Install validation dependencies
-        run: python3 -m pip install --user pyyaml packaging
+        run: python3 -m pip install --user pyyaml packaging markdown-it-py==3.0.0
 
       - name: Claude Code validates the marketplace
         run: npx -y @anthropic-ai/claude-code@2.1.310 plugin validate .
