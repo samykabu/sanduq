@@ -1,5 +1,9 @@
 # Changelog
 
+## [4.7.6] - 2026-10-30
+
+- Accepts User Manual 2.x as the optional integration (`>=1.0.0,<3.0.0`); PR uses only its `manual_state.py status` and `speckit.user-manual.update`, which 2.0.0 keeps unchanged. No behaviour change.
+
 ## [4.7.5] - 2026-10-29
 
 - The packaged shared helpers (`deps.py`, `sanduq_pr_lint.py`, `sanduq_gh.py`) start with an `SPDX-License-Identifier: MIT` line. No behaviour change.

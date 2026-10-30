@@ -55,7 +55,8 @@ LINK = re.compile(
 )
 
 
-def copy_pages(source: Path, target: Path, audience: str, module: str | None, page_suffix: str = ".md") -> int:
+def copy_pages(source: Path, target: Path, audience: str, module: str | None, page_suffix: str = ".md",
+               titles: dict[str, str] | None = None) -> int:
     """Stage the pages this edition selects, and only the assets they reach.
 
     A manual keeps shared assets beside its language directories, so a page reaches them through a
@@ -115,7 +116,10 @@ def copy_pages(source: Path, target: Path, audience: str, module: str | None, pa
         text = path.read_text(encoding="utf-8")
         if path.suffix == ".md" and text.startswith("---\n") and text.count("---\n") >= 2:
             # Front matter is source metadata: GitHub would show it as a table and Pandoc would let each page's
-            # title replace the edition's. The manifest carries what renderers need.
+            # title replace the edition's. The manifest keeps each page's title for the renderers.
+            title = (split_page(path)[0] or {}).get("title")
+            if titles is not None and title:
+                titles[output.relative_to(target).as_posix()] = str(title)
             text = text.split("---\n", 2)[2].lstrip("\n")
         output.write_text(LINK.sub(link, text), encoding="utf-8")
 
@@ -170,6 +174,12 @@ def nav_pages(nav: list) -> list[str]:
             for children in item.values():
                 pages += nav_pages(children)
     return pages
+
+
+def titled_nav(nav: list, titles: dict[str, str]) -> list:
+    """The navigation with each page that has a front-matter title labelled by it (`{title: page}`)."""
+    return [({titles[item]: item} if item in titles else item) if isinstance(item, str)
+            else {name: titled_nav(children, titles) for name, children in item.items()} for item in nav]
 
 
 def reading_order(docs: Path, nav: list) -> list[str]:
@@ -236,7 +246,8 @@ def assemble(root: Path, manual: dict, args: argparse.Namespace, target: Path, p
     source = root / "docs" / args.language
     if not source.is_dir():
         raise SystemExit(f"language source not found: {source}")
-    if copy_pages(source, target, args.audience, args.module, page_suffix) == 0:
+    titles: dict[str, str] = {}
+    if copy_pages(source, target, args.audience, args.module, page_suffix, titles) == 0:
         raise SystemExit(f"no {args.audience}/{args.language} pages selected")
     brand = load_brand(root, manual)
     rtl = {str(code) for code in (manual.get("languages") or {}).get("rtl", [])}
@@ -252,6 +263,7 @@ def assemble(root: Path, manual: dict, args: argparse.Namespace, target: Path, p
         "version": args.version,
         "toc_title": TOC_TITLE.get(args.language, TOC_TITLE["en"]),
         "pages": reading_order(target, nav),
+        "titles": dict(sorted(titles.items())),
         "nav": nav,
         "brand": brand,
     }
@@ -526,7 +538,8 @@ def render_mkdocs(root: Path, manual: dict, settings: dict, args: argparse.Names
                 "    return soup\n", encoding="utf-8")
         config = {
             "site_name": manifest["title"],
-            "nav": manifest["nav"],
+            # Front matter is stripped from staged pages, so the navigation carries each page's authored title.
+            "nav": titled_nav(manifest["nav"], manifest["titles"]),
             "docs_dir": "docs",
             "site_dir": "site",
             "use_directory_urls": False,

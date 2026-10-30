@@ -37,7 +37,7 @@ and backslashes are escapes, so give Windows paths in list form). Placeholders:
 renderer:
   kind: command
   # A Word edition through the team's reference document:
-  command: pandoc {pages} --metadata-file {metadata} --reference-doc theme/word.docx -o {output}/manual.docx
+  command: pandoc -f gfm+rebase_relative_paths {pages} --metadata-file {metadata} --reference-doc theme/word.docx -o {output}/manual.docx
 ```
 
 ```yaml
@@ -46,6 +46,10 @@ renderer:
   # A Quarto book that reads the edition folder and the brand file:
   command: [quarto, render, theme/quarto, --output-dir, "{output}", -M, "edition:{edition}"]
 ```
+
+Pages keep links relative to their own folder. Give Pandoc `-f gfm+rebase_relative_paths` so it finds each
+page's images from that page, not from `User-Manual/`; check how your Pandoc version shows GitHub alerts.
+Each page's front-matter title is in `edition.json` under `titles`.
 
 The tool itself is not installed by the skill: put it on the build machine or the CI runner image,
 or add an install step to the generated workflow.

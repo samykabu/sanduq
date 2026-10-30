@@ -309,7 +309,8 @@ class PdfDocumentTests(unittest.TestCase):
         self.addCleanup(self.tmp.cleanup)
         self.root = Path(self.tmp.name).resolve()
         (self.root / 'docs/ar').mkdir(parents=True)
-        (self.root / 'docs/ar/index.md').write_text('---\naudiences: [end-user]\n---\n# الرئيسية\n', encoding='utf-8')
+        (self.root / 'docs/ar/index.md').write_text('---\ntitle: البداية\naudiences: [end-user]\n---\n# الرئيسية\n',
+                                                     encoding='utf-8')
         patcher = mock.patch.object(builder, 'installed_themes', return_value={'material', 'readthedocs'})
         patcher.start()
         self.addCleanup(patcher.stop)
@@ -345,6 +346,7 @@ class PdfDocumentTests(unittest.TestCase):
         self.assertEqual({'lang': 'ar', 'dir': 'rtl'}, dict(html))
         self.assertNotIn('pdf_theme_handler.py', seen)
         self.assertNotIn('theme_handler_path', seen['config']['plugins'][1]['to-pdf'])
+        self.assertEqual([{'البداية': 'index.md'}], seen['config']['nav'], 'the authored title labels the page')
 
     def test_the_cover_omits_unset_fields_and_the_contents_heading_follows_the_language(self):
         seen = self.build('material')
@@ -428,6 +430,10 @@ class MarkdownRendererTests(unittest.TestCase):
         page = (site / 'index.md').read_text(encoding='utf-8')
         self.assertIn('(modules/booking/index.md)', page)
         self.assertTrue(page.startswith('# الرئيسية'), 'front matter is source metadata, not output')
+        self.assertEqual({'index.md': 'الرئيسية'}, manifest['titles'])
+        self.assertEqual(['index.md', {'Modules': [{'Booking': [{'Home': 'modules/booking/index.md'}]}]}],
+                         builder.titled_nav(['index.md', {'Modules': [{'Booking': ['modules/booking/index.md']}]}],
+                                            {'modules/booking/index.md': 'Home'}))
         metadata = builder.yaml.safe_load((site / 'metadata.yml').read_text(encoding='utf-8'))
         self.assertEqual(('ar', 'rtl', 'Booking Demo'), (metadata['lang'], metadata['dir'], metadata['title']))
         self.assertTrue(archive.is_file())
@@ -487,8 +493,8 @@ class CommandRendererTests(unittest.TestCase):
         self.assertTrue(call['args'][3].endswith('metadata.yml'))
 
     def test_a_string_command_is_split_like_a_shell(self):
-        self.assertEqual(['pandoc', '/e/a.md', '/e/b.md', '-o', '/out/My Manual.docx'],
-                         builder.command_argv('pandoc {pages} -o "{output}/My Manual.docx"',
+        self.assertEqual(['pandoc', '-f', 'gfm+rebase_relative_paths', '/e/a.md', '/e/b.md', '-o', '/out/My Manual.docx'],
+                         builder.command_argv('pandoc -f gfm+rebase_relative_paths {pages} -o "{output}/My Manual.docx"',
                                               {'output': '/out'}, ['/e/a.md', '/e/b.md']))
 
     def test_a_failing_silent_or_missing_command_stops_the_build(self):
