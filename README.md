@@ -32,7 +32,7 @@ The map shows each extension and what it requires; arrows point to the dependenc
 | [Scope](docs/extensions/scope.md) | Issue scope, prerequisites and decomposition; part of Workflow from 2.0.0 | Before and after Specify, before Plan | No | Workflow (it ships Scope), Illustrate | Through Workflow (Claude Code live run) |
 | [Project](docs/extensions/project.md) | GitHub Project board sync | Specify to Implement | Yes | `gh` (optional standalone; Workflow needs a mapped board in its `full` and `minimal` board modes, none in `none`) | Claude Code (live run through Workflow); Codex (unverified) |
 | [Assure](docs/extensions/assure.md) | QA readiness analysis and walkthrough | After Tasks, around Implement | Yes | Illustrate | Codex, Claude Code (unverified) |
-| [User Manual](docs/extensions/user-manual.md) | Audience-aware application manual | After Tasks and Implement; release | Yes | Illustrate | Codex, Claude Code (unverified) |
+| [User Manual](docs/extensions/user-manual.md) | Audience-aware application manual; HTML and PDF, English and Arabic (Amiri font) | After Tasks and Implement; release | Yes | Illustrate | Codex, Claude Code (unverified) |
 | [PR](docs/extensions/pr.md) | Feature docs, PR description, review feedback | After Implement | Yes | Illustrate | Claude Code (live run through Workflow); Codex (unverified) |
 | [Illustrate](docs/extensions/illustrate.md) | Themed diagrams and charts, 44 types | Any, on request | Yes | Nothing | Codex, Claude Code (unverified) |
 | [Memory](docs/extensions/memory.md) | Project memory and recoverable spec archiving | Before Specify and Analyze; after merge | Yes | Python 3.11+, Git | Claude Code (live run through Workflow); Codex (unverified) |
