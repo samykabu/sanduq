@@ -459,10 +459,16 @@ def affected_lanes(root, command, paths):
 
 
 def source_drift(receipt, current, root=None, feature=None):
-    """Source paths added, removed or changed since the receipt's inventory."""
+    """Source paths added, removed or changed since the receipt's inventory.
+
+    A dependency the receipt fingerprints but its inventory missed (ignored at completion) counts with that
+    fingerprint, so publishing it with the same bytes is not an addition (#109)."""
     old = source_fingerprints_of(root, receipt, feature)
+    declared = {portable_label(path): value for path, value in (receipt.get('fingerprints') or {}).items()
+                if value is not None}
+    baseline = {**declared, **old}
     return sorted(path for path in set(old) | set(current)
-                  if path not in old or path not in current or old[path] != current[path])
+                  if path not in baseline or path not in current or baseline[path] != current[path])
 
 
 def current_source_key(root):
@@ -626,7 +632,9 @@ def receipt_status(root, feature, stage, receipt, policy=None, tier=None):
     current = source_fingerprints(root)
     if recorded == current:
         return {'current': True, 'via': 'identity'}
-    drift = source_drift({'source_fingerprints': recorded}, current)
+    drift = source_drift({'source_fingerprints': recorded, 'fingerprints': saved}, current)
+    if not drift:
+        return {'current': True, 'via': 'declared-dependency'}
     stale = {'current': False, 'reason': 'source-drift', 'paths': drift}
     if not receipt.get('source_key'):
         return {**stale, 'rule': 'identity'}
@@ -728,12 +736,11 @@ def receipt_drift(root, feature, stage, receipt, tier=None):
     changed = {p for p in set(saved) | set(current) if saved.get(p) != current.get(p)}
     changed.update(set(required) - {portable_label(p) for p in receipt.get('fingerprints', {})})
     if stage in SOURCE_STAGES:
-        try:
-            old = source_fingerprints_of(root, receipt, feature)
-        except WorkflowError:
-            old = {}  # an unreadable inventory leaves every current source path reported as changed
         new = source_fingerprints(root)
-        changed.update(p for p in set(old) | set(new) if p not in old or p not in new or old[p] != new[p])
+        try:
+            changed.update(source_drift(receipt, new, root, feature))
+        except WorkflowError:
+            changed.update(new)  # an unreadable inventory leaves every current source path reported as changed
     return sorted(changed)
 
 

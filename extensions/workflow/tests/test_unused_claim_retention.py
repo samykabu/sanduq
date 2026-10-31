@@ -162,6 +162,35 @@ class Issue109Tests(RetentionHarness):
         status = w.receipt_status(self.root, self.feature, 'verify', run.load()['receipts']['verify'], run.policy)
         self.assertEqual((status['current'], status['paths']), (False, ['tools/dep.py']))
 
+    def test_publishing_an_unchanged_declared_dependency_keeps_verify_current(self):
+        for dependency in ('tools/dep.py', '.delegate/uiux/final-verify-interface.json'):
+            with self.subTest(dependency=dependency):
+                self.setUp()
+                self.policy = w.default_policy(False, False)
+                self.configure()
+                self.write('.gitignore', dependency.split('/')[0] + '/\n')
+                self.write(dependency, 'DEPENDENCY = 1\r\n')
+                run = self.run_object()
+                self.complete_through(run, 'execute')
+                claim = run.claim(self.usage())
+                self.assertEqual(claim['stage'], 'verify')
+                receipt = self.receipt('verify')
+                run.complete(claim['token'], {**receipt, 'inputs': receipt['inputs'] + [dependency]})
+                self.commit_all()
+                self.assertNotIn(dependency, run.load()['receipts']['verify'].get('source_fingerprints', {}))
+                subprocess.run(['git', 'add', '-f', dependency], cwd=self.root, check=True, capture_output=True)
+                self.commit_all('publish the unchanged dependency')
+                verify = run.load()['receipts']['verify']
+                self.assertTrue(w.receipt_status(self.root, self.feature, 'verify', verify, run.policy)['current'])
+                self.assertEqual(w.receipt_drift(self.root, self.feature, 'verify', verify), [])
+                self.assertEqual(run.next(run.load())['stage'], 'review')  # no second Verify pass
+                # Real bytes still count, and a missing dependency still fails closed.
+                self.write(dependency, 'DEPENDENCY = 2\r\n')
+                status = w.receipt_status(self.root, self.feature, 'verify', verify, run.policy)
+                self.assertEqual((status['current'], status['paths']), (False, [dependency]))
+                (self.root / dependency).unlink()
+                self.assertFalse(w.receipt_current(self.root, self.feature, 'verify', verify, run.policy))
+
 
 class Issue114Tests(RetentionHarness):
     """A Verify source-inventory side file is damaged: a storage fault, never whole-inventory drift."""
