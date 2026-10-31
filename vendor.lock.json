@@ -533,8 +533,8 @@
       ],
       "internal": true,
       "exclusive": true,
-      "ref": "agent-tools-v1.8.2",
-      "sha": "5e3cf07c9e3275161380a563bb1120803b258e8e",
+      "ref": "agent-tools-v1.9.0",
+      "sha": "378fd423f6d52b78083ad7bef971f796ff35a76c",
       "files": {
         "extensions/workflow/assets/delegate-task/.gitignore": "247681cefffa8448d973f21147c92b38b63f492a98a50aca3b3c490bc97499e1",
         "extensions/workflow/assets/delegate-task/README.ar.md": "7c2cade9d85acab9c3da95d81c59d6bd44abbed9bdd465f92e6de81ed034ea12",
@@ -690,8 +690,8 @@
       ],
       "internal": true,
       "exclusive": true,
-      "ref": "agent-tools-v1.8.2",
-      "sha": "5e3cf07c9e3275161380a563bb1120803b258e8e",
+      "ref": "agent-tools-v1.9.0",
+      "sha": "378fd423f6d52b78083ad7bef971f796ff35a76c",
       "files": {
         "extensions/progress/assets/ui/base.css": "6c5e32f0ca4fb687ef681339957b1ed85805cfaf9f1fa551a3367127032585b0",
         "extensions/progress/assets/ui/blocks.js": "78ec5ce715e35130643bbb76f69530ee4b0967b22ce5a35accd3633e8f7620c4",
