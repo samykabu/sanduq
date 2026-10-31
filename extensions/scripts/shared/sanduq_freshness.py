@@ -87,7 +87,12 @@ def inputs(root, feature, kind, base=None, outputs=()):
         # name-only includes deleted files; diff against the working tree includes
         # staged and unstaged edits. No HEAD^ fallback can hide earlier commits.
         paths.update(filter(None, git(root, 'diff', '--name-only', '-z', comparison).split('\0')))
-        paths.update(filter(None, git(root, 'ls-files', '--others', '--exclude-standard', '-z').split('\0')))
+        # A sibling feature's untracked notes are local debris, not this feature's input (issue #113);
+        # its committed files still arrive through the diff, and other untracked sources stay inputs.
+        siblings = Path(feature).parent.as_posix() + '/'
+        paths.update(p for p in git(root, 'ls-files', '--others', '--exclude-standard', '-z').split('\0')
+                     if p and not (p.startswith(siblings) and '/' in p[len(siblings):]
+                                   and not p.startswith(feature + '/')))
     else:
         comparison = None
     def included(value):

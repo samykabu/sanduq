@@ -140,6 +140,9 @@ class FreshnessTests(unittest.TestCase):
             path = self.root / name
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text('original requirement or source', encoding='utf-8')
+        # Another feature's files reach this branch through the diff once committed (#113).
+        subprocess.run(['git', 'add', 'specs/002-other'], cwd=self.root, check=True)
+        subprocess.run(['git', 'commit', '-qm', 'other feature'], cwd=self.root, check=True)
         for kind in ('analyze', 'document'):
             names = feature_paths + (product_paths if kind == 'document' else [])
             state = f'.specify/extensions/assure/state/{kind}.json'
@@ -223,6 +226,22 @@ class FreshnessTests(unittest.TestCase):
         (self.root/'src.txt').unlink();self.call('record');self.assertTrue(self.call()['current'])
         (self.root/'src.txt').write_text('restored');self.assertFalse(self.call()['current'])
         self.call('record');(self.root/'new-source.txt').write_text('new');self.assertFalse(self.call()['current'])
+
+    def test_untracked_notes_of_another_feature_are_not_inputs(self):
+        # Issue #113: another feature's untracked coordination note is worktree debris, not this feature's input.
+        self.call('record'); before = f.inputs(self.root, self.feature, 'document', self.base, [self.output])
+        note = self.root/'specs/002-other/scope/source-supplement.md'
+        note.parent.mkdir(parents=True); note.write_text('unrelated')
+        self.assertEqual(f.inputs(self.root, self.feature, 'document', self.base, [self.output]), before)
+        self.assertTrue(self.call()['current'])
+        # Untracked product source and this feature's own untracked files still invalidate.
+        (self.root/'specs/README.md').write_text('shared'); self.assertFalse(self.call()['current'])
+        self.call('record'); (self.root/self.feature/'scope').mkdir(); (self.root/self.feature/'scope/note.md').write_text('own')
+        self.assertFalse(self.call()['current'])
+        # A committed change to another feature stays a diff input of this branch.
+        subprocess.run(['git','add','specs/002-other'],cwd=self.root,check=True)
+        subprocess.run(['git','commit','-qm','other'],cwd=self.root,check=True)
+        self.call('record'); note.write_text('now tracked'); self.assertFalse(self.call()['current'])
 
     def test_modified_and_deleted_outputs_invalidate(self):
         self.call('record');(self.root/self.output).write_text('changed');self.assertFalse(self.call()['current'])
