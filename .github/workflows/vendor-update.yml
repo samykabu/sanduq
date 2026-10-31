@@ -64,4 +64,4 @@ jobs:
           git add -A
           git commit -m "chore(vendor): $TAGS from sanduq-skills"
           git push "$remote" "$branch"
-          gh pr create --title "Vendor $TAGS from sanduq-skills" --body "Vendors $TAGS from samykabu/sanduq-skills and pins the marketplace entries to those releases. Extensions that ship the vendored files need a patch release recorded in extensions/pending-releases.json before merging. If CI did not start, VENDOR_PR_TOKEN is missing or expired: re-run CI from the Actions tab."
+          gh pr create --head "$branch" --title "Vendor $TAGS from sanduq-skills" --body "Vendors $TAGS from samykabu/sanduq-skills and pins the marketplace entries to those releases. Extensions that ship the vendored files need a patch release recorded in extensions/pending-releases.json before merging. If CI did not start, VENDOR_PR_TOKEN is missing or expired: re-run CI from the Actions tab."
