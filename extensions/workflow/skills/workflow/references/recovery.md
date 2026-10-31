@@ -16,7 +16,10 @@ receipt back (`retained.restored`); a stale one stays stale.
   --plan` prints the changed input paths per stale stage. Review each change, write
   `{"stages": {"<stage>": {"summary", "evidence": [], "inputs": []}}}` for every listed stage,
   then run it with `--receipt <file>`: one locked operation re-records them in order with the
-  same validation as `complete`. Whitespace-only Markdown changes count as unchanged.
+  same validation as `complete`. Whitespace-only Markdown changes count as unchanged, and so
+  do unchanged CRLF files that a later `-text` attribute reads byte exact; those stages are
+  re-stamped with no entry. Scope is only ever re-stamped; a real Scope input change still
+  needs a Scope claim.
 - Verify stale after source drift (`ci.gate.verification_check` set): push HEAD, wait for that
   check to pass on it, then `workflow.py revalidate --feature ... --stage verify --check-run
   <run id>`. It needs the affected-lane hook, a clean source tree and current earlier stages. A

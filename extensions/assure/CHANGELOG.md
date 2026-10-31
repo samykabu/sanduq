@@ -1,5 +1,9 @@
 # Changelog
 
+## [2.7.3] - 2026-10-31
+
+- The packaged `sanduq_freshness.py` leaves another feature's untracked files under `specs/<other>/` out of the QA document inputs, so an untracked note in a sibling feature no longer stales this feature's QA record (#113). Committed files still count through the branch diff.
+
 ## [2.7.2] - 2026-10-29
 
 - The packaged shared helpers (`sanduq_freshness.py`, `sanduq_hash.py`, `sanduq_ci.py`, `deps.py`) start with an `SPDX-License-Identifier: MIT` line. No behaviour change.

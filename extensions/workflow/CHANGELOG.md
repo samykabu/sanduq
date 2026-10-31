@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.2.2] - 2026-10-31
+
+- Publishing a declared dependency that Git ignored at completion (`git add -f`) with unchanged bytes no longer makes Verify or Review stale: source drift compares a path the inventory lacks against the receipt's own fingerprint for it (#109). Changed bytes, deletions and undeclared ignored files still drift.
+- `revalidate-upstream` can start at Scope (`--through scope`). It re-stamps a stage whose recorded hash still equals the attribute-free text reading of the current bytes, such as after a later `specs/** -text` rule, keeping every receipt with a `revalidated_upstream` audit record (#111). A real Scope change is refused with `REVALIDATE_UPSTREAM_SCOPE_NEEDS_CLAIM`; before, later stages were re-recorded while Scope stayed stale.
+- A missing, truncated or tampered source-inventory side file fails the CI gate as `SOURCE_INVENTORY_INVALID` (naming the file and its recorded and found sha256) instead of `STALE_RECEIPT` with every source path listed, and the recovery advice is to restore the file from Git, not to re-record the stage (#114). This code cannot be waived, as `check_index` already treated it.
+- A decision question with line breaks round-trips: the title parser spans lines, and `ask` reads back the rendered comment before posting, refusing one that would not parse back with `DECISION_QUESTION_INVALID` and no comment or ledger entry (#116).
+- Another feature's untracked files under `specs/<other>/` are no longer implicit QA or manual inputs (#113, shared `sanduq_freshness.py`). Pins Assure 2.7.3 and User Manual 2.0.2.
+
 ## [2.2.1] - 2026-10-31
 
 - Pins User Manual 2.0.1 (manuals from User Manual 1.x keep their MkDocs site; Pandoc renderer commands resolve page images). No behaviour change.

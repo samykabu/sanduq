@@ -459,10 +459,16 @@ def affected_lanes(root, command, paths):
 
 
 def source_drift(receipt, current, root=None, feature=None):
-    """Source paths added, removed or changed since the receipt's inventory."""
+    """Source paths added, removed or changed since the receipt's inventory.
+
+    A dependency the receipt fingerprints but its inventory missed (ignored at completion) counts with that
+    fingerprint, so publishing it with the same bytes is not an addition (#109)."""
     old = source_fingerprints_of(root, receipt, feature)
+    declared = {portable_label(path): value for path, value in (receipt.get('fingerprints') or {}).items()
+                if value is not None}
+    baseline = {**declared, **old}
     return sorted(path for path in set(old) | set(current)
-                  if path not in old or path not in current or old[path] != current[path])
+                  if path not in baseline or path not in current or baseline[path] != current[path])
 
 
 def current_source_key(root):
@@ -626,7 +632,9 @@ def receipt_status(root, feature, stage, receipt, policy=None, tier=None):
     current = source_fingerprints(root)
     if recorded == current:
         return {'current': True, 'via': 'identity'}
-    drift = source_drift({'source_fingerprints': recorded}, current)
+    drift = source_drift({'source_fingerprints': recorded, 'fingerprints': saved}, current)
+    if not drift:
+        return {'current': True, 'via': 'declared-dependency'}
     stale = {'current': False, 'reason': 'source-drift', 'paths': drift}
     if not receipt.get('source_key'):
         return {**stale, 'rule': 'identity'}
@@ -664,6 +672,11 @@ def recovery_recipe(feature, stage, status, policy, receipt, root=None):
                 f'{WORKFLOW_SCRIPT} recover{at} --token <token> --reason "<why>" first), re-run {stage}, then '
                 f'{WORKFLOW_SCRIPT} complete{at} --token <token> --receipt <receipt.json>')
     reason = status.get('reason')
+    if reason == 'source-inventory-invalid':
+        # Storage, not source: the receipt and its evidence stand once the side file matches its recorded hash.
+        side = feature + '/' + str((receipt.get('source_inventory') or {}).get('path', '<inventory>'))
+        return [f'Restore {side} from the commit that recorded {stage} (git checkout <commit> -- {side}; '
+                f'with core.autocrlf=false on Windows), then re-run the gate; no re-record is needed']
     if reason == 'marked-stale':
         mark = status.get('stale') or {}
         if mark.get('reason') == 'ci-lane-gap':
@@ -707,15 +720,18 @@ def recovery_recipe(feature, stage, status, policy, receipt, root=None):
 
 def upstream_drift(root, feature, stage, receipt, tier=None):
     """Changed dependency paths of a receipt, where a Markdown input whose only change is CRLF or trailing
-    spaces counts as unchanged (compared through `text_fingerprints`; the stored hash stays the byte hash).
-    A required input the receipt never fingerprinted counts as changed."""
+    spaces counts as unchanged (compared through `text_fingerprints`; the stored hash stays the byte hash), and so
+    does any input whose recorded hash is still its text reading with no Git attributes (a later `-text` rule
+    re-reads unchanged CRLF bytes byte-exact). A required input the receipt never fingerprinted counts as changed."""
     required = required_inputs(root, feature, stage, tier)
     saved = dependency_fingerprints(receipt, required)
     current = fingerprint_files(root, saved, feature=feature, like=saved)
     drifted = [path for path in saved if current[path] != saved[path]]
     recorded = receipt.get('text_fingerprints') or {}
     text_now = text_fingerprints(root, [path for path in drifted if current[path] is not None and path in recorded])
-    changed = {path for path in drifted if not (path in text_now and text_now[path] == recorded[path])}
+    textual = fingerprint_files(root, drifted, feature=feature, like=saved, attributes=lambda *_: {})
+    changed = {path for path in drifted if textual[path] != saved[path]
+               and not (path in text_now and text_now[path] == recorded[path])}
     changed.update(set(required) - {portable_label(path) for path in receipt.get('fingerprints', {})})
     return sorted(changed)
 
@@ -728,12 +744,8 @@ def receipt_drift(root, feature, stage, receipt, tier=None):
     changed = {p for p in set(saved) | set(current) if saved.get(p) != current.get(p)}
     changed.update(set(required) - {portable_label(p) for p in receipt.get('fingerprints', {})})
     if stage in SOURCE_STAGES:
-        try:
-            old = source_fingerprints_of(root, receipt, feature)
-        except WorkflowError:
-            old = {}  # an unreadable inventory leaves every current source path reported as changed
         new = source_fingerprints(root)
-        changed.update(p for p in set(old) | set(new) if p not in old or p not in new or old[p] != new[p])
+        changed.update(source_drift(receipt, new, root, feature))  # a damaged side file is a storage error, never drift
     return sorted(changed)
 
 

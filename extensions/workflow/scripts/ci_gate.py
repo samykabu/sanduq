@@ -112,6 +112,9 @@ def check(root, feature, policy, base=None, rules=None, verify_ci_evidence=True,
             receipt = state.get('receipts', {}).get(stage, {})
             require(receipt.get('outcome') == 'passed' and receipt.get('evidence'), 'RECEIPT_MISSING: ' + stage)
             status = receipt_status(root, feature, stage, receipt, policy)
+            if status.get('reason') == 'source-inventory-invalid':
+                raise WorkflowError(status['detail'] + '; ' + stage + ' receipt storage, not source drift; recovery: ' +
+                                    ' | '.join(recovery_recipe(feature, stage, status, policy, receipt, root)))
             if not status['current']:
                 stale = receipt.get('stale')
                 note = ''

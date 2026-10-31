@@ -1,5 +1,9 @@
 # Changelog
 
+## [2.0.2] - 2026-10-31
+
+- The packaged `sanduq_freshness.py` leaves another feature's untracked files under `specs/<other>/` out of the manual inputs, so an untracked note in a sibling feature no longer stales this feature's manual status (#113). Committed files still count through the branch diff.
+
 ## [2.0.1] - 2026-10-31
 
 - Vendors sanduq-skills `dev-tools-v2.0.3`. A `manual.yml` from User Manual 1.x (MkDocs settings such as `theme` or `primary`, and no `renderer.kind`) keeps building with the `mkdocs` renderer instead of switching to Markdown; the build prints a notice to add `kind: mkdocs`, and the release workflow still installs MkDocs and builds PDFs for it. When a renderer command is Pandoc and sets no `--from`, the build adds `--from=gfm+rebase_relative_paths`, so images resolve from each page; the documented recipe is plain `pandoc {pages} ...`. `build_manual.py --help` lists the renderers, placeholders and both behaviours.

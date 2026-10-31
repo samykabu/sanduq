@@ -38,8 +38,8 @@ def posted(qid='SD1', options=('First', 'Second', 'Third'), mode='single', recom
             'body': '<!-- sanduq-decision:question ' + json.dumps(marker, sort_keys=True) + ' -->\n' + body}
 
 
-def legacy(qid='SD1', options=('First', 'Second'), cid=1):
-    body = f'**{qid}: Which path?**\n\n' + '\n'.join(f'- {chr(65 + i)}. {o}' for i, o in enumerate(options))
+def legacy(qid='SD1', options=('First', 'Second'), cid=1, question='Which path?'):
+    body = f'**{qid}: {question}**\n\n' + '\n'.join(f'- {chr(65 + i)}. {o}' for i, o in enumerate(options))
     body += f'\n\nReply with `{qid}: A` (or another letter) in a new comment. Decisions are reviewed in this issue.'
     marker = {'version': 1, 'id': qid, 'options': list(options), 'body_digest': d.digest(body),
               'request_digest': 'legacy'}
@@ -75,6 +75,30 @@ class FormatTests(unittest.TestCase):
         marker = json.loads(gh.comments[0]['body'].split('\n', 1)[0][len('<!-- sanduq-decision:question '):-4])
         self.assertEqual((marker['choice_format'], marker['mode'], marker['recommended']), (1, 'single', 1))
         self.assertIn('**(Recommended)**', gh.comments[0]['body'])
+
+    def test_multiline_question_round_trips_through_reconcile(self):
+        # Issue #116: the writer published multiline questions the reader then called edited.
+        question = 'Which refund policy should apply?\nKeep **manual approval**\n\nfor exceptions? **ok**'
+        gh = FakeGitHub()
+        with ledger_root(gh) as root:
+            first = d.ask(root, 'specs/001', question, ['Review every request', 'Review exceptions only'], gh)
+            again = d.ask(root, 'specs/001', question, ['Review every request', 'Review exceptions only'], gh)
+            item = d.reconcile(root, 'specs/001', FakeGitHub([tick(gh.comments[0], 'B')]))['decisions'][0]
+        self.assertEqual((first['id'], again['id'], again['reused'], len(gh.comments)), ('SD1', 'SD1', True, 1))
+        self.assertIn('**SD1: ' + question + '**\n\n', gh.comments[0]['body'])
+        self.assertEqual((item['status'], item['option']), ('answered', 'B'))
+
+    def test_question_the_reader_cannot_parse_is_refused_before_posting(self):
+        gh = FakeGitHub()
+        with ledger_root(gh) as root:
+            # Each holds the delimiter that ends the title, so the reader would cut it short.
+            for question, mode in (('Keep **this**\n\nTick exactly one option. Then?', 'single'),
+                                   ('Keep **this**\n\nTick every option. Then?', 'multiple'),
+                                   ('Keep **this**\n\n- A. One', 'single')):
+                with self.assertRaisesRegex(d.WorkflowError, 'DECISION_QUESTION_INVALID'):
+                    d.ask(root, 'specs/001', question, ['One', 'Two'], gh, mode)
+            self.assertEqual(d.read(root / 'specs/001/workflow/decisions.json', {}).get('decisions', []), [])
+        self.assertEqual(gh.comments, [])
 
     def test_invalid_mode_and_recommendation_are_refused(self):
         with ledger_root(FakeGitHub()) as root:
@@ -206,6 +230,16 @@ class LegacyTests(unittest.TestCase):
                          (before['status'], before['option'], before['answers']))
         self.assertEqual(after['answer_digest'], before['answer_digest'])
         self.assertEqual(after['choice_format'], 1)
+
+    def test_upgrade_keeps_a_multiline_legacy_question(self):
+        question = 'Which path?\nKeep **manual approval**\n\nfor exceptions?'
+        gh = FakeGitHub([legacy(question=question), reply(2, 'reviewer', 'SD1: B')])
+        with ledger_root(gh) as root:
+            self.assertEqual(d.reconcile(root, 'specs/001', gh)['decisions'][0]['option'], 'B')
+            self.assertEqual(d.upgrade_questions(root, 'specs/001', gh)['upgraded'], ['SD1'])
+            after = d.reconcile(root, 'specs/001', gh)['decisions'][0]
+        self.assertIn('**SD1: ' + question + '**\n\nTick exactly one option.', gh.comments[0]['body'])
+        self.assertEqual((after['choice_format'], after['option']), (1, 'B'))
 
     def test_upgrade_keeps_an_applied_decision_applied(self):
         gh = FakeGitHub([legacy(), reply(2, 'reviewer', 'SD1: A')])

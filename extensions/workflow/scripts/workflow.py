@@ -583,10 +583,10 @@ class Run:
     UPSTREAM_ENTRY_FIELDS = ('summary', 'evidence', 'inputs', 'input_roles', 'evidence_snapshots', 'lint') + CARRIED_FIELDS
 
     def upstream_plan(self, state, through):
-        """Per stale or removed receipt from Specify through `through`: the changed input paths, which stages
+        """Per stale or removed receipt from Scope through `through`: the changed input paths, which stages
         only changed by whitespace in Markdown (re-stamped without a model pass), and which need a receipt."""
         tier = self.tier_of(state)
-        first, last = BASE_STAGES.index('specify'), BASE_STAGES.index(through)
+        first, last = BASE_STAGES.index('scope'), BASE_STAGES.index(through)
         changed, restamp, needs = {}, [], []
         for stage in stages(self.policy, state_tier(state), state.get('skipped')):
             if not first <= BASE_STAGES.index(stage) <= last:
@@ -605,15 +605,15 @@ class Run:
         return {'changed': changed, 'restamp': restamp, 'needs_receipt': needs}
 
     def revalidate_upstream(self, through, receipts=None, plan=False, actor=None):
-        """Re-record stale upstream receipts (Specify through `through`) in one locked operation.
+        """Re-record stale upstream receipts (Scope through `through`) in one locked operation.
 
         `plan` only reports `changed: {stage: [paths]}`. Otherwise `receipts` is `{stages: {<stage>:
         {summary, evidence[], inputs[]}}}` with an entry for every stage that needs one; each is checked the
         way `complete` checks a receipt (binding, decisions ledger, required inputs). A stage whose only drift
-        is whitespace in Markdown inputs is re-stamped with the new byte hashes and no entry."""
-        require(through in BASE_STAGES and BASE_STAGES.index('specify') <= BASE_STAGES.index(through)
-                < BASE_STAGES.index('execute'), 'REVALIDATE_UPSTREAM_STAGE_INVALID: --through names a stage from '
-                'specify to taskstoissues')
+        is whitespace in Markdown inputs (CRLF included, so a later `-text` attribute) is re-stamped with the
+        new byte hashes and no entry. Scope is only ever re-stamped: a real Scope change goes through its claim."""
+        require(through in BASE_STAGES and BASE_STAGES.index(through) < BASE_STAGES.index('execute'),
+                'REVALIDATE_UPSTREAM_STAGE_INVALID: --through names a stage from scope to taskstoissues')
         with locked(self.lock):
             state = self.load()
             active = state['active']
@@ -626,6 +626,9 @@ class Run:
             if plan:
                 return {'plan': True, 'feature': self.relative, 'through': through, **found}
             require(found['changed'], 'REVALIDATE_UPSTREAM_NOT_NEEDED: every receipt through ' + through + ' is current')
+            # Re-admitting Scope reads the issue again (Scope's gate); only its claim does that.
+            require('scope' not in found['needs_receipt'], 'REVALIDATE_UPSTREAM_SCOPE_NEEDS_CLAIM: Scope inputs '
+                    'changed (' + ', '.join(found['changed'].get('scope', [])) + '); amend its evidence or claim Scope')
             entries = (receipts or {}).get('stages') if isinstance(receipts, dict) else None
             require(isinstance(entries, dict), 'REVALIDATE_UPSTREAM_RECEIPT_INVALID: expected {stages: {<stage>: '
                     '{summary, evidence, inputs}}}')
@@ -2181,9 +2184,8 @@ def main():
             cmd.add_argument('--token', required=True)
             cmd.add_argument('--receipt', type=Path, required=True)
         if name == 'revalidate-upstream':
-            cmd.add_argument('--through', required=True, choices=BASE_STAGES[BASE_STAGES.index('specify'):
-                                                                             BASE_STAGES.index('execute')],
-                             help='Last upstream stage to re-record (specify to taskstoissues)')
+            cmd.add_argument('--through', required=True, choices=BASE_STAGES[:BASE_STAGES.index('execute')],
+                             help='Last upstream stage to re-record (scope to taskstoissues; Scope is re-stamped only)')
             cmd.add_argument('--receipt', type=Path,
                              help='{stages: {<stage>: {summary, evidence[], inputs[]}}}; required unless --plan')
             cmd.add_argument('--plan', action='store_true', help='Print the changed inputs per stage without writing')
