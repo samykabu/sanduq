@@ -1,5 +1,9 @@
 # Changelog
 
+## [2.2.1] - 2026-10-31
+
+- Pins User Manual 2.0.1 (manuals from User Manual 1.x keep their MkDocs site; Pandoc renderer commands resolve page images). No behaviour change.
+
 ## [2.2.0] - 2026-10-30
 
 - Requires User Manual 2.x (`>=2.0,<3`) and pins User Manual 2.0.0: Markdown-first editions with pluggable renderers (`markdown`, `command`, `mkdocs`) and one `user-manual` skill. Workflow's own behaviour is unchanged; a project on User Manual 1.x upgrades it with Workflow.

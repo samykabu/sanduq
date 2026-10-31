@@ -247,9 +247,20 @@ def load_brand(root: Path, manual: dict) -> dict:
     return brand
 
 
+# Keys only the MkDocs renderer reads, and that User Manual 1.x wrote into every manual.yml.
+MKDOCS_SETTINGS = ("theme", "theme_options", "custom_dir", "primary", "material_version", "mkdocs_constraint",
+                   "compatibility")
+
+
+def legacy_mkdocs(manual: dict) -> bool:
+    """A manual.yml with MkDocs settings and no renderer.kind, as User Manual 1.x wrote it: it keeps its site."""
+    settings = manual.get("renderer") or {}
+    return not settings.get("kind") and any(key in settings for key in MKDOCS_SETTINGS)
+
+
 def renderer_settings(manual: dict, override: str | None = None) -> dict:
     settings = dict(manual.get("renderer") or {})
-    kind = str(override or settings.get("kind") or DEFAULT_RENDERER)
+    kind = str(override or settings.get("kind") or ("mkdocs" if legacy_mkdocs(manual) else DEFAULT_RENDERER))
     if kind not in RENDERERS:
         raise SystemExit(f"renderer.kind must be one of {', '.join(RENDERERS)}, not {kind!r}")
     settings["kind"] = kind
@@ -332,6 +343,12 @@ def command_argv(command: object, values: dict[str, str], pages: list[str]) -> l
             argv += pages
         else:
             argv.append(PLACEHOLDER.sub(lambda match: values[match.group(1)], token))
+    if argv and Path(argv[0]).stem.lower() == "pandoc" and not any(
+            arg in ("-f", "-r", "--from", "--read") or arg.startswith(("--from=", "--read=", "-f", "-r"))
+            for arg in argv[1:]):
+        # Pandoc runs from User-Manual/ and would look for each page's images there; read the pages as the GitHub
+        # Markdown they are, with links resolved from each page's own folder.
+        argv.insert(1, "--from=gfm+rebase_relative_paths")
     return argv
 
 
@@ -625,8 +642,22 @@ def build_edition(args: argparse.Namespace, root: Path, manual: dict) -> tuple[P
     return site_dir, archive, pdf_path if args.pdf else None
 
 
+HELP = """\
+renderer.kind in manual.yml (or --renderer):
+  markdown  the assembled Markdown edition (default), readable on GitHub
+  command   renderer.command, run from the manual root on each edition; placeholders:
+            {pages} (every page, in reading order), {edition}, {manifest}, {metadata}, {output},
+            {language}, {direction}, {audience}, {version}, {module}, {title}
+            e.g. pandoc {pages} --metadata-file {metadata} -o {output}/manual.docx
+            (Pandoc without its own --from reads the pages as GitHub Markdown with page-relative images)
+  mkdocs    an MkDocs site with renderer.theme; --pdf adds a PDF
+A manual.yml without renderer.kind that sets MkDocs options (as User Manual 1.x wrote it) builds with mkdocs.
+"""
+
+
 def main() -> None:
-    parser = argparse.ArgumentParser(description=__doc__.split("\n", 1)[0])
+    parser = argparse.ArgumentParser(description=__doc__.split("\n", 1)[0], epilog=HELP,
+                                     formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--root", type=Path, default=Path("User-Manual"))
     parser.add_argument("--audience", choices=AUDIENCES)
     parser.add_argument("--language")
@@ -642,6 +673,9 @@ def main() -> None:
     args = parser.parse_args()
     root = args.root.resolve()
     manual = yaml.safe_load((root / "manual.yml").read_text(encoding="utf-8")) or {}
+    if legacy_mkdocs(manual) and not args.renderer:
+        print("notice: manual.yml sets MkDocs options but no renderer.kind, so the mkdocs renderer builds it; "
+              "add 'kind: mkdocs' under renderer to keep it, or another kind to change it", file=sys.stderr)
     if args.print_renderer:
         print(renderer_settings(manual, args.renderer)["kind"])
         return

@@ -7,7 +7,9 @@ one `--module`):
    reach, and write `edition.json` (title, language, direction, version, pages in reading order, the
    navigation tree, brand values) and `metadata.yml` (title, subtitle, author, `lang`, `dir`,
    `toc-title`, in the form Pandoc reads). Needs only Python, PyYAML and markdown-it-py (which tells code examples from links).
-2. **Render** with `renderer.kind` in `manual.yml`. `--renderer` overrides it for one build.
+2. **Render** with `renderer.kind` in `manual.yml`. `--renderer` overrides it for one build. A `manual.yml`
+   without `kind` that sets MkDocs options (as User Manual 1.x wrote it) builds with `mkdocs`, and the build
+   asks you to add `kind: mkdocs`. `build_manual.py --help` lists the renderers and placeholders.
 
 | `renderer.kind` | Output in `site/<version>/<lang>/<audience>/` | Install |
 | --- | --- | --- |
@@ -37,7 +39,7 @@ and backslashes are escapes, so give Windows paths in list form). Placeholders:
 renderer:
   kind: command
   # A Word edition through the team's reference document:
-  command: pandoc -f gfm+rebase_relative_paths {pages} --metadata-file {metadata} --reference-doc theme/word.docx -o {output}/manual.docx
+  command: pandoc {pages} --metadata-file {metadata} --reference-doc theme/word.docx -o {output}/manual.docx
 ```
 
 ```yaml
@@ -47,8 +49,9 @@ renderer:
   command: [quarto, render, theme/quarto, --output-dir, "{output}", -M, "edition:{edition}"]
 ```
 
-Pages keep links relative to their own folder. Give Pandoc `-f gfm+rebase_relative_paths` so it finds each
-page's images from that page, not from `User-Manual/`; check how your Pandoc version shows GitHub alerts.
+Pages keep links relative to their own folder. When the command is Pandoc and sets no `--from`, the build
+adds `--from=gfm+rebase_relative_paths`, so Pandoc reads the pages as GitHub Markdown and finds each page's
+images from that page, not from `User-Manual/`. Check how your Pandoc version shows GitHub alerts.
 Each page's front-matter title is in `edition.json` under `titles`.
 
 The tool itself is not installed by the skill: put it on the build machine or the CI runner image,
