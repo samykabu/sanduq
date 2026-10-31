@@ -1,10 +1,6 @@
 {
   "schema_version": 1,
-  "versions": {
-    "user-manual": "2.0.0",
-    "workflow": "2.2.0",
-    "pr": "4.7.6"
-  },
-  "status": "ready",
+  "versions": {},
+  "status": "released",
   "note": "User Manual 2.0.0 (dev-tools 2.0.1: Markdown-first editions, pluggable renderers, one skill), Workflow 2.2.0 (accepts User Manual 2.x), PR 4.7.6 (accepts User Manual 2.x)."
 }
