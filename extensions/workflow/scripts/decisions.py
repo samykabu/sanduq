@@ -27,7 +27,8 @@ ANSWER_LIST = re.compile(r'^\s*(SD[1-9]\d*)\s*[:\-=]\s*' + LETTERS + r'\s*$', re
 MENTION = re.compile(r'(?<![A-Za-z0-9])(SD[1-9]\d*)(?![A-Za-z0-9])', re.I)
 CHOICES = re.compile(r'(?<=<!-- sanduq-decision:choices:start -->\n)(.*?)(?=\n<!-- sanduq-decision:choices:end -->)', re.S)
 TICKED = re.compile(r'^- \[[xX]\] ')
-LEGACY_TITLE = re.compile(r'\A\*\*(SD[1-9]\d*): (.+)\*\*\n')
+# The title may span lines (#116); it ends at the first `**` followed by the hint or the first legacy option.
+LEGACY_TITLE = re.compile(r'\A\*\*(SD[1-9]\d*): (.+?)\*\*\n\n(?=Tick |- A\. )', re.S)
 MODES = ('single', 'multiple')
 # REQ-21, transport `local`: questions and the user's replies live in this file instead of issue comments.
 LOCAL_FILE = 'clarifications.md'
@@ -470,6 +471,11 @@ def _ask(root, feature, question, options, gh=None, mode='single', recommended=N
     marker = {'version': 1, 'id': qid, 'options': options, 'body_digest': digest(body),
               'request_digest': request_digest, 'choice_format': 1, 'mode': mode,
               'recommended': recommended}
+    comment = '<!-- sanduq-decision:question ' + json.dumps(marker, sort_keys=True) + ' -->\n' + body
+    try:  # never publish a question the reader would call edited (#116)
+        question_record({'body': comment})
+    except WorkflowError:
+        raise WorkflowError('DECISION_QUESTION_INVALID') from None
     if ledger.get('transport') == 'local':
         # The question goes to the feature's clarifications.md; the agent asks the user in the conversation.
         path = Path(root) / feature / LOCAL_FILE
@@ -483,8 +489,7 @@ def _ask(root, feature, question, options, gh=None, mode='single', recommended=N
     else:
         repo, issue = ledger['issue'].split('#')
         gh = gh or GitHub()
-        posted = gh.api(f'repos/{repo}/issues/{issue}/comments', 'POST',
-                        {'body': '<!-- sanduq-decision:question ' + json.dumps(marker, sort_keys=True) + ' -->\n' + body})
+        posted = gh.api(f'repos/{repo}/issues/{issue}/comments', 'POST', {'body': comment})
         require(posted.get('id'), 'DECISION_POST_NOT_CONFIRMED')
     ledger['decisions'].append({**marker, 'question_comment_id': posted['id'],
                                 'question_url': posted.get('html_url'), 'status': 'pending',
