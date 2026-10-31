@@ -204,6 +204,9 @@ class ProjectRest:
         allowed = self.ALLOWED.get(action)
         require(allowed is not None, f'REST fallback does not support `gh project {action}`; retry after the GraphQL rate limit resets.')
         rest = list(args[2:])
+        clear = action == 'item-edit' and '--clear' in rest  # `gh project item-edit --clear` takes no value
+        if clear:
+            rest.remove('--clear')
         positional = []
         while rest and not rest[0].startswith('--'):
             positional.append(rest.pop(0))
@@ -217,7 +220,8 @@ class ProjectRest:
         if action == 'item-edit':
             require(not positional and self.cfg.get('projectId') and options.get('--project-id') == self.cfg['projectId'],
                     'REST fallback: request Project ID differs from the configured Project.')
-            require(('--single-select-option-id' in options) != ('--text' in options) and '--id' in options and '--field-id' in options,
+            require([('--single-select-option-id' in options), ('--text' in options), clear].count(True) == 1
+                    and '--id' in options and '--field-id' in options,
                     'REST fallback: item-edit needs --id, --field-id and exactly one value.')
             return
         require(positional == [str(self.cfg['projectNumber'])], 'REST fallback: request Project number differs from the configured Project.')
@@ -272,6 +276,8 @@ class ProjectRest:
                 value = options['--single-select-option-id']
             elif '--text' in options:
                 value = options['--text'] or None  # an empty text value clears the field
+            elif '--clear' in args:
+                value = None
             else:
                 raise GitHubError('REST fallback supports single-select and text field edits only.')
             item_id = self.item_database_id(options.get('--id'))

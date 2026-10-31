@@ -274,6 +274,7 @@ class Scope:
         self._fields = None
         self._ids = {}
         self._listing = None
+        self.native_deps = {}  # issue number -> its native blocked-by numbers, as last read by `dependencies`
 
     def listing(self, fresh=False):
         """Every issue and pull request of the repository. A split publish lists once and its rewire and plan export
@@ -432,6 +433,7 @@ class Scope:
         rows = self.gh.api(f'{self.base}/{issue["number"]}/dependencies/blocked_by?per_page=100', pages=True)
         for row in rows:
             require(self.same_repository(row), 'Cross-repository prerequisite is unsupported; scope rejected.')
+        self.native_deps[issue['number']] = sorted(x['number'] for x in rows)  # export's exact before-image
         refs = {x['number'] for x in rows} | self.declared_dependencies(issue)
         require(issue['number'] not in refs, 'Dependency cycle: issue depends on itself.')
         return sorted(refs)
@@ -904,10 +906,11 @@ class Scope:
         return item['id'] if item else self.add_to_board(issue)
 
     def edit_item(self, issue, field_id, key, value, option=None):
-        """Set one Project field (single-select `option`, else text `value`) and mirror it in this process's board row."""
+        """Set one Project field (single-select `option`, else text `value`; an empty text clears the field) and mirror
+        it in this process's board row."""
         item_id = self.board_item(issue)
-        flag, raw = ('--single-select-option-id', option) if option else ('--text', value)
-        self.gh.command(['project', 'item-edit', '--id', item_id, '--project-id', self.cfg['projectId'], '--field-id', field_id, flag, raw])
+        edit = ['--single-select-option-id', option] if option else ['--text', value] if value else ['--clear']
+        self.gh.command(['project', 'item-edit', '--id', item_id, '--project-id', self.cfg['projectId'], '--field-id', field_id, *edit])
         self.invalidate_board(memory=False)
         row = (self._board or {}).get(issue['number'])
         if row is not None:
@@ -987,6 +990,7 @@ class Scope:
             node_marker = f'<!-- speckit-scope:node {root_issue["number"]}:'
             candidates = self.rewire_candidates(root_issue, [
                 x for x in existing if 'pull_request' not in x and x['number'] != root_issue['number']
+                and x.get('state_reason') != 'not_planned'  # cancelled history keeps its links
                 and x['number'] not in journal['nodes'].values() and node_marker not in (x.get('body') or '')],
                 journal.get('dependencies_before', {}))
         journal['before'].setdefault(str(root_issue['number']), slim_issue(root_issue))
@@ -1087,8 +1091,8 @@ class Scope:
         return result
 
     def cancel(self, operation, apply=False):
-        """Mark one publish journal `rolled_back`, so `publish` refuses to resume it, and return what the operation
-        changed, for manual repair. No GitHub write; the caller holds the mutation lock with --apply."""
+        """Mark one publish or standalone export journal `rolled_back`, so `publish` refuses to resume it, and return
+        what the operation changed, for manual repair. No GitHub write; the caller holds the mutation lock with --apply."""
         value = str(operation or '').strip()
         runs = self.root / '.specify/scope/runs'
         # A linked runs folder (or parent) must not lead the journal read or write outside the project.
@@ -1097,36 +1101,44 @@ class Scope:
         if re.fullmatch(r'#?[1-9]\d*', value):
             found = sorted(p.name for p in runs.glob(value.lstrip('#') + '-*') if (p / 'journal.json').is_file())
             raise ScopeError(f'SCOPE_CANCEL_AMBIGUOUS: name one operation as <issue>-<hash>: {", ".join(found) or "none for this issue"}.')
-        require(re.fullmatch(r'[1-9]\d*-[0-9a-f]{16}', value),
-                'SCOPE_CANCEL_OPERATION: name the operation as <issue>-<hash>, its folder under .specify/scope/runs.')
+        export = re.fullmatch(r'plan-export-\d+', value)
+        require(export or re.fullmatch(r'[1-9]\d*-[0-9a-f]{16}', value),
+                'SCOPE_CANCEL_OPERATION: name the operation as <issue>-<hash> (publish) or plan-export-<n> (export-plan), '
+                'its folder under .specify/scope/runs.')
         folder = runs / value
         path = folder / 'journal.json'
         journal = read_json(path) if path.is_file() and path.resolve().parent == runs.resolve() / value else None
-        require(isinstance(journal, dict) and journal.get('operation') == value.split('-', 1)[1],
-                f'SCOPE_CANCEL_UNKNOWN: no publish journal {value} under .specify/scope/runs.')
+        require(isinstance(journal, dict) and journal.get('operation') == (value if export else value.split('-', 1)[1]),
+                f'SCOPE_CANCEL_UNKNOWN: no publish or export journal {value} under .specify/scope/runs.')
         if apply and not journal.get('rolled_back'):
             journal.update(rolled_back=True, rolled_back_at=datetime.now(timezone.utc).isoformat())
             write_json(path, journal)
-        root = int(value.split('-', 1)[0])
+        root = None if export else int(value.split('-', 1)[0])
         relative = folder.relative_to(self.root).as_posix()
-        return {'operation': value, 'journal': f'{relative}/journal.json', 'dry_run': not apply,
+        return {'operation': value, 'kind': journal.get('kind', 'publish'), 'journal': f'{relative}/journal.json', 'dry_run': not apply,
                 'rolled_back': bool(journal.get('rolled_back')), 'published': bool(journal.get('published')),
                 'created': {key: n for key, n in journal.get('nodes', {}).items() if n != root},
                 'before': journal.get('before', {}), 'dependencies_before': journal.get('dependencies_before', {}),
+                'native_dependencies_before': journal.get('native_dependencies_before', {}),
+                'fields_before': journal.get('fields_before', {}), 'export': journal.get('export'),
                 'backups': [f'{relative}/{name}' for name in ('snapshot.json', 'analysis.json', 'catalog-before.json',
                                                               'issue-map-before.json') if (folder / name).is_file()],
-                'repair': 'Scope changed nothing on GitHub. By hand: restore issue bodies from `before` and native '
-                          'dependencies from `dependencies_before`, close the `created` issues you do not keep, and '
-                          'restore the catalog and issue map from the backups.'}
+                'repair': 'Scope changed nothing on GitHub. By hand: restore issue bodies from `before`, Project fields '
+                          'from `fields_before` and native dependencies from `native_dependencies_before` '
+                          '(`dependencies_before` also lists declared links; it is the full list for older journals), '
+                          'close the `created` issues you do not keep, and restore the catalog and issue map from the '
+                          'backups. `export.applied` counts the planned writes that reached GitHub.'}
 
     def rewire(self, parent, leaves, journal, journal_path, candidates):
         """Move each candidate's dependency on `parent` to `leaves`; `candidates` come from `rewire_candidates`."""
         for issue, deps in candidates:
+            native = self.gh.api(f'{self.base}/{issue["number"]}/dependencies/blocked_by?per_page=100', pages=True)
             journal['before'].setdefault(str(issue['number']), slim_issue(issue))
             journal.setdefault('dependencies_before', {}).setdefault(str(issue['number']), deps)
+            # `dependencies_before` also holds declared links; restore native links from this exact list.
+            journal.setdefault('native_dependencies_before', {}).setdefault(str(issue['number']), sorted(x['number'] for x in native))
             write_json(journal_path, journal)
             replacement = sorted((set(deps) - {parent['number']}) | set(leaves))
-            native = self.gh.api(f'{self.base}/{issue["number"]}/dependencies/blocked_by?per_page=100', pages=True)
             # Add replacements before removing the original blocker, so interruption fails closed.
             for dep in replacement:
                 if dep not in {x['number'] for x in native}:
@@ -1151,49 +1163,78 @@ class Scope:
                     entry['blockedBy'] = [f'#{n}' for n in replacement]
         write_json(self.catalog_path, self.catalog)
 
+    def check_export(self, graph, receipts, known, cancelled):
+        """Refuse an export before its first write, naming each offending link: a dependency or scoped sub-issue that
+        is cancelled or missing, work that depends on an aggregate or epic, an aggregate without its scope approval,
+        and a dependency or sub-issue cycle."""
+        items = {x['number']: x for x in graph}
+        work = {n for n, x in items.items() if not x['children'] and x.get('kind') != 'epic'}
+        links = [(x['number'], n) for x in graph for n in x['dependencies'] + x['children']]
+        again = 'then run export-plan again. Nothing was written.'
+        bad = ', '.join(f'#{a} -> #{b}' for a, b in links if b in cancelled)
+        require(not bad, f'SCOPE_EXPORT_CANCELLED: work depends on issues closed as not planned: {bad}. Remove each link '
+                f'(native dependency, Blocked by text or Project field, catalogue entry, or scoped sub-issue), {again}')
+        bad = ', '.join(f'#{a} -> #{b}' for a, b in links if b not in known)
+        require(not bad, f'SCOPE_EXPORT_MISSING: links name issues this repository does not have: {bad}. Correct or remove each link, {again}')
+        bad = ', '.join(f'#{n} -> #{d}' for n in sorted(work) for d in items[n]['dependencies'] if d in items and d not in work)
+        require(not bad, f'SCOPE_EXPORT_AGGREGATE: work depends on an aggregate or epic: {bad}. Depend on its scoped sub-issues instead, {again}')
+        bad = ', '.join(f'#{n}' for n, x in items.items() if x['children']
+                        and not all((receipts[n].get('approval') or {}).get(k) for k in ('analysis_sha256', 'approved_by')))
+        require(not bad, f'SCOPE_EXPORT_UNAPPROVED: aggregate issues carry no scope approval: {bad}. Publish an approved analysis for each, {again}')
+        cycle = find_cycle({n: x['children'] or [d for d in x['dependencies'] if d in work and n in work] for n, x in items.items()})
+        require(not cycle, f'SCOPE_EXPORT_CYCLE: {" -> ".join(f"#{n}" for n in cycle or [])}. Remove one link of the cycle, {again}')
+
     def export_plan(self, journal=None, journal_path=None):
-        standalone = journal is None  # inside publish, reuse the publish's listing
-        if standalone:
-            journal = {'before': {}}
-            journal_path = self.root / '.specify/scope/runs' / f'plan-export-{time.time_ns()}' / 'journal.json'
-            write_json(journal_path.parent / 'catalog-before.json', self.catalog)
-            write_json(journal_path.parent / 'issue-map-before.json', self.keymap)
+        """Rebuild the catalogue, reverse `Blocks` links and plan files for the issues Scope tracks, in three steps:
+        read and validate everything, journal the exact before-images and the planned writes, then write. Work that
+        depends on a cancelled (closed as not planned) or missing issue, or on an aggregate, an aggregate without an
+        approval, and a dependency or sub-issue cycle refuse the export before any write. Cancelled issues are
+        history: no write touches them."""
+        standalone = journal is None  # inside publish, reuse the publish's listing and journal
         rows = list(self.listing(fresh=standalone))
+        self.board(fresh=standalone)  # the Project field before-images must be live
+        known = {x['number']: x for x in rows if 'pull_request' not in x}
+        cancelled = {n for n, x in known.items() if x.get('state_reason') == 'not_planned'}
         entries = {self.keymap.get(x['key']): x for x in self.catalog['issues']}
-        graph = []
-        for issue in rows:
-            if 'pull_request' in issue:
-                continue
+        selected = []
+        for issue in known.values():
             receipt = metadata(issue.get('body'))
-            if issue['number'] not in entries and not receipt:
-                continue
+            if (issue['number'] in entries or receipt) and issue['number'] not in cancelled:
+                selected.append((issue, receipt, self.dependencies(issue)))
+        graph = [{'number': issue['number'], 'kind': entries[issue['number']].get('kind') if issue['number'] in entries else 'scope', 'title': issue['title'],
+                  'url': issue['html_url'], 'status': self.status(issue), 'dependencies': deps,
+                  'children': receipt.get('children', []), 'score': receipt.get('score')} for issue, receipt, deps in selected]
+        self.check_export(graph, {issue['number']: receipt for issue, receipt, _ in selected}, known, cancelled)
+
+        # Plan every write from the validated graph; nothing below reads GitHub again.
+        for issue, receipt, deps in selected:
             entry = entries.get(issue['number'])
             if entry is None:
                 key = f'SCOPE-{issue["number"]}'
                 entry = {'key': key, 'kind': 'scope', 'labels': [], 'blockedBy': []}
                 self.keymap[key] = issue['number']
                 self.catalog['issues'].append(entry)
-            deps = self.dependencies(issue)
             entry.update(title=issue['title'], body=issue.get('body', ''), status=self.status(issue),
                          blockedBy=[f'#{n}' for n in deps], effort=receipt.get('score'),
                          scopeChildren=receipt.get('children', []), aggregate=bool(receipt.get('children')))
-            graph.append({'number': issue['number'], 'kind': entry.get('kind'), 'title': issue['title'], 'url': issue['html_url'],
-                          'status': self.status(issue), 'dependencies': deps, 'children': receipt.get('children', []), 'score': receipt.get('score')})
         reverse = {x['number']: [] for x in graph}
         for item in graph:
             for dep in item['dependencies']:
                 reverse.setdefault(dep, []).append(item['number'])
         # Keep reverse catalogue and Project fields consistent with native blockers.
         blocks_field = next((f for f in self.project_fields() if f['name'] == 'Blocks'), None)
+        planned = []
         for entry in self.catalog['issues']:
             number = self.keymap.get(entry['key'])
+            if number in cancelled:
+                continue
             blocks = sorted(reverse.get(number, []))
             entry['blocks'] = [f'#{n}' for n in blocks]
             item = self.board().get(number)
             value = ', '.join(f'#{n}' for n in blocks)
             if blocks_field and item and item.get('blocks', '') != value:
-                self.edit_item({'number': number}, blocks_field['id'], 'blocks', value)
-            issue = next((x for x in rows if x['number'] == number), None)
+                planned.append({'issue': number, 'field': 'Blocks', 'before': item.get('blocks', ''), 'after': value})
+            issue = known.get(number)
             if issue:
                 body = issue.get('body') or ''
                 reverse_text = '### Blocks\n\n' + ('\n'.join(f'- #{n}' for n in blocks) if blocks else '- None.') + '\n\n'
@@ -1203,10 +1244,32 @@ class Scope:
                 block = MANAGED.search(body)
                 updated = updated_source.rstrip() + ('\n\n' + block.group() if block else '') + '\n'
                 if updated.strip() != body.strip():
-                    journal['before'].setdefault(str(number), slim_issue(issue))
-                    write_json(journal_path, journal)
-                    self.remember(self.gh.api(f'{self.base}/{number}', 'PATCH', {'body': updated}))
+                    planned.append({'issue': number, 'body': updated})
                 entry['body'] = updated
+
+        # Journal the before-images and the planned writes, then apply them in order, recording each one.
+        if standalone:
+            operation = f'plan-export-{time.time_ns()}'
+            journal = {'kind': 'plan-export', 'operation': operation, 'before': {}}
+            journal_path = self.root / '.specify/scope/runs' / operation / 'journal.json'
+            write_json(journal_path.parent / 'catalog-before.json', read_json(self.catalog_path, {'issues': []}))
+            write_json(journal_path.parent / 'issue-map-before.json', read_json(self.map_path, {}))
+        for write in planned:
+            if 'body' in write:
+                journal['before'].setdefault(str(write['issue']), slim_issue(known[write['issue']]))
+            else:
+                journal.setdefault('fields_before', {}).setdefault(str(write['issue']), {}).setdefault(write['field'], write['before'])
+        for item in graph:
+            journal.setdefault('native_dependencies_before', {}).setdefault(str(item['number']), self.native_deps[item['number']])
+        journal['export'] = {'planned': [{k: v for k, v in w.items() if k != 'body'} for w in planned], 'applied': 0}
+        write_json(journal_path, journal)
+        for write in planned:
+            if 'body' in write:
+                self.remember(self.gh.api(f'{self.base}/{write["issue"]}', 'PATCH', {'body': write['body']}))
+            else:
+                self.edit_item({'number': write['issue']}, blocks_field['id'], 'blocks', write['after'])
+            journal['export']['applied'] += 1
+            write_json(journal_path, journal)
         write_json(self.catalog_path, self.catalog)
         write_json(self.map_path, self.keymap)
         waves, critical_path, cyclic = plan_waves(graph)
@@ -1399,6 +1462,29 @@ class Scope:
         if apply:
             self.invalidate_board(memory=False)
         return result
+
+
+def find_cycle(edges):
+    """One cycle of `{node: [successor, ...]}` as `[a, b, ..., a]`, or None."""
+    state, stack = {}, []
+
+    def visit(n):
+        state[n] = 'open'
+        stack.append(n)
+        for d in edges.get(n, ()):
+            if state.get(d) == 'open':
+                return stack[stack.index(d):] + [d]
+            found = None if d in state else visit(d)
+            if found:
+                return found
+        state[n] = 'done'
+        stack.pop()
+        return None
+    for n in sorted(edges):
+        found = None if n in state else visit(n)
+        if found:
+            return found
+    return None
 
 
 def plan_waves(graph):
