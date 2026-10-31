@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.2.3] - 2026-10-31
+
+- Scope `export-plan` validates the affected dependency graph before its first write and refuses, writing nothing remote or local, on a cancelled (not planned) prerequisite (`SCOPE_EXPORT_CANCELLED`), a missing target (`SCOPE_EXPORT_MISSING`), work depending on an aggregate (`SCOPE_EXPORT_AGGREGATE`), an aggregate without approval (`SCOPE_EXPORT_UNAPPROVED`) or a dependency or sub-issue cycle (`SCOPE_EXPORT_CYCLE`, shown as `#a -> #b -> #a`); each error names the links to remove or correct (#115). Before, the issue bodies and local catalog were written first and a cycle was only recorded afterwards.
+- Cancelled issues are never written by export or by a split publish's rewire.
+- The export journal records exact before-images before the first write: issue bodies, the Project `Blocks` values, the native blocked-by links and the planned writes; rewire saves native links separately from declared ones. `cancel plan-export-<n>` accepts a standalone export, marks it rolled back and prints the before-images; like `cancel` for a publish it does not write to GitHub.
+- Clearing a Project text field sends `--clear` on the command-line route instead of an empty `--text`.
+
 ## [2.2.2] - 2026-10-31
 
 - Publishing a declared dependency that Git ignored at completion (`git add -f`) with unchanged bytes no longer makes Verify or Review stale: source drift compares a path the inventory lacks against the receipt's own fingerprint for it (#109). Changed bytes, deletions and undeclared ignored files still drift.
