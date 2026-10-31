@@ -8,10 +8,10 @@
   },
   "selected": {
     "qa": {
-      "assure": "2.7.2"
+      "assure": "2.7.3"
     },
     "user_manual": {
-      "user-manual": "2.0.1"
+      "user-manual": "2.0.2"
     }
   },
   "optional": {
