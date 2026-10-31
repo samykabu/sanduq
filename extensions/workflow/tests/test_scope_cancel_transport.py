@@ -59,12 +59,13 @@ class Cancel(unittest.TestCase):
         self.assertEqual(code, 2)
         self.assertIn('SCOPE_CANCEL_AMBIGUOUS', err)
         self.assertIn(operation, err)
-        for bad in ('../1-0123456789abcdef', str(self.root / '.specify/scope/runs' / operation), 'plan-export-1', '1-abc', ''):
+        for bad in ('../1-0123456789abcdef', str(self.root / '.specify/scope/runs' / operation), 'plan-export-x', '1-abc', ''):
             code, err = self.cli('cancel', bad, '--apply')
             self.assertEqual(code, 2, bad)
             self.assertIn('SCOPE_CANCEL_OPERATION', err)
-        code, err = self.cli('cancel', '1-0123456789abcdef', '--apply')
-        self.assertIn('SCOPE_CANCEL_UNKNOWN', err)
+        for unknown in ('1-0123456789abcdef', 'plan-export-1'):
+            code, err = self.cli('cancel', unknown, '--apply')
+            self.assertIn('SCOPE_CANCEL_UNKNOWN', err)
 
     def test_cancel_refuses_a_journal_folder_that_leaves_the_runs_directory(self):
         outside = self.root / 'elsewhere'

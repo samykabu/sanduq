@@ -14,6 +14,13 @@ to redraw the existing product plan when merely installing this extension.
    containers excluded), `critical_path` and `cyclic` (issues a cycle left unscheduled), the
    reverse `blocks` data and Project `Blocks` fields, and a draft
    `implementation-plan.mapping.json` (`graph_sha256`, `issue_to_node`).
+   It validates the graph before its first write and refuses, writing nothing, on a link to a
+   cancelled (closed as not planned) issue (`SCOPE_EXPORT_CANCELLED`), a missing issue
+   (`SCOPE_EXPORT_MISSING`), work that depends on an aggregate or epic (`SCOPE_EXPORT_AGGREGATE`),
+   an aggregate without its scope approval (`SCOPE_EXPORT_UNAPPROVED`) or a cycle
+   (`SCOPE_EXPORT_CYCLE`); remove or correct the named link and run it again. Cancelled issues are
+   never written. Its journal, `.specify/scope/runs/plan-export-<n>/`, holds the exact issue-body,
+   Project-field and native-dependency before-images; `scope.py cancel plan-export-<n>` prints them.
 2. Read `scope-dependencies.json` and the existing `<scope-plan-file>`. Confirm every new leaf
    exists, incoming parent dependencies target the correct leaves, `cyclic` is empty and the
    original use cases and source IDs stay covered.

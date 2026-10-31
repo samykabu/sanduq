@@ -27,7 +27,8 @@
    export all wait for it. On a transient failure keep the same analysis and operation journal;
    never recreate issues blindly. If requirements changed, stop and reconcile the journal first.
    To cancel an interrupted operation instead, run `scope.py cancel <issue>-<hash>` (the folder
-   under `.specify/scope/runs/`), then again with `--apply`. It marks the journal `rolled_back`,
+   under `.specify/scope/runs/`; `plan-export-<n>` for a standalone `export-plan`), then again
+   with `--apply`. It marks the journal `rolled_back`,
    changes nothing on GitHub, and prints the created issues, before-images and backups to repair
    by hand. A cancelled operation fails with `SCOPE_ROLLED_BACK`.
 5. Publication keeps original bodies and images, records approved scores and prompts, and makes

@@ -390,6 +390,18 @@ class ProjectRestFallbackTests(unittest.TestCase):
             ('PATCH', f'{BASE}/items/9001', {'fields': [{'id': 102, 'value': None}]}),
         ])
 
+    def test_item_edit_clear_flag_clears_like_empty_text(self):
+        # Scope sends `--clear` (the CLI's way to empty a field); the REST route sends the same null value.
+        fake = FakeGh(project_ok=False, remaining=0)
+        gh = self.client(fake)
+        self.run_quiet(gh.command, ['project', 'item-edit', '--id', 'PVTI_a', '--project-id', 'PVT_1',
+                                    '--field-id', 'PVTF_blocked', '--clear'])
+        self.assertEqual(fake.writes, [('PATCH', f'{BASE}/items/9001', {'fields': [{'id': 102, 'value': None}]})])
+        for extra in (['--text', ''], ['--clear']):
+            with self.assertRaisesRegex(m.GitHubError, 'exactly one value|unsupported argument|malformed'):
+                self.run_quiet(gh.command, ['project', 'item-edit', '--id', 'PVTI_a', '--project-id', 'PVT_1',
+                                            '--field-id', 'PVTF_blocked', '--clear', *extra])
+
     def test_listings_are_cached_across_operations(self):
         fake = FakeGh(project_ok=False, remaining=0)
         gh = self.client(fake)
