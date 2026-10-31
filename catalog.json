@@ -1,6 +1,6 @@
 {
   "schema_version": "1.0",
-  "updated_at": "2026-10-30T15:18:04.789946+00:00",
+  "updated_at": "2026-10-31T00:31:18.471847+00:00",
   "catalog_url": "https://raw.githubusercontent.com/samykabu/sanduq/main/catalog.json",
   "extensions": {
     "project": {
@@ -58,14 +58,14 @@
     "pr": {
       "name": "Pull Request Workflow",
       "id": "pr",
-      "version": "4.7.5",
+      "version": "4.7.6",
       "description": "Generate or update pull requests from Spec Kit artifacts, enforce installed QA and User Manual freshness policies, then process review feedback through an approval-gated fix and reply workflow.",
       "author": "Samy K. Abushanab",
       "repository": "https://github.com/samykabu/sanduq",
       "homepage": "https://github.com/samykabu/sanduq/tree/main/extensions/pr",
       "documentation": "https://github.com/samykabu/sanduq/blob/main/extensions/pr/README.md",
       "changelog": "https://github.com/samykabu/sanduq/blob/main/extensions/pr/CHANGELOG.md",
-      "download_url": "https://github.com/samykabu/sanduq/releases/download/pr-v4.7.5/pr.zip",
+      "download_url": "https://github.com/samykabu/sanduq/releases/download/pr-v4.7.6/pr.zip",
       "license": "MIT",
       "category": "process",
       "effect": "read-write",
@@ -84,7 +84,7 @@
           },
           {
             "id": "user-manual",
-            "version": ">=1.0.0,<2.0.0",
+            "version": ">=1.0.0,<3.0.0",
             "required": false
           }
         ],
@@ -124,9 +124,9 @@
       ],
       "verified": false,
       "created_at": "2026-07-09T20:26:15Z",
-      "updated_at": "2026-10-29T22:39:43.270719+00:00",
-      "sha256": "3e61e72b9dc328ab26a4124c8a194c1e524d69b9f1127bc3d81906498fe485a0",
-      "inventory_sha256": "20477a9e39f79207b329de8f818c0251465ee0c4ac3c088b376a9ac90cab3fac"
+      "updated_at": "2026-10-31T00:31:18.471788+00:00",
+      "sha256": "49f6748401af098d9c6d654e3deb0e8a7174a330c009133cf03864c1e5824681",
+      "inventory_sha256": "ee7be29e36738b06cd04ab724b9c848d34e86fbedc9b241e1914a85330c41ce4"
     },
     "illustrate": {
       "name": "Illustrate",
@@ -258,14 +258,14 @@
     "user-manual": {
       "name": "User Manual",
       "id": "user-manual",
-      "version": "1.9.1",
-      "description": "Create and incrementally maintain bilingual-ready, audience-aware application manuals in Markdown, themeable MkDocs HTML (Material, ReadTheDocs, or any installed theme), and PDF, including modules, interfaces, tutorials, screenshots, APIs, releases, migrations, infrastructure, architecture, and complete data dictionaries.",
+      "version": "2.0.0",
+      "description": "Create and incrementally maintain bilingual-ready, audience-aware application manuals in Markdown that reads correctly on GitHub, rendered as Markdown, through your own templates and tools, or as MkDocs HTML and PDF, including modules, interfaces, tutorials, screenshots, APIs, releases, migrations, infrastructure, architecture, and complete data dictionaries.",
       "author": "Samy K. Abushanab",
       "repository": "https://github.com/samykabu/sanduq",
       "homepage": "https://github.com/samykabu/sanduq/tree/main/extensions/user-manual",
       "documentation": "https://github.com/samykabu/sanduq/blob/main/extensions/user-manual/README.md",
       "changelog": "https://github.com/samykabu/sanduq/blob/main/extensions/user-manual/CHANGELOG.md",
-      "download_url": "https://github.com/samykabu/sanduq/releases/download/user-manual-v1.9.1/user-manual.zip",
+      "download_url": "https://github.com/samykabu/sanduq/releases/download/user-manual-v2.0.0/user-manual.zip",
       "license": "MIT",
       "category": "documentation",
       "effect": "read-write",
@@ -318,14 +318,14 @@
       ],
       "verified": false,
       "created_at": "2026-07-18T18:35:58Z",
-      "updated_at": "2026-10-30T15:18:04.601342+00:00",
-      "sha256": "6d54c8c618973e4550dcc81fe5a0a3e9c4ccf029e6cba0b16f3825c42d1f64da",
-      "inventory_sha256": "973f579c631cdd51b03cf2f0af2c71e1fa51de3a2189e9a3a03bcb3423f9b0af"
+      "updated_at": "2026-10-31T00:31:18.263658+00:00",
+      "sha256": "a02c82b04515393aa08190536755749c37e648999459dff1e7ab9e31acb31fd5",
+      "inventory_sha256": "5525a48ecdd1b29fe109e74c83eba48e65095600d45259539f5f7c8c5f2c18e8"
     },
     "workflow": {
       "name": "Sanduq Workflow",
       "id": "workflow",
-      "version": "2.1.1",
+      "version": "2.2.0",
       "description": "GitHub issue decisions and resumable Scope-to-PR orchestration with optional model-aware delegation, QA, User Manual, and workflow evidence CI.",
       "author": "Samy K. Abushanab",
       "license": "MIT",
@@ -333,7 +333,7 @@
       "homepage": "https://github.com/samykabu/sanduq/tree/main/extensions/workflow",
       "documentation": "https://github.com/samykabu/sanduq/blob/main/extensions/workflow/README.md",
       "changelog": "https://github.com/samykabu/sanduq/blob/main/extensions/workflow/CHANGELOG.md",
-      "download_url": "https://github.com/samykabu/sanduq/releases/download/workflow-v2.1.1/workflow.zip",
+      "download_url": "https://github.com/samykabu/sanduq/releases/download/workflow-v2.2.0/workflow.zip",
       "requires": {
         "speckit_version": ">=1.0.0,<2.0.0",
         "tools": [
@@ -367,9 +367,9 @@
       "category": "process",
       "effect": "read-write",
       "verified": false,
-      "sha256": "cdb32ba888d6ff417f4d136ab24d2ba2160cd6694d3cc7b16cbfc66c024ca572",
-      "updated_at": "2026-10-30T15:18:04.789820+00:00",
-      "inventory_sha256": "d225da1cf87a1e2623f6a734d78e8c0adc1f3cd97af49372827d58f9e934321a"
+      "sha256": "60d44513e8bf8673834a87a14f0522a4ce24e863aa76f96035ff292ca0ae81ca",
+      "updated_at": "2026-10-31T00:31:18.454011+00:00",
+      "inventory_sha256": "8d37f7a2bf5bda183576e0d660ddd0f87e4b8f2eda421727b604af6cbde80127"
     },
     "scope": {
       "name": "Speckit Scope (retired)",
