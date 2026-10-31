@@ -715,15 +715,18 @@ def recovery_recipe(feature, stage, status, policy, receipt, root=None):
 
 def upstream_drift(root, feature, stage, receipt, tier=None):
     """Changed dependency paths of a receipt, where a Markdown input whose only change is CRLF or trailing
-    spaces counts as unchanged (compared through `text_fingerprints`; the stored hash stays the byte hash).
-    A required input the receipt never fingerprinted counts as changed."""
+    spaces counts as unchanged (compared through `text_fingerprints`; the stored hash stays the byte hash), and so
+    does any input whose recorded hash is still its text reading with no Git attributes (a later `-text` rule
+    re-reads unchanged CRLF bytes byte-exact). A required input the receipt never fingerprinted counts as changed."""
     required = required_inputs(root, feature, stage, tier)
     saved = dependency_fingerprints(receipt, required)
     current = fingerprint_files(root, saved, feature=feature, like=saved)
     drifted = [path for path in saved if current[path] != saved[path]]
     recorded = receipt.get('text_fingerprints') or {}
     text_now = text_fingerprints(root, [path for path in drifted if current[path] is not None and path in recorded])
-    changed = {path for path in drifted if not (path in text_now and text_now[path] == recorded[path])}
+    textual = fingerprint_files(root, drifted, feature=feature, like=saved, attributes=lambda *_: {})
+    changed = {path for path in drifted if textual[path] != saved[path]
+               and not (path in text_now and text_now[path] == recorded[path])}
     changed.update(set(required) - {portable_label(path) for path in receipt.get('fingerprints', {})})
     return sorted(changed)
 

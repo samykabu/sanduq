@@ -93,10 +93,10 @@ def text_fingerprints(root, paths):
     return {path: value for path, value in hashes.items() if value is not None}
 
 
-def fingerprint_files(root, paths, normalize=False, feature=None, like=None):
+def fingerprint_files(root, paths, normalize=False, feature=None, like=None, attributes=None):
     """Byte hashes of `paths`. With `feature`, the configured Project Sync state hashes as that feature's binding
     projection (`sync_projection`), except where `like` (the fingerprints compared against) holds a legacy raw hash,
-    which stays byte-exact."""
+    which stays byte-exact. `attributes` stands in for the Git text attributes (`portable_files`)."""
     result = {}
     paths = sorted(set(paths))
     state = sync_state_label(root) if feature and not normalize else None
@@ -104,7 +104,7 @@ def fingerprint_files(root, paths, normalize=False, feature=None, like=None):
     # canonical path. Labels naming one file each keep their own entry (and the same hash); conflicting role
     # data for such labels is refused when a receipt is ingested (`canonical_receipt`).
     canonical = {relative: canonical_path(root, relative) for relative in paths}
-    contents = portable_files(root, sorted(set(canonical.values())), attributes=git_text_attributes)
+    contents = portable_files(root, sorted(set(canonical.values())), attributes=attributes or git_text_attributes)
     # Byte-sensitive files read as their committed blob when the working tree
     # differs only by checkout conversion, so a Windows autocrlf checkout and a
     # clean CI checkout of the same commit fingerprint identically.

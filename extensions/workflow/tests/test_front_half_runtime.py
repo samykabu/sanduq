@@ -886,6 +886,67 @@ class RevalidateUpstreamTests(Base):
         self.assertIn('REVALIDATE_UPSTREAM_RECEIPT_REQUIRED', result['error'])
 
 
+class ScopeAttributeRecoveryTests(Base):
+    """Issue #111: an accepted Scope whose committed bytes never changed, but whose fingerprint a later
+    `specs/** -text` rule re-reads byte-exact, is recovered without discarding the later receipts."""
+
+    def git(self, *args):
+        return subprocess.run(['git', *args], cwd=self.root, check=True, capture_output=True, text=True).stdout
+
+    def test_attribute_only_scope_drift_is_restamped_and_later_receipts_survive(self):
+        self.git('config', 'core.autocrlf', 'false')  # the blob keeps the CRLF bytes, as a Windows author commits
+        self.policy = w.default_policy(False, False)
+        self.configure()
+        analysis = self.feature + '/scope-analysis.md'
+        (self.root / analysis).parent.mkdir(parents=True, exist_ok=True)
+        (self.root / analysis).write_bytes(b'# Scope\r\n\r\nApproved requirement\r\n')
+        run = self.run_object()
+        receipt = self.receipt('scope')
+        receipt['inputs'] = receipt['inputs'] + [analysis]
+        self.advance_fresh(run, 'analyze', {'scope': receipt})
+        # Workflow writes JSON in text mode, so a Windows run leaves CRLF here, a dependency from Specify on.
+        source = self.root / self.feature / 'scope-source.json'
+        source.write_bytes(source.read_bytes().replace(b'\r\n', b'\n').replace(b'\n', b'\r\n'))
+        self.assertEqual(run.next(run.load())['stage'], 'taskstoissues')
+        self.commit_all()
+        blobs = self.git('ls-files', '-s', 'specs')
+        before = run.load()['receipts']
+        (self.root / '.gitattributes').write_bytes(b'specs/** -text\n')
+        self.commit_all('Keep specs byte exact')
+        self.assertEqual((self.git('ls-files', '-s', 'specs'), self.git('status', '--porcelain')), (blobs, ''))
+        self.assertEqual(run.next(run.load())['stage'], 'scope')  # the same blobs now read as drifted
+        plan = run.revalidate_upstream('analyze', plan=True)
+        self.assertEqual((plan['restamp'], plan['needs_receipt']), (list(before), []))
+        result = run.revalidate_upstream('analyze', {'stages': {}})
+        self.assertEqual(result['restamped'], list(before))
+        state = run.load()
+        self.assertEqual(state['receipts']['scope']['revalidated_upstream']['paths'], [analysis])
+        self.assertEqual(state['receipts']['specify']['revalidated_upstream']['paths'],
+                         [self.feature + '/scope-source.json'])
+        restamped = ('fingerprints', 'revalidated_upstream', 'completed_at')
+        self.assertEqual({stage: {k: v for k, v in value.items() if k not in restamped}
+                          for stage, value in state['receipts'].items()},
+                         {stage: {k: v for k, v in value.items() if k not in restamped}
+                          for stage, value in before.items()})
+        self.assertEqual(run.next(state)['stage'], 'taskstoissues')
+        checkpoint_validator().validate(state)
+
+    def test_a_real_scope_change_still_needs_a_scope_claim(self):
+        self.policy = w.default_policy(False, False)
+        self.configure()
+        run = self.run_object()
+        analysis = self.write(self.feature + '/scope-analysis.md', '# Scope\n')
+        receipt = self.receipt('scope')
+        receipt['inputs'] = receipt['inputs'] + [analysis]
+        self.advance_fresh(run, 'specify', {'scope': receipt})
+        self.write(analysis, '# Scope\nNew unreviewed requirement\n')
+        plan = run.revalidate_upstream('scope', plan=True)
+        self.assertEqual((plan['restamp'], plan['needs_receipt']), ([], ['scope']))
+        with self.assertRaisesRegex(w.WorkflowError, 'REVALIDATE_UPSTREAM_SCOPE_NEEDS_CLAIM'):
+            run.revalidate_upstream('scope', {'stages': {'scope': {'summary': 's', 'evidence': [], 'inputs': []}}})
+        self.assertEqual(run.next(run.load())['stage'], 'scope')
+
+
 class BindOnlyAndLazyIssueTests(Base):
     def test_rendered_spec_makes_specify_bind_only(self):
         run = self.run_object()
