@@ -1,9 +1,6 @@
 {
   "schema_version": 1,
-  "versions": {
-    "user-manual": "2.0.1",
-    "workflow": "2.2.1"
-  },
-  "status": "ready",
+  "versions": {},
+  "status": "released",
   "note": "User Manual 2.0.1 (dev-tools 2.0.3: 1.x manuals keep MkDocs, Pandoc page-relative images, --help), Workflow 2.2.1 (pin)."
 }
