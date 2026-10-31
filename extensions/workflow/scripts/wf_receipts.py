@@ -672,6 +672,11 @@ def recovery_recipe(feature, stage, status, policy, receipt, root=None):
                 f'{WORKFLOW_SCRIPT} recover{at} --token <token> --reason "<why>" first), re-run {stage}, then '
                 f'{WORKFLOW_SCRIPT} complete{at} --token <token> --receipt <receipt.json>')
     reason = status.get('reason')
+    if reason == 'source-inventory-invalid':
+        # Storage, not source: the receipt and its evidence stand once the side file matches its recorded hash.
+        side = feature + '/' + str((receipt.get('source_inventory') or {}).get('path', '<inventory>'))
+        return [f'Restore {side} from the commit that recorded {stage} (git checkout <commit> -- {side}; '
+                f'with core.autocrlf=false on Windows), then re-run the gate; no re-record is needed']
     if reason == 'marked-stale':
         mark = status.get('stale') or {}
         if mark.get('reason') == 'ci-lane-gap':
@@ -740,10 +745,7 @@ def receipt_drift(root, feature, stage, receipt, tier=None):
     changed.update(set(required) - {portable_label(p) for p in receipt.get('fingerprints', {})})
     if stage in SOURCE_STAGES:
         new = source_fingerprints(root)
-        try:
-            changed.update(source_drift(receipt, new, root, feature))
-        except WorkflowError:
-            changed.update(new)  # an unreadable inventory leaves every current source path reported as changed
+        changed.update(source_drift(receipt, new, root, feature))  # a damaged side file is a storage error, never drift
     return sorted(changed)
 
 

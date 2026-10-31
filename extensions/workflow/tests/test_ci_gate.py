@@ -326,6 +326,31 @@ class CIGateTests(unittest.TestCase):
             c.check(self.root, self.feature, self.policy)
         self.assertNotIn('private contents', str(failure.exception))
 
+    def test_damaged_inventory_side_file_is_a_storage_error_not_source_drift(self):
+        # #114: a truncated or missing side file named every source path as changed and advised re-recording.
+        run = self.ready()
+        receipt = run.load()['receipts']['verify']
+        label = self.feature + '/' + receipt['source_inventory']['path']
+        side = self.root / label
+        before, checkpoint = side.read_bytes(), run.path.read_bytes()
+        for damage in (lambda: side.write_bytes(before[:len(before) // 2]), side.unlink):
+            with self.subTest(damage):
+                damage()
+                with self.assertRaises(w.WorkflowError) as failure:
+                    c.check(self.root, self.feature, self.policy)
+                message = str(failure.exception)
+                self.assertTrue(message.startswith('SOURCE_INVENTORY_INVALID: ' + label), message)
+                self.assertNotIn('STALE_RECEIPT', message)
+                self.assertNotIn('claim --feature', message)
+                with self.assertRaisesRegex(w.WorkflowError, 'SOURCE_INVENTORY_INVALID'):
+                    w.receipt_drift(self.root, self.feature, 'verify', receipt)
+                self.assertEqual(run.path.read_bytes(), checkpoint)
+                side.write_bytes(before)
+        side.write_bytes(before[:-2] + b'0\n')  # same length, other bytes
+        with self.assertRaisesRegex(w.WorkflowError, 'recorded sha256 ' + receipt['source_inventory']['sha256'] +
+                                    ', found [0-9a-f]{64}'):
+            c.check(self.root, self.feature, self.policy)
+
     def test_missing_or_deleted_evidence_and_incomplete_tasks_fail(self):
         run=self.ready();evidence=run.feature/'evidence/verify.txt';before=evidence.read_bytes();evidence.unlink()
         with self.assertRaisesRegex(w.WorkflowError,'STALE_RECEIPT'):c.check(self.root,self.feature,self.policy)

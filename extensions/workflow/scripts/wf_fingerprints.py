@@ -208,8 +208,9 @@ def source_fingerprints_of(root, receipt, feature=None):
         data = portable_content(label, inside(root, label).read_bytes())
     except OSError as exc:
         raise WorkflowError('SOURCE_INVENTORY_INVALID: ' + label + ': ' + str(exc)) from exc
-    require(hashlib.sha256(data).hexdigest() == reference.get('sha256'), 'SOURCE_INVENTORY_INVALID: ' + label +
-            ' does not match its recorded sha256')
+    found = hashlib.sha256(data).hexdigest()
+    require(found == reference.get('sha256'), 'SOURCE_INVENTORY_INVALID: ' + label + ' does not match its recorded sha256 ' +
+            str(reference.get('sha256')) + ', found ' + found)
     try:
         value = json.loads(data.decode('utf-8'))
     except ValueError as exc:
