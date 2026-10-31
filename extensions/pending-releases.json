@@ -1,8 +1,6 @@
 {
   "schema_version": 1,
-  "versions": {
-    "workflow": "2.2.3"
-  },
-  "status": "ready",
+  "versions": {},
+  "status": "released",
   "note": "Workflow 2.2.3 (#115: Scope export validates the graph before writing, refuses cancelled prerequisites, keeps exact before-images)."
 }
