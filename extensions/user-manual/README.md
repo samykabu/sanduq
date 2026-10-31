@@ -67,7 +67,7 @@ Pandoc-style `metadata.yml`), then renders it with `renderer.kind` in `User-Manu
 | `renderer.kind` | Output |
 | --- | --- |
 | `markdown` (default) | The assembled edition, readable on GitHub or a wiki |
-| `command` | Your own tool and templates run on the edition, for example `pandoc -f gfm+rebase_relative_paths {pages} --metadata-file {metadata} --reference-doc theme/word.docx -o {output}/manual.docx`, from `User-Manual/` |
+| `command` | Your own tool and templates run on the edition, for example `pandoc {pages} --metadata-file {metadata} --reference-doc theme/word.docx -o {output}/manual.docx`, from `User-Manual/` |
 | `mkdocs` | An MkDocs HTML site; `--pdf` adds a PDF |
 
 Pages use GitHub's own syntax (`> [!NOTE]` alerts, `<details>`), so they read correctly on GitHub; the

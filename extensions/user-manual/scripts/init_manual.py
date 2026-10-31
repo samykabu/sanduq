@@ -73,7 +73,7 @@ def manual_yaml(product: str, modules: list[dict[str, object]], arabic: bool, pr
         "  commit_build_outputs: false",
         "renderer:",
         "  # markdown (default): the assembled Markdown editions, readable on GitHub.",
-        "  # command: your own tool on each edition, e.g. command: pandoc -f gfm+rebase_relative_paths {pages} --metadata-file {metadata} -o {output}/manual.docx",
+        "  # command: your own tool on each edition, e.g. command: pandoc {pages} --metadata-file {metadata} -o {output}/manual.docx",
         "  # mkdocs: an MkDocs site (theme: material, readthedocs, mkdocs or any installed theme) and --pdf.",
         "  kind: markdown",
         "lifecycle:",

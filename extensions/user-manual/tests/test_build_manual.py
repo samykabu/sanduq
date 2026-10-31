@@ -457,6 +457,19 @@ class MarkdownRendererTests(unittest.TestCase):
         with self.assertRaisesRegex(SystemExit, 'renderer.kind must be one of'):
             builder.renderer_settings({'renderer': {'kind': 'sphinx'}})
 
+    def test_a_manual_from_1x_keeps_its_mkdocs_site_and_is_told_to_say_so(self):
+        legacy = {'renderer': {'primary': 'mkdocs-material', 'theme': 'readthedocs', 'theme_options': {}}}
+        self.assertEqual('mkdocs', builder.renderer_settings(legacy)['kind'])
+        self.assertEqual('markdown', builder.renderer_settings({'renderer': {'kind': 'markdown', 'theme': 'x'}})['kind'])
+        self.assertEqual('markdown', builder.renderer_settings({'renderer': {}})['kind'])
+        (self.root / 'manual.yml').write_text('renderer:\n  theme: material\n', encoding='utf-8')
+        argv = ['build_manual.py', '--root', str(self.root), '--print-renderer']
+        with mock.patch('sys.argv', argv), mock.patch('sys.stdout', new_callable=io.StringIO) as out, \
+                mock.patch('sys.stderr', new_callable=io.StringIO) as err:
+            builder.main()
+        self.assertEqual('mkdocs', out.getvalue().strip())
+        self.assertIn("add 'kind: mkdocs'", err.getvalue())
+
     def test_print_renderer_reports_the_selected_kind(self):
         argv = ['build_manual.py', '--root', str(self.root), '--print-renderer']
         with mock.patch('sys.argv', argv), mock.patch('sys.stdout', new_callable=io.StringIO) as out:
@@ -496,6 +509,16 @@ class CommandRendererTests(unittest.TestCase):
         self.assertEqual(['pandoc', '-f', 'gfm+rebase_relative_paths', '/e/a.md', '/e/b.md', '-o', '/out/My Manual.docx'],
                          builder.command_argv('pandoc -f gfm+rebase_relative_paths {pages} -o "{output}/My Manual.docx"',
                                               {'output': '/out'}, ['/e/a.md', '/e/b.md']))
+
+    def test_pandoc_reads_github_markdown_with_page_relative_images_unless_told_otherwise(self):
+        self.assertEqual(['pandoc', '--from=gfm+rebase_relative_paths', '/e/a.md', '-o', '/out/m.docx'],
+                         builder.command_argv('pandoc {pages} -o {output}/m.docx', {'output': '/out'}, ['/e/a.md']))
+        self.assertEqual(['C:/tools/pandoc.exe', '--from=gfm+rebase_relative_paths', '/e/a.md'],
+                         builder.command_argv(['C:/tools/pandoc.exe', '{pages}'], {}, ['/e/a.md']))
+        for own in ('-f markdown', '--from=commonmark', '-fgfm', '-r gfm'):
+            self.assertNotIn('--from=gfm+rebase_relative_paths',
+                             builder.command_argv(f'pandoc {own} {{pages}}', {}, ['/e/a.md']), own)
+        self.assertEqual(['quarto', 'render'], builder.command_argv('quarto render', {}, []))
 
     def test_a_failing_silent_or_missing_command_stops_the_build(self):
         failing = [sys.executable, '-c', 'import sys; print("template missing"); sys.exit(3)']
