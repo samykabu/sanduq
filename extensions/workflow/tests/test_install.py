@@ -1,0 +1,882 @@
+import json
+import hashlib
+import os
+import shutil
+import subprocess
+import sys
+import tempfile
+import unittest
+from unittest.mock import patch
+from pathlib import Path
+import yaml
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
+import delegation
+import install as installer
+import workflow as w
+import test_workflow as fixture
+
+
+class InstallTests(unittest.TestCase):
+    configure = fixture.WorkflowTests.configure
+
+    def setUp(self):
+        fixture.WorkflowTests.setUp(self)
+        temporary = tempfile.TemporaryDirectory(); self.addCleanup(temporary.cleanup)
+        self.package = Path(temporary.name).resolve()
+        source = Path(__file__).resolve().parents[1]
+        shutil.copyfile(source / 'dependencies.json', self.package / 'dependencies.json')
+        major, minor, patch_version = map(int, w.read(self.package / 'dependencies.json')['required']['pr'].split('.'))
+        self.newer_pr = f'{major}.{minor}.{patch_version + 1}'
+        shutil.copytree(source / 'skills', self.package / 'skills')
+        for stored in (self.package / 'skills').rglob('SKILL.ext.md'):  # as package.py restores it
+            stored.rename(stored.with_name('SKILL.md'))
+        shutil.copytree(source / 'assets', self.package / 'assets')
+        for name in ('scope-gate', 'scope-brainstorm', 'workflow'):
+            p = self.package / 'presets' / name / 'preset.yml'
+            p.parent.mkdir(parents=True); p.write_text('schema_version: "1.0"', encoding='utf-8')
+
+    def version(self, name, value, enabled=True):
+        registry = w.registry(self.root); registry[name].update(version=value, enabled=enabled)
+        w.write(self.root / '.specify/extensions/.registry', {'extensions': registry})
+
+    def test_disabled_gate_installs_no_job_and_removes_only_managed_job(self):
+        target = self.root / '.github/workflows/sanduq-workflow-gates.yml'
+        with patch.object(installer, 'install_aliases', return_value={}), \
+             patch.object(installer, 'doctor', return_value={'ok': True, 'errors': []}), \
+             patch.object(installer, 'required_gate_checks', return_value=[]):
+            installer.install(self.root, apply=True, package_root=self.package, runner=lambda *args: None)
+            self.assertTrue(target.is_file())
+            self.policy['ci']['gate']['mode'] = 'disabled'
+            self.configure()
+            result = installer.install(self.root, apply=True, package_root=self.package, runner=lambda *args: None)
+            self.assertEqual(result['gate']['mode'], 'disabled')
+            self.assertFalse(target.exists())
+
+    def test_disabled_gate_refuses_stale_required_branch_check(self):
+        target = self.root / '.github/workflows/sanduq-workflow-gates.yml'
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes((self.package / 'assets/github/workflow-gates.yml').read_bytes())
+        self.policy['ci']['gate']['mode'] = 'disabled'
+        self.configure()
+        with patch.object(installer, 'required_gate_checks', return_value=['workflow-evidence']):
+            with self.assertRaisesRegex(w.WorkflowError, 'CI_GATE_REQUIRED_BY_BRANCH_RULE'):
+                installer.install(self.root, apply=True, package_root=self.package,
+                                  runner=lambda *args: None)
+        self.assertTrue(target.is_file())
+
+    def test_provider_none_installs_no_managed_gate_job(self):
+        target = self.root / '.github/workflows/sanduq-workflow-gates.yml'
+        self.policy['ci']['provider'] = 'none'
+        self.configure()
+        with patch.object(installer, 'install_aliases', return_value={}), \
+             patch.object(installer, 'doctor', return_value={'ok': True, 'errors': []}):
+            result = installer.install(self.root, apply=True, package_root=self.package,
+                                       runner=lambda *args: None)
+        self.assertTrue(result['applied'])
+        self.assertFalse(target.exists())
+
+    def test_branch_rule_inspection_covers_ruleset_and_legacy_protection(self):
+        def api(args, **kwargs):
+            endpoint = args[2]
+            if endpoint == 'repos/acme/app':
+                value = {'default_branch': 'main'}
+            elif '/rules/branches/' in endpoint:
+                value = [{'type': 'required_status_checks', 'parameters': {
+                    'required_status_checks': [{'context': 'workflow-evidence'}]}}]
+            else:
+                value = {'contexts': ['Sanduq workflow gates / workflow-evidence']}
+            return subprocess.CompletedProcess(args, 0, json.dumps(value), '')
+        with patch.object(installer.subprocess, 'run', side_effect=api), \
+             patch.object(installer, 'github_repository', return_value='acme/app'):
+            self.assertEqual(installer.required_gate_checks(self.root),
+                             ['Sanduq workflow gates / workflow-evidence', 'workflow-evidence'])
+
+    def test_disabled_gate_refuses_to_claim_custom_preserved_workflow_is_off(self):
+        target = self.root / '.github/workflows/sanduq-workflow-gates.yml'
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text('name: Custom gate\n', encoding='utf-8')
+        self.policy['ci']['gate']['mode'] = 'disabled'
+        self.configure()
+        with patch.object(installer, 'install_aliases', return_value={}), \
+             patch.object(installer, 'doctor', return_value={'ok': True, 'errors': []}):
+            with self.assertRaisesRegex(w.WorkflowError, 'CI_GATE_DISABLED_PRESERVED_FILE_CONFLICT'):
+                installer.install(self.root, apply=True, package_root=self.package,
+                                  runner=lambda *args: None, preserve_ci=True)
+        self.assertEqual(target.read_text(encoding='utf-8'), 'name: Custom gate\n')
+
+    def test_ci_checkout_conversion_survives_installer_rerun_and_asset_upgrade(self):
+        target = self.root / '.github/workflows/sanduq-workflow-gates.yml'
+        asset = self.package / 'assets/github/workflow-gates.yml'
+        for original, converted in ((b'name: CI\non: pull_request\n', b'name: CI\r\non: pull_request\r\n'),
+                                    (b'name: CI\r\non: pull_request\r\n', b'name: CI\non: pull_request\n')):
+            with self.subTest(original=original):
+                asset.write_bytes(original)
+                # Exercise the real transaction; external CLI and fixture-only
+                # command registrations are outside this regression's scope.
+                with patch.object(installer, 'install_aliases', return_value={}), \
+                     patch.object(installer, 'doctor', return_value={'ok': True, 'errors': []}):
+                    installer.install(self.root, apply=True, package_root=self.package, runner=lambda *args: None)
+                    receipt_path = self.root / '.specify/workflow/install-receipt.json'
+                    receipt = w.read(receipt_path)
+                    receipt['ci_sha256'] = hashlib.sha256(original).hexdigest()
+                    w.write(receipt_path, receipt)
+                    target.write_bytes(converted)
+                    installer.install(self.root, apply=True, package_root=self.package, runner=lambda *args: None)
+                    self.assertEqual(target.read_bytes(), original)
+                    # A new release changes the asset; the historical raw hash
+                    # must still recognize an unedited, converted predecessor.
+                    w.write(receipt_path, receipt)
+                    target.write_bytes(converted)
+                    asset.write_bytes(b'name: Updated CI\non: pull_request\n')
+                    installer.install(self.root, apply=True, package_root=self.package, runner=lambda *args: None)
+                    self.assertEqual(target.read_bytes(), asset.read_bytes())
+                target.unlink()
+
+    def test_fresh_clone_upgrade_replaces_the_unedited_head_run_gate(self):
+        # SEC-03: a project rendered from the gate that ran the PR head's scripts gets the base-branch gate,
+        # even without the git-excluded install receipt.
+        # Also 1.22.0's gate, which never loaded (arithmetic in fetch-depth), and 2.3.0's on Node 20 actions.
+        target = self.root / '.github/workflows/sanduq-workflow-gates.yml'
+        target.parent.mkdir(parents=True, exist_ok=True)
+        for name in ('workflow-gates.yml', 'workflow-gates-1.22.0.yml', 'workflow-gates-2.3.0.yml'):
+            with self.subTest(previous=name):
+                target.write_bytes(installer.rendered(self.package / 'assets/github/previous' / name, self.policy))
+                (self.root / '.specify/workflow/install-receipt.json').unlink(missing_ok=True)  # a fresh clone
+                with patch.object(installer, 'install_aliases', return_value={}), \
+                     patch.object(installer, 'doctor', return_value={'ok': True, 'errors': []}):
+                    installer.install(self.root, apply=True, package_root=self.package, runner=lambda *args: None)
+                self.assertEqual(target.read_bytes(),
+                                 installer.rendered(self.package / 'assets/github/workflow-gates.yml', self.policy))
+
+    def test_ci_semantic_edits_still_roll_back_without_overwrite(self):
+        target = self.root / '.github/workflows/sanduq-workflow-gates.yml'
+        target.parent.mkdir(parents=True, exist_ok=True)
+        original = b'name: CI\non: pull_request\n'
+        edited = b'name: CI\r\non: push\r\n'
+        target.write_bytes(edited)
+        w.write(self.root / '.specify/workflow/install-receipt.json',
+                {'ci_sha256': hashlib.sha256(original).hexdigest()})
+        with patch.object(installer, 'install_aliases', return_value={}), \
+             patch.object(installer, 'doctor', return_value={'ok': True, 'errors': []}):
+            with self.assertRaisesRegex(w.WorkflowError, 'CI_WORKFLOW_HAS_LOCAL_EDITS'):
+                installer.install(self.root, apply=True, package_root=self.package, runner=lambda *args: None)
+        self.assertEqual(target.read_bytes(), edited)
+
+    def test_ci_guard_preserves_whitespace_and_lone_carriage_return_edits(self):
+        original = b'name: CI\non: pull_request\n'
+        receipt = {'ci_sha256': hashlib.sha256(original).hexdigest()}
+        for edited in (b'name: CI \non: pull_request\n', b'name: CI\ron: pull_request\n',
+                       b'name: CI\non: pull_request', b'name: CI\n on: pull_request\n'):
+            with self.subTest(edited=edited):
+                self.assertFalse(installer.ci_matches_managed(edited, original, receipt))
+
+    def test_explicit_preserve_ci_keeps_custom_policy_without_blessing_it_as_managed(self):
+        target = self.root / '.github/workflows/sanduq-workflow-gates.yml'
+        target.parent.mkdir(parents=True, exist_ok=True)
+        custom = b'name: Local policy\r\njobs:\r\n  check:\r\n    runs-on: homek8\r\n'
+        target.write_bytes(custom)
+        with patch.object(installer, 'install_aliases', return_value={}), \
+             patch.object(installer, 'doctor', return_value={'ok': True, 'errors': []}):
+            result = installer.install(self.root, apply=True, package_root=self.package,
+                                       runner=lambda *args: None, preserve_ci=True)
+            self.assertEqual(target.read_bytes(), custom)
+            self.assertEqual(result['preserved_ci'], {
+                'path': '.github/workflows/sanduq-workflow-gates.yml',
+                'sha256': hashlib.sha256(custom).hexdigest()})
+            self.assertEqual(w.read(self.root / '.specify/workflow/install-receipt.json')['preserved_ci'], result['preserved_ci'])
+            # A later invocation without the explicit choice must still protect
+            # this consumer policy from replacement by the bundled template.
+            with self.assertRaisesRegex(w.WorkflowError, 'CI_WORKFLOW_HAS_LOCAL_EDITS'):
+                installer.install(self.root, apply=True, package_root=self.package, runner=lambda *args: None)
+            self.assertEqual(target.read_bytes(), custom)
+
+    def test_preserve_ci_passes_health_check_on_a_checkout_without_a_receipt(self):
+        # Issue #22: the receipt is git-excluded, so a fresh clone or worktree
+        # has none. The health check runs before it is written and must still
+        # know the preserved file belongs to the project.
+        target = self.root / '.github/workflows/sanduq-workflow-gates.yml'
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(b'name: Local policy\njobs: {}\n')
+        asset = self.root / '.specify/extensions/workflow/assets/github/workflow-gates.yml'
+        asset.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(self.package / 'assets/github/workflow-gates.yml', asset)
+        self.assertFalse((self.root / '.specify/workflow/install-receipt.json').exists())
+
+        def health(root, policy, project=False, preserved_ci=None):
+            errors = w.ci_errors(root, policy, preserved_ci)
+            return {'ok': not errors, 'errors': errors}
+        with patch.object(installer, 'install_aliases', return_value={}),              patch.object(installer, 'doctor', side_effect=health):
+            result = installer.install(self.root, apply=True, package_root=self.package,
+                                       runner=lambda *args: None, preserve_ci=True)
+        self.assertEqual(result['preserved_ci']['path'], '.github/workflows/sanduq-workflow-gates.yml')
+        # The tracked lock carries the choice to every other checkout.
+        lock = w.read(self.root / '.specify/workflow/install-lock.json')
+        self.assertEqual(lock['preserved_ci'], {'path': '.github/workflows/sanduq-workflow-gates.yml'})
+        (self.root / '.specify/workflow/install-receipt.json').unlink()
+        self.assertEqual(w.ci_errors(self.root, w.load_policy(self.root)), [])
+
+    def test_preserve_ci_still_installs_template_when_project_has_no_ci_file(self):
+        with patch.object(installer, 'install_aliases', return_value={}), \
+             patch.object(installer, 'doctor', return_value={'ok': True, 'errors': []}):
+            result = installer.install(self.root, apply=True, package_root=self.package,
+                                       runner=lambda *args: None, preserve_ci=True)
+        self.assertIsNone(result['preserved_ci'])
+        # What lands in the project is the template rendered for its CI selection.
+        self.assertEqual((self.root / '.github/workflows/sanduq-workflow-gates.yml').read_bytes(),
+                         installer.rendered(self.package / 'assets/github/workflow-gates.yml',
+                                            w.load_policy(self.root)))
+
+    def test_newer_compatible_package_is_retained_without_downgrade(self):
+        self.version('pr', self.newer_pr)
+        result = installer.install(self.root, package_root=self.package)
+        self.assertEqual(result['retained_newer'][0]['extension'], 'pr')
+        self.assertNotIn('pr', [op['extension'] for op in result['extensions']])
+
+    def test_newer_incompatible_or_disabled_package_requires_resolution(self):
+        self.version('pr', '5.0.0')
+        with self.assertRaisesRegex(w.WorkflowError, 'NEWER_DEPENDENCY_INCOMPATIBLE'):
+            installer.install(self.root, package_root=self.package)
+        self.version('pr', self.newer_pr, enabled=False)
+        with self.assertRaisesRegex(w.WorkflowError, 'NEWER_DEPENDENCY_DISABLED'):
+            installer.install(self.root, package_root=self.package)
+
+    def test_scope_shim_requires_workflow_2(self):
+        source = Path(__file__).resolve().parents[2] / 'scope/extension.yml'
+        doc = yaml.safe_load(source.read_text(encoding='utf-8'))
+        self.assertEqual(doc['extension']['version'], '2.0.0')
+        self.assertIs(doc['extension']['deprecated'], True)
+        self.assertEqual([c['name'] for c in doc['provides']['commands']], ['speckit.scope.migrate'])
+        self.assertNotIn('hooks', doc)
+        self.assertIn({'id': 'workflow', 'version': '>=2.0.0,<3.0.0', 'required': True}, doc['requires']['extensions'])
+        installer.check_workflow_requirement('scope', doc, '2.0.0')
+        with self.assertRaisesRegex(w.WorkflowError, 'WORKFLOW_VERSION_UNSUPPORTED'):
+            installer.check_workflow_requirement('scope', doc, '1.25.0')
+
+    def installed_scope(self, version, repository='https://github.com/samykabu/sanduq'):
+        manifest = self.root / '.specify/extensions/scope/extension.yml'
+        manifest.parent.mkdir(parents=True, exist_ok=True)
+        manifest.write_text(yaml.safe_dump({'extension': {'id': 'scope', 'version': version, 'repository': repository}}),
+                            encoding='utf-8')
+        registry = w.registry(self.root); registry['scope'] = {'version': version, 'enabled': True}
+        w.write(self.root / '.specify/extensions/.registry', {'extensions': registry})
+
+    def test_installer_removes_an_installed_scope_before_any_other_package(self):
+        """DEC-03: Workflow provides Scope; Spec Kit never enforces requires.extensions, so the installer removes
+        Scope (1.x with code, or the 2.0.0 shim) first and keeps its state in .specify/scope."""
+        self.assertNotIn('scope', w.read(self.package / 'dependencies.json')['required'])
+        for version in ('1.14.0', '2.0.0'):
+            with self.subTest(version=version):
+                self.installed_scope(version)
+                state = self.root / '.specify/scope/approvals/10-baseline.json'
+                w.write(state, {'issue': 10})
+                plan = installer.install(self.root, package_root=self.package)
+                self.assertEqual(plan['scope_removed']['args'], ['specify', 'extension', 'remove', 'scope', '--force'])
+                self.assertEqual(plan['scope_removed']['state'], '.specify/scope (kept, read in place)')
+                self.version('project', '2.0.0')  # one more operation, to see the order
+                calls = []
+
+                def runner(root, args, log):
+                    calls.append(args[:3] + args[3:4])
+                    if args[:3] == ['specify', 'extension', 'remove']:
+                        shutil.rmtree(root / '.specify/extensions/scope')
+                        registry = w.registry(root); registry.pop('scope')
+                        w.write(root / '.specify/extensions/.registry', {'extensions': registry})
+                with patch.object(installer, 'install_aliases', return_value={}),                      patch.object(installer, 'doctor', return_value={'ok': True, 'errors': []}):
+                    result = installer.install(self.root, apply=True, package_root=self.package, runner=runner)
+                self.assertEqual(calls[0], ['specify', 'extension', 'remove', 'scope'])
+                self.assertIn(['specify', 'extension', 'add', 'project'], calls[1:])
+                self.assertEqual(result['scope_removed']['version'], version)
+                self.assertEqual(w.read(state), {'issue': 10})
+                self.assertNotIn('scope', w.read(self.root / '.specify/workflow/install-lock.json')['extensions'])
+                self.assertIsNone(installer.install(self.root, package_root=self.package)['scope_removed'])
+
+    def test_unrelated_scope_package_cannot_be_overwritten(self):
+        self.installed_scope('1.0.0', repository='https://github.com/unrelated/scope')
+        with self.assertRaisesRegex(w.WorkflowError, 'EXISTING_EXTENSION_SOURCE_CONFLICT: scope'):
+            installer.install(self.root, package_root=self.package)
+
+    def test_backups_and_runtime_are_ignored_without_ignoring_receipts(self):
+        w.ensure_local_excludes(self.root)
+        for value in ('.specify/workflow/backups/a.zip', '.specify/workflow/runtime/usage.json', '.specify/workflow/install-receipt.json'):
+            result = subprocess.run(['git', 'check-ignore', value], cwd=self.root, capture_output=True)
+            self.assertEqual(result.returncode, 0, value)
+        result = subprocess.run(['git', 'check-ignore', self.feature + '/workflow/checkpoint.json'], cwd=self.root, capture_output=True)
+        self.assertEqual(result.returncode, 1)
+
+    def test_internal_command_symlink_roundtrips_without_writing_through_link(self):
+        target = self.root / '.specify/extensions/pr/original.md'
+        target.write_text('Original command', encoding='utf-8')
+        alias = self.root / '.claude/skills/speckit-pr-generate/SKILL.md'
+        alias.parent.mkdir(parents=True)
+        try:
+            alias.symlink_to(target)
+        except OSError as error:
+            self.skipTest('Host does not support test symlinks: ' + str(error))
+        before = installer.snapshot(self.root, self.package / 'backup')
+        alias.unlink(); alias.write_text('Replaced registration', encoding='utf-8')
+        target.write_text('Changed command', encoding='utf-8')
+        installer.restore(self.root, before, installer.managed_files(self.root))
+        self.assertTrue(alias.is_symlink())
+        self.assertEqual(target.read_text(encoding='utf-8'), 'Original command')
+        self.assertEqual(installer.managed_files(self.root), before)
+
+    def delegate_link(self):
+        outside = tempfile.TemporaryDirectory(); self.addCleanup(outside.cleanup)
+        target = Path(outside.name).resolve() / 'delegate-task'
+        target.mkdir()
+        (target / 'SKILL.md').write_text('Shared skill', encoding='utf-8')
+        link = self.root / '.claude/skills/delegate-task'
+        link.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            link.symlink_to(target, target_is_directory=True)
+        except OSError as error:
+            self.skipTest('Host does not support test symlinks: ' + str(error))
+        return link, target
+
+    def replace_link_with_folder(self, link, backup):
+        # What a skill install does: move the link aside, then place a real copy.
+        link.rename(backup)
+        link.mkdir()
+        (link / 'SKILL.md').write_text('Bundled skill', encoding='utf-8')
+        (link / 'delegate.mjs').write_text('// bundled', encoding='utf-8')
+
+    def test_symlinked_delegate_skill_is_one_link_and_rolls_back(self):
+        link, target = self.delegate_link()
+        before = installer.snapshot(self.root, self.package / 'backup')
+        self.assertEqual(before['.claude/skills/delegate-task'],
+                         {'symlink': str(link.readlink()), 'directory': True})
+        self.assertFalse(any(name.startswith('.claude/skills/delegate-task/') for name in before))
+        self.replace_link_with_folder(link, self.package / 'moved-link')
+        installer.restore(self.root, before, installer.managed_files(self.root))
+        self.assertTrue(link.is_symlink())
+        self.assertEqual((link / 'SKILL.md').read_text(encoding='utf-8'), 'Shared skill')
+        self.assertEqual(sorted(p.name for p in target.iterdir()), ['SKILL.md'])
+        self.assertEqual(installer.managed_files(self.root), before)
+
+    def test_dangling_delegate_skill_link_rolls_back_as_a_folder_link(self):
+        link, target = self.delegate_link()
+        # The shared checkout the link points at is moved away for now.
+        parked = target.with_name('parked')
+        target.rename(parked)
+        self.assertFalse(link.exists())
+        before = installer.snapshot(self.root, self.package / 'backup')
+        self.assertEqual(before['.claude/skills/delegate-task'],
+                         {'symlink': str(link.readlink()), 'directory': True})
+        self.replace_link_with_folder(link, self.package / 'moved-link')
+        created = []
+        real_symlink_to = Path.symlink_to
+        def spy(path, to, target_is_directory=False):
+            created.append((path, target_is_directory))
+            return real_symlink_to(path, to, target_is_directory)
+        with patch.object(Path, 'symlink_to', spy):
+            installer.restore(self.root, before, installer.managed_files(self.root))
+        # Windows needs a directory link here; a file link would never open the folder.
+        self.assertEqual(created, [(link, True)])
+        self.assertTrue(link.is_symlink())
+        parked.rename(target)
+        self.assertEqual((link / 'SKILL.md').read_text(encoding='utf-8'), 'Shared skill')
+        self.assertEqual(installer.managed_files(self.root), before)
+
+    def test_link_rollback_never_deletes_unmanaged_files(self):
+        link, _ = self.delegate_link()
+        before = installer.snapshot(self.root, self.package / 'backup')
+        self.replace_link_with_folder(link, self.package / 'moved-link')
+        (link / 'runs/r1').mkdir(parents=True)
+        (link / 'runs/r1/result.json').write_text('{}', encoding='utf-8')
+        current = installer.managed_files(self.root)
+        with self.assertRaisesRegex(w.WorkflowError, 'ROLLBACK_CONFLICT: unmanaged files'):
+            installer.restore(self.root, before, current)
+        self.assertEqual(installer.managed_files(self.root), current)
+        self.assertTrue((link / 'runs/r1/result.json').is_file())
+
+    def delegate_junction(self):
+        outside = tempfile.TemporaryDirectory(); self.addCleanup(outside.cleanup)
+        target = Path(outside.name).resolve() / 'shared skill'
+        (target / 'runs/r1').mkdir(parents=True)
+        (target / 'SKILL.md').write_text('Shared skill', encoding='utf-8')
+        (target / 'runs/r1/prompt.txt').write_text('raw run data', encoding='utf-8')
+        link = self.root / '.claude/skills/delegate-task'
+        link.parent.mkdir(parents=True, exist_ok=True)
+        made = subprocess.run(['cmd', '/c', 'mklink', '/J', str(link), str(target)],
+                              capture_output=True, text=True)
+        self.assertEqual(made.returncode, 0, made.stderr or made.stdout)
+        self.addCleanup(lambda: delegation.is_link(link) and os.rmdir(link))
+        self.assertFalse(link.is_symlink())
+        return link, target
+
+    @staticmethod
+    def tree(folder):
+        return {p.relative_to(folder).as_posix(): p.read_bytes() for p in folder.rglob('*') if p.is_file()}
+
+    @unittest.skipUnless(os.name == 'nt', 'directory junctions exist only on Windows')
+    def test_junctioned_delegate_skill_is_one_link_and_rolls_back_as_a_junction(self):
+        link, target = self.delegate_junction()
+        untouched = self.tree(target)
+        before = installer.snapshot(self.root, self.package / 'backup')
+        self.assertEqual(before['.claude/skills/delegate-task'],
+                         {'symlink': os.readlink(link), 'directory': True, 'junction': True})
+        self.assertFalse(any(name.startswith('.claude/skills/delegate-task/') for name in before))
+        moved = self.package / 'moved-link'
+        self.replace_link_with_folder(link, moved)
+        self.addCleanup(lambda: delegation.is_link(moved) and os.rmdir(moved))
+        installer.restore(self.root, before, installer.managed_files(self.root))
+        self.assertTrue(delegation.is_junction(link))
+        self.assertFalse(link.is_symlink())
+        self.assertEqual((link / 'SKILL.md').read_text(encoding='utf-8'), 'Shared skill')
+        self.assertEqual(installer.managed_files(self.root), before)
+        # The moved-aside original link and the external target are left as they were.
+        self.assertTrue(delegation.is_junction(moved))
+        self.assertEqual(self.tree(target), untouched)
+        self.assertEqual(list((self.root / '.specify/workflow/runtime').glob('junction-restore-*')), [])
+
+    @unittest.skipUnless(os.name == 'nt', 'directory junctions exist only on Windows')
+    def test_dangling_delegate_skill_junction_rolls_back_as_a_junction(self):
+        link, target = self.delegate_junction()
+        parked = target.with_name('parked')
+        target.rename(parked)
+        self.assertFalse(link.exists())
+        before = installer.snapshot(self.root, self.package / 'backup')
+        self.assertTrue(before['.claude/skills/delegate-task']['junction'])
+        moved = self.package / 'moved-link'
+        self.replace_link_with_folder(link, moved)
+        self.addCleanup(lambda: delegation.is_link(moved) and os.rmdir(moved))
+        installer.restore(self.root, before, installer.managed_files(self.root))
+        self.assertTrue(delegation.is_junction(link))
+        parked.rename(target)
+        self.assertEqual((link / 'SKILL.md').read_text(encoding='utf-8'), 'Shared skill')
+        self.assertEqual(installer.managed_files(self.root), before)
+
+    @unittest.skipUnless(os.name == 'nt', 'directory junctions exist only on Windows')
+    def test_dangling_junction_target_with_shell_metacharacters_is_restored_exactly(self):
+        import _winapi
+        outside = tempfile.TemporaryDirectory(); self.addCleanup(outside.cleanup)
+        # cmd would expand %OS% (always defined) and could split on & or treat ^ ! as escapes.
+        target = Path(outside.name).resolve() / 'skill %OS% & ^caret !x! (1);='
+        target.mkdir()
+        link = self.root / '.claude/skills/delegate-task'
+        link.parent.mkdir(parents=True, exist_ok=True)
+        _winapi.CreateJunction(str(target), str(link))  # No shell involved in the original.
+        self.addCleanup(lambda: delegation.is_link(link) and os.rmdir(link))
+        target.rmdir()
+        recorded = os.readlink(link)
+        before = installer.snapshot(self.root, self.package / 'backup')
+        self.assertEqual(before['.claude/skills/delegate-task'],
+                         {'symlink': recorded, 'directory': True, 'junction': True})
+        moved = self.package / 'moved-link'
+        self.replace_link_with_folder(link, moved)
+        self.addCleanup(lambda: delegation.is_link(moved) and os.rmdir(moved))
+        with patch.object(subprocess, 'run', side_effect=AssertionError('no shell')), \
+             patch.object(Path, 'symlink_to', side_effect=AssertionError('never a symlink')):
+            installer.restore(self.root, before, installer.managed_files(self.root))
+        self.assertTrue(delegation.is_junction(link))
+        self.assertEqual(os.readlink(link), recorded)
+        self.assertIn('%OS%', os.readlink(link))
+        # The missing target is not created, and nothing else appears beside it.
+        self.assertFalse(os.path.lexists(target))
+        self.assertEqual(list(Path(outside.name).iterdir()), [])
+        self.assertEqual(installer.managed_files(self.root), before)
+        target.mkdir()
+        (target / 'SKILL.md').write_text('Shared skill', encoding='utf-8')
+        self.assertEqual((link / 'SKILL.md').read_text(encoding='utf-8'), 'Shared skill')
+        self.assertEqual(list((self.root / '.specify/workflow/runtime').glob('junction-restore-*')), [])
+
+    @unittest.skipUnless(os.name == 'nt', 'directory junctions exist only on Windows')
+    def test_junction_that_cannot_be_recreated_stops_rollback_before_any_change(self):
+        link, target = self.delegate_junction()
+        untouched = self.tree(target)
+        before = installer.snapshot(self.root, self.package / 'backup')
+        moved = self.package / 'moved-link'
+        self.replace_link_with_folder(link, moved)
+        self.addCleanup(lambda: delegation.is_link(moved) and os.rmdir(moved))
+        current = installer.managed_files(self.root)
+        with patch.object(installer, 'create_junction', side_effect=OSError('no junctions here')), \
+             patch.object(Path, 'symlink_to', side_effect=AssertionError('never a symlink')), \
+             self.assertRaisesRegex(w.WorkflowError, 'ROLLBACK_JUNCTION_FAILED: nothing was restored'):
+            installer.restore(self.root, before, current)
+        self.assertEqual(installer.managed_files(self.root), current)
+        self.assertTrue(delegation.is_junction(moved))
+        self.assertEqual(self.tree(target), untouched)
+        self.assertEqual(list((self.root / '.specify/workflow/runtime').glob('junction-restore-*')), [])
+
+    def test_real_delegate_skill_snapshot_excludes_run_data_and_rolls_back(self):
+        folder = self.root / '.agents/skills/delegate-task'
+        for name, text in (('SKILL.md', 'Skill'), ('contracts/result-schema-v2.md', 'Schema'),
+                           ('runs/codex-1/prompt.txt', 'secret'), ('node_modules/x/index.js', 'x'),
+                           ('contracts/runs/kept.md', 'nested runs folder is skill content')):
+            (folder / name).parent.mkdir(parents=True, exist_ok=True)
+            (folder / name).write_text(text, encoding='utf-8')
+        before = installer.snapshot(self.root, self.package / 'backup')
+        skill = sorted(name for name in before if name.startswith('.agents/skills/delegate-task/'))
+        self.assertEqual(skill, ['.agents/skills/delegate-task/SKILL.md',
+                                 '.agents/skills/delegate-task/contracts/result-schema-v2.md',
+                                 '.agents/skills/delegate-task/contracts/runs/kept.md'])
+        (folder / 'SKILL.md').write_text('Changed', encoding='utf-8')
+        (folder / 'delegate.mjs').write_text('// new', encoding='utf-8')
+        (folder / 'runs/codex-2').mkdir()
+        (folder / 'runs/codex-2/prompt.txt').write_text('live run', encoding='utf-8')
+        installer.restore(self.root, before, installer.managed_files(self.root))
+        self.assertEqual((folder / 'SKILL.md').read_text(encoding='utf-8'), 'Skill')
+        self.assertFalse((folder / 'delegate.mjs').exists())
+        self.assertEqual((folder / 'runs/codex-2/prompt.txt').read_text(encoding='utf-8'), 'live run')
+        self.assertEqual(installer.managed_files(self.root), before)
+
+    def test_install_refuses_while_a_delegation_attempt_is_active(self):
+        ledger = self.root / 'specs/001-example/workflow/delegations.json'
+        w.write(ledger, {'schema_version': 1, 'feature': 'specs/001-example',
+                         'attempts': [{'intent_id': 'i-1', 'status': 'starting'}], 'route_decisions': []})
+        commands = []
+        with patch.object(installer, 'install_aliases', return_value={}), \
+             patch.object(installer, 'doctor', return_value={'ok': True, 'errors': []}), \
+             patch.object(installer, 'required_gate_checks', return_value=[]), \
+             self.assertRaisesRegex(w.WorkflowError, 'DELEGATION_ATTEMPTS_ACTIVE: .*intent i-1'):
+            installer.install(self.root, apply=True, package_root=self.package,
+                              runner=lambda root, args, log: commands.append(args))
+        self.assertEqual(commands, [])
+        self.assertFalse((self.root / '.specify/workflow/runtime/install.lock').exists())
+
+    def test_owned_alias_upgrade_uses_previous_hash_and_preserves_local_edits(self):
+        inventory = installer.install_aliases(self.root, self.package)
+        w.write(self.root / '.specify/workflow/install-lock.json', {'aliases': inventory})
+        source = self.package / 'skills/speckit-scope/SKILL.md'
+        source.write_text(source.read_text(encoding='utf-8') + '\nUpdated owned routing.\n', encoding='utf-8')
+        updated = installer.install_aliases(self.root, self.package)
+        self.assertNotEqual(inventory, updated)
+        w.write(self.root / '.specify/workflow/install-lock.json', {'aliases': updated})
+        destination = self.root / '.agents/skills/speckit-scope/SKILL.md'
+        destination.write_text(destination.read_text(encoding='utf-8') + '\nUser customization\n', encoding='utf-8')
+        with self.assertRaisesRegex(w.WorkflowError, 'ALIAS_HAS_LOCAL_EDITS'):
+            installer.install_aliases(self.root, self.package)
+        self.assertIn('User customization', destination.read_text(encoding='utf-8'))
+
+    def test_recognized_legacy_short_alias_routes_through_owned_dispatcher(self):
+        destination = self.root / '.agents/skills/speckit-superpowers-bridge/SKILL.md'
+        destination.parent.mkdir(parents=True)
+        old = b'Legacy executor fixture'
+        destination.write_bytes(old)
+        w.write(self.package / 'assets/legacy-bridge-alias-hashes.json', [hashlib.sha256(old).hexdigest()])
+        self.assertIn('LEGACY_ALIAS_RECONCILIATION_REQUIRED', str(w.doctor(self.root, self.policy)))
+        installer.install_aliases(self.root, self.package)
+        self.assertIn('<!-- sanduq-workflow-alias:v1 -->', destination.read_text(encoding='utf-8'))
+        self.assertNotIn('LEGACY_ALIAS_RECONCILIATION_REQUIRED', str(w.doctor(self.root, self.policy)))
+
+    # Round 4 installer items (X19, X21, W10, D3, AU8).
+    def apply(self, runner=None, **kwargs):
+        with patch.object(installer, 'install_aliases', return_value={}), \
+             patch.object(installer, 'doctor', return_value={'ok': True, 'errors': []}), \
+             patch.object(installer, 'required_gate_checks', return_value=[]):
+            return installer.install(self.root, apply=True, package_root=self.package,
+                                     runner=runner or (lambda *args: None), **kwargs)
+
+    def test_four_applies_keep_three_zips_every_result_and_alias_backups(self):
+        backups = [Path(self.apply()['backup'])]
+        saved = backups[0] / 'unrecognized-aliases/.claude/skills/speckit-scope/SKILL.md'
+        saved.parent.mkdir(parents=True); saved.write_text('local edit', encoding='utf-8')
+        receipt = None
+        for _ in range(3):
+            receipt = self.apply(); backups.append(Path(receipt['backup']))
+        self.assertEqual([(b / 'before.zip').exists() for b in backups], [False, True, True, True])
+        self.assertTrue(all((b / 'result.json').is_file() and (b / 'before.json').is_file() for b in backups))
+        self.assertTrue(saved.is_file())
+        self.assertEqual(receipt['backups'], {'zips': 3, 'bytes': sum((b / 'before.zip').stat().st_size
+                                                                       for b in backups[1:])})
+        self.assertEqual(installer.backup_usage(self.root), receipt['backups'])
+
+    def test_failed_apply_prunes_no_backup_and_the_next_success_keeps_the_newest_three(self):
+        old = fake_backups(self.root, 4)
+
+        def runner(root, args, log):
+            raise w.WorkflowError('simulated')
+        with self.assertRaisesRegex(w.WorkflowError, 'INSTALL_ROLLED_BACK'):
+            self.apply(runner)
+        self.assertTrue(all(path.is_file() for path in old))
+        self.assertEqual(installer.backup_usage(self.root)['zips'], 5)
+        receipt = self.apply()
+        self.assertEqual(receipt['backups']['zips'], 3)
+        self.assertTrue((Path(receipt['backup']) / 'before.zip').is_file())
+        self.assertEqual([path.is_file() for path in old], [False, False, False, True])
+
+    def test_install_inside_an_upgrade_leaves_pruning_to_the_upgrade(self):
+        old = fake_backups(self.root, 4)
+        receipt = self.apply(upgrade_owner=os.getpid())
+        self.assertNotIn('backups', receipt)
+        self.assertTrue(all(path.is_file() for path in old))
+
+    def test_gh_api_timeout_maps_to_the_branch_rule_error(self):
+        seen = {}
+
+        def run(args, **kwargs):
+            seen.update(kwargs)
+            raise subprocess.TimeoutExpired(args, kwargs.get('timeout'))
+        with patch.object(installer.subprocess, 'run', side_effect=run), \
+             patch.object(installer, 'github_repository', return_value='acme/app'):
+            with self.assertRaisesRegex(w.WorkflowError,
+                                        'CI_BRANCH_RULE_INSPECTION_FAILED: gh api repos/acme/app timed out'):
+                installer.required_gate_checks(self.root)
+        self.assertEqual(seen['timeout'], 60)
+
+    def test_branch_rule_errors_keep_their_codes_on_the_shared_gh_transport(self):
+        def respond(protection=None, repo=None):
+            def run(args, **kwargs):
+                endpoint = args[2]
+                if endpoint == 'repos/acme/app':
+                    return repo or subprocess.CompletedProcess(args, 0, json.dumps({'default_branch': 'main'}), '')
+                if '/rules/branches/' in endpoint:
+                    return subprocess.CompletedProcess(args, 0, '[]', '')
+                return protection
+            return run
+        missing = subprocess.CompletedProcess([], 1, '', 'gh: Not Found (HTTP 404)')
+        cases = [(respond(missing), []),
+                 (respond(repo=subprocess.CompletedProcess([], 1, '', 'HTTP 403: forbidden')),
+                  'CI_BRANCH_RULE_INSPECTION_FAILED: HTTP 403: forbidden'),
+                 (respond(repo=subprocess.CompletedProcess([], 0, 'not json', '')), 'CI_BRANCH_RULE_RESPONSE_INVALID'),
+                 (respond(repo=subprocess.CompletedProcess([], 0, '', '')), 'CI_BRANCH_RULE_RESPONSE_INVALID'),
+                 (FileNotFoundError('gh'), 'CI_BRANCH_RULE_INSPECTION_FAILED: gh CLI not installed')]
+        for side_effect, expected in cases:
+            with self.subTest(expected=expected), patch.object(installer.subprocess, 'run', side_effect=side_effect), \
+                    patch.object(installer, 'github_repository', return_value='acme/app'):
+                if isinstance(expected, list):
+                    self.assertEqual(installer.required_gate_checks(self.root), expected)
+                else:
+                    with self.assertRaisesRegex(w.WorkflowError, expected):
+                        installer.required_gate_checks(self.root)
+
+    def optional_speckit(self, spec='>=1.1.1.dev0,<2.0.0'):
+        lock = w.read(self.package / 'dependencies.json')
+        lock['optional_speckit'] = {'progress': spec}
+        w.write(self.package / 'dependencies.json', lock)
+        return lock['optional']['progress']
+
+    def test_preview_refuses_an_optional_package_that_needs_a_newer_spec_kit(self):
+        version = self.optional_speckit()
+        expected = (f'OPTIONAL_PACKAGE_SPECKIT_INCOMPATIBLE: progress {version} requires spec-kit >=1.1.1.dev0,<2.0.0; '
+                    'installed 1.0.11. Upgrade Spec Kit or run without --with progress.')
+        calls = []
+        with patch.object(installer, 'speckit_version', return_value='1.0.11'):
+            with self.assertRaises(w.WorkflowError) as preview:
+                installer.install(self.root, package_root=self.package, with_optional=['progress'])
+            self.assertEqual(str(preview.exception), expected)
+            with self.assertRaises(w.WorkflowError) as applied:
+                installer.install(self.root, apply=True, package_root=self.package, with_optional=['progress'],
+                                  runner=lambda *args: calls.append(args))
+            self.assertEqual(str(applied.exception), expected)
+            installer.install(self.root, package_root=self.package)  # without Progress nothing is checked
+        self.assertEqual(calls, [])
+        self.assertFalse((self.root / '.specify/workflow/install-lock.json').exists())
+        for current in ('1.1.4.dev0', None):  # a matching or an unknown Spec Kit goes ahead
+            with self.subTest(current=current), patch.object(installer, 'speckit_version', return_value=current):
+                result = installer.install(self.root, package_root=self.package, with_optional=['progress'])
+                self.assertEqual(result['extensions'][-1]['extension'], 'progress')
+
+    def test_preview_reads_a_staged_optional_package_requirement(self):
+        lock = w.read(self.package / 'dependencies.json')
+        staged = self.package / 'staged'
+        versions = {**lock['required'], **{k: v for group in lock['selected'].values() for k, v in group.items()},
+                    **lock['optional']}
+        for name, version in versions.items():
+            doc = {'extension': {'id': name, 'version': version, 'repository': lock['repository']}}
+            if name == 'progress':
+                doc['requires'] = {'speckit_version': '>=1.1.1.dev0,<2.0.0'}
+            (staged / name).mkdir(parents=True)
+            (staged / name / 'extension.yml').write_text(yaml.safe_dump(doc), encoding='utf-8')
+        with patch.object(installer, 'speckit_version', return_value='1.0.11'):
+            with self.assertRaisesRegex(w.WorkflowError, 'OPTIONAL_PACKAGE_SPECKIT_INCOMPATIBLE: progress'):
+                installer.install(self.root, packages=staged, package_root=self.package, with_optional=['progress'])
+
+    def test_spec_kit_version_comes_from_specify_version(self):
+        for side_effect, expected in ((subprocess.CompletedProcess([], 0, 'specify 1.0.11\n', ''), '1.0.11'),
+                                      (subprocess.CompletedProcess([], 0, 'specify 1.1.4.dev0\n', ''), '1.1.4.dev0'),
+                                      (subprocess.CompletedProcess([], 2, '', 'No such option'), None),
+                                      (FileNotFoundError('specify'), None)):
+            with self.subTest(expected=expected), patch.object(installer.subprocess, 'run', side_effect=[side_effect]):
+                self.assertEqual(installer.speckit_version(self.root), expected)
+
+    def test_a_failed_command_reports_its_own_error(self):
+        # Spec Kit 1.0.11's output for Progress 1.5.0 in the round-5 live run: Rich wraps it at 80 columns.
+        stdout = ('Continue with installation? [y/N]: Downloading from \nhttps://github.com/samykabu/sanduq/releases/'
+                  'download/progress-v1.5.0/progress.z\nip...\n\nCompatibility Error: Extension requires spec-kit '
+                  '>=1.1.1.dev0,<2.0.0, but \n1.0.11 is installed.\nUpgrade spec-kit with: uv tool install specify-cli '
+                  '--force --from \ngit+https://github.com/github/spec-kit.git\n')
+        cases = [(stdout, '', 'Compatibility Error: Extension requires spec-kit >=1.1.1.dev0,<2.0.0, but 1.0.11 is '
+                              'installed. Upgrade spec-kit with: uv tool install specify-cli --force --from '
+                              'git+https://github.com/github/spec-kit.git'),
+                 (json.dumps({'ok': False, 'error': 'INSTALL_ROLLED_BACK: boom'}) + '\n', '', 'INSTALL_ROLLED_BACK: boom'),
+                 ('progress...\n', 'Traceback (most recent call last):\nValueError: bad\n',
+                  'Traceback (most recent call last): ValueError: bad'),
+                 ('', '', 'no output, exit code 1')]
+        for out, err, cause in cases:
+            log = []
+            with self.subTest(cause=cause), \
+                    patch.object(installer.subprocess, 'run', return_value=subprocess.CompletedProcess([], 1, out, err)):
+                with self.assertRaises(w.WorkflowError) as failed:
+                    installer.command(self.root, ['specify', 'extension', 'add', 'progress'], log)
+                self.assertEqual(str(failed.exception), 'INSTALL_COMMAND_FAILED: specify extension add progress: ' + cause)
+                self.assertEqual(log[0]['stdout'], out)
+
+    def test_install_refuses_while_a_memory_archive_run_is_active(self):
+        active = memory_archive_run(self.root)
+        commands = []
+        with self.assertRaisesRegex(w.WorkflowError, 'MEMORY_ARCHIVE_ACTIVE: archive run a{32} .*'
+                                                      'speckit.memory.session --run a{32}'):
+            self.apply(lambda root, args, log: commands.append(args))
+        self.assertEqual(commands, [])
+        self.assertFalse((self.root / '.specify/workflow/backups/installs').exists())
+        active.unlink()  # Memory finished the run: an idle Memory never blocks.
+        self.assertTrue(self.apply()['applied'])
+
+    def owned_hook(self):
+        path = self.root / '.specify/extensions.yml'
+        hook = {'extension': 'project', 'command': 'speckit.project.sync', 'enabled': True, 'optional': False}
+        path.write_text(yaml.safe_dump({'hooks': {'after_tasks': [hook]}}), encoding='utf-8')
+        from reconcile import reconcile
+        reconcile(self.root, apply=True)
+        # `specify extension add/update` (register_hooks) and Memory's init re-create the entry enabled.
+        path.write_text(yaml.safe_dump({'hooks': {'after_tasks': [hook]}}), encoding='utf-8')
+        return path
+
+    def test_install_accepts_an_owned_hook_registered_again_and_disables_it(self):
+        path = self.owned_hook()
+        self.assertTrue(self.apply()['applied'])
+        [entry] = yaml.safe_load(path.read_text(encoding='utf-8'))['hooks']['after_tasks']
+        self.assertIs(entry['enabled'], False)
+        # A disabled entry edited by hand is still refused, not overwritten.
+        entry['prompt'] = 'user edit'
+        path.write_text(yaml.safe_dump({'hooks': {'after_tasks': [entry]}}), encoding='utf-8')
+        with self.assertRaisesRegex(w.WorkflowError, 'INSTALL_ROLLED_BACK: HOOK_CHANGED_SINCE_RECONCILE'):
+            self.apply()
+        self.assertIn('user edit', path.read_text(encoding='utf-8'))
+
+    def test_install_restores_manifest_metadata_drift_and_rolls_back_exactly_on_later_failure(self):
+        from reconcile import reconcile
+        path = self.owned_hook()
+        reconcile(self.root, apply=True)
+        document = yaml.safe_load(path.read_text(encoding='utf-8'))
+        document['hooks']['after_tasks'][0]['description'] = 'Current installed description'
+        path.write_text(yaml.safe_dump(document), encoding='utf-8')
+        manifest_path = self.root / '.specify/extensions/project/extension.yml'
+        manifest = yaml.safe_load(manifest_path.read_text(encoding='utf-8'))
+        manifest['hooks'] = {'after_tasks': {'command': 'speckit.project.sync',
+                                           'description': 'Current installed description'}}
+        manifest_path.write_text(yaml.safe_dump(manifest), encoding='utf-8')
+        journal = self.root / '.specify/workflow/integration-backup.json'
+        before = path.read_bytes(), journal.read_bytes()
+        def fail_after_restore(*args):
+            restored = yaml.safe_load(path.read_text(encoding='utf-8'))['hooks']['after_tasks'][0]
+            self.assertTrue(restored['enabled'])
+            self.assertEqual('Current installed description', restored['description'])
+            raise w.WorkflowError('DEPENDENCY_COMMAND_FAILED')
+        with self.assertRaisesRegex(w.WorkflowError, 'INSTALL_ROLLED_BACK: DEPENDENCY_COMMAND_FAILED'):
+            self.apply(fail_after_restore)
+        self.assertEqual(before, (path.read_bytes(), journal.read_bytes()))
+        results = [w.read(p) for p in (self.root / '.specify/workflow/backups/installs').glob('*/result.json')]
+        failed, = [item for item in results if item.get('error') == 'DEPENDENCY_COMMAND_FAILED']
+        audit, = failed['hook_metadata_refreshes']
+        self.assertNotIn('description', audit['before'])
+        self.assertEqual('Current installed description', audit['after']['description'])
+        self.assertFalse(audit['before']['enabled'])
+        self.assertFalse(audit['after']['enabled'])
+        result = self.apply()
+        self.assertTrue(result['applied'])
+        self.assertEqual([audit], result['hook_metadata_refreshes'])
+        self.assertEqual([audit], w.read(self.root / '.specify/workflow/install-receipt.json')['hook_metadata_refreshes'])
+        self.assertEqual([audit], w.read(Path(result['backup']) / 'result.json')['hook_metadata_refreshes'])
+        hook, = yaml.safe_load(path.read_text(encoding='utf-8'))['hooks']['after_tasks']
+        self.assertFalse(hook['enabled'])
+        self.assertEqual('Current installed description', hook['description'])
+
+    def assure_reference(self, content):
+        reference = self.root / '.specify/extensions/assure/assets/github/documentation-gates.yml'
+        reference.parent.mkdir(parents=True, exist_ok=True)
+        reference.write_bytes(content)
+        return reference
+
+    def test_unedited_documentation_gate_from_the_assure_this_apply_replaced_is_removed(self):
+        # Standalone Assure rendered this file; installing Workflow updates Assure to a changed template (AU8).
+        old = ASSURE_GATE.read_bytes()
+        reference = self.assure_reference(old)
+        legacy = self.root / '.github/workflows/documentation-gates.yml'
+        legacy.parent.mkdir(parents=True, exist_ok=True)
+        legacy.write_bytes(installer.rendered(reference, w.load_policy(self.root)))
+
+        def runner(root, args, log):
+            if args[1:3] == ['extension', 'add'] and 'assure' in ' '.join(args):
+                reference.write_bytes(old + b'# changed in the new Assure\n')
+        self.apply(runner)
+        self.assertFalse(legacy.exists())
+
+    def test_documentation_gate_rendered_before_the_head_checkout_is_removed(self):
+        # Assure was already updated to the AU8 template; the file is still the earlier render.
+        template = ASSURE_GATE.read_bytes().replace(b'\r\n', b'\n')
+        self.assertIn(installer.ASSURE_HEAD_CHECKOUT, template)
+        self.assure_reference(template)
+        legacy = self.root / '.github/workflows/documentation-gates.yml'
+        legacy.parent.mkdir(parents=True, exist_ok=True)
+        legacy.write_bytes(installer.sanduq_ci.render(template.replace(installer.ASSURE_HEAD_CHECKOUT, b''),
+                                                      w.load_policy(self.root)['ci']))
+        self.apply()
+        self.assertFalse(legacy.exists())
+
+    def test_edited_documentation_gate_is_still_refused(self):
+        reference = self.assure_reference(ASSURE_GATE.read_bytes())
+        legacy = self.root / '.github/workflows/documentation-gates.yml'
+        legacy.parent.mkdir(parents=True, exist_ok=True)
+        edited = installer.rendered(reference, w.load_policy(self.root)) + b'# local edit\n'
+        legacy.write_bytes(edited)
+        with self.assertRaisesRegex(w.WorkflowError, 'LEGACY_CI_HAS_LOCAL_EDITS'):
+            self.apply()
+        self.assertEqual(legacy.read_bytes(), edited)
+
+    def test_user_manual_workflows_follow_the_template_this_apply_replaced_unless_edited(self):
+        # User Manual's init rendered both files; this apply updates User Manual to changed templates.
+        policy = w.load_policy(self.root)
+        targets = {}
+        for name in installer.USER_MANUAL_CI:
+            reference = self.root / '.specify/extensions/user-manual/assets/github' / name
+            reference.parent.mkdir(parents=True, exist_ok=True)
+            reference.write_bytes((USER_MANUAL_CI / name).read_bytes())
+            target = self.root / '.github/workflows' / name
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(installer.rendered(reference, policy).replace(b'\n', b'\r\n'))
+            targets[name] = (reference, target)
+        edited = targets['user-manual-release.yml'][1]
+        edited.write_bytes(edited.read_bytes() + b'# local edit\n')
+        kept = edited.read_bytes()
+
+        def runner(root, args, log):
+            if args[1:3] == ['extension', 'add'] and 'user-manual' in ' '.join(args):
+                for reference, _ in targets.values():
+                    reference.write_bytes(reference.read_bytes() + b'# changed in the new User Manual\n')
+        result = self.apply(runner)
+        reference, target = targets['user-manual-preview.yml']
+        self.assertEqual(target.read_bytes(), installer.rendered(reference, policy))
+        self.assertEqual(result['refreshed_ci'], ['.github/workflows/user-manual-preview.yml'])
+        self.assertEqual(edited.read_bytes(), kept)
+
+
+ASSURE_GATE = Path(__file__).resolve().parents[2] / 'assure/assets/github/documentation-gates.yml'
+USER_MANUAL_CI = Path(__file__).resolve().parents[2] / 'user-manual/assets/github'
+
+
+def fake_backups(root, count):
+    """``count`` earlier backups spread over the three folders, oldest first, all older than any new apply."""
+    zips = []
+    for index in range(count):
+        folder = root / '.specify/workflow/backups' / installer.BACKUP_KINDS[index % 3] / ('old%d' % index)
+        folder.mkdir(parents=True)
+        for name in ('before.json', 'result.json'):
+            (folder / name).write_text('{}', encoding='utf-8')
+        path = folder / 'before.zip'
+        path.write_bytes(b'zip')
+        stamp = (1_600_000_000 + index) * 10**9
+        os.utime(path, ns=(stamp, stamp))
+        zips.append(path)
+    return zips
+
+
+def memory_archive_run(root, run_id='a' * 32):
+    """An installed Memory with an unfinished archive run, recorded as archive.py records it."""
+    script = root / '.specify/extensions/memory/scripts/archive.py'
+    script.parent.mkdir(parents=True, exist_ok=True)
+    script.write_text('# fixture\n', encoding='utf-8')
+    active = root / '.git/sanduq-memory/active.json'
+    w.write(active, {'run_id': run_id})
+    return active

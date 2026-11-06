@@ -1,0 +1,39 @@
+name: Documentation gates
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  feature-documentation:
+    runs-on: __sanduq_runs_on_linux__
+    # sanduq:if self_hosted
+    # A self-hosted runner never executes a fork's checkout and scripts.
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    # sanduq:endif
+    steps:
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+        with:
+          # The recorded states describe the PR head, not GitHub's merge commit.
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+      - name: Resolve active feature
+        id: feature
+        shell: bash
+        run: |
+          set -euo pipefail
+          feature="$(python -c "import json; print(json.load(open('.specify/feature.json', encoding='utf-8'))['feature_directory'])")"
+          test -d "$feature"
+          echo "path=$feature" >> "$GITHUB_OUTPUT"
+      - name: Verify QA analysis and documentation freshness
+        if: ${{ hashFiles('.specify/extensions/assure/assure-config.yml') != '' }}
+        env:
+          FEATURE: ${{ steps.feature.outputs.path }}
+        run: python .specify/extensions/assure/scripts/assure_state.py status --gate --summary --kind document --feature "$FEATURE"
+      - name: Verify User Manual freshness
+        if: ${{ hashFiles('User-Manual/manual.yml') != '' && hashFiles('.specify/extensions/user-manual/scripts/manual_state.py') != '' }}
+        env:
+          FEATURE: ${{ steps.feature.outputs.path }}
+        run: python .specify/extensions/user-manual/scripts/manual_state.py status --summary --feature "$FEATURE"

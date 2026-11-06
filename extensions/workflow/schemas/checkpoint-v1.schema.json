@@ -1,0 +1,125 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sanduq.local/schemas/checkpoint-v1.schema.json",
+  "title": "Sanduq feature checkpoint v1",
+  "description": "Checkpoint versions 1 and 2. Version 2 drops repo_path; readers accept both and every write is version 2.",
+  "type": "object",
+  "required": ["schema_version", "run_id", "branch", "feature", "issue", "policy_digest", "dependency_digest", "policy", "commands", "receipts", "generation", "active", "status"],
+  "properties": {
+    "schema_version": {"enum": [1, 2]},
+    "run_id": {"type": "string", "minLength": 1},
+    "repo_path": {"type": "string", "minLength": 1, "description": "Version 1 only: the absolute root at the time of the last write. 1.8.0+ never compares it; relocate records it as old_identity.legacy_repo_path for a pre-1.8.0 checkpoint. Version 2 never carries it."},
+    "repo_identity": {
+      "description": "Portable repository identity (1.8.0+): the normalised origin remote and/or the root commit SHA, and whether this clone was shallow when recorded. Absent only on a pre-1.8.0 version-1 checkpoint the current repository has not yet upgraded (see repo_path).",
+      "type": "object",
+      "required": ["remote", "root_commit"],
+      "properties": {
+        "remote": {"type": ["string", "null"], "minLength": 1},
+        "root_commit": {"type": ["string", "null"], "pattern": "^[0-9a-f]{40,64}$"},
+        "shallow": {"type": ["boolean", "null"]}
+      }
+    },
+    "branch": {"type": "string", "minLength": 1},
+    "target_branch": {"type": ["string", "null"]},
+    "feature": {"type": "string", "pattern": "^specs/[^/]+$"},
+    "issue": {"type": "string", "pattern": "^[^/]+/[^#]+#[1-9][0-9]*$"},
+    "policy_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "dependency_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "policy": {"$ref": "policy-v1.schema.json"},
+    "commands": {"type": "object", "additionalProperties": {"type": "string"}},
+    "receipts": {"type": "object", "additionalProperties": {"$ref": "receipt-v1.schema.json"}},
+    "generation": {"type": "integer", "minimum": 0},
+    "active": {
+      "oneOf": [
+        {"type": "null"},
+        {"type": "object", "required": ["stage", "token", "claimed_at", "session_id", "context", "baseline"], "properties": {
+          "stage": {"type": "string"}, "token": {"type": "string", "minLength": 1},
+          "claimed_at": {"type": "string", "format": "date-time"}, "session_id": {"type": "string"},
+          "context": {"type": "object"}, "baseline": {"type": "object"}
+        }}
+      ]
+    },
+    "profile": {
+      "description": "The effort tier frozen at the first Plan claim when profiles are enabled; absent means the full stage list.",
+      "type": "object", "required": ["tier", "score", "fixed_at"],
+      "properties": {"tier": {"enum": ["lite", "standard", "full"]},
+                     "score": {"type": ["integer", "null"], "enum": [1, 2, 3, 5, 8, 13, 21, null]},
+                     "fixed_at": {"type": "string", "format": "date-time"}}
+    },
+    "skipped": {
+      "description": "Stages the frozen tier does not run, with the reason (tasks is merged into plan on lite and standard).",
+      "type": "object", "additionalProperties": {"type": "string", "minLength": 1}
+    },
+    "status": {"enum": ["in-progress", "paused", "ready_to_finalize", "pr_open", "blocked", "failed"]},
+    "migrations": {
+      "description": "Reviewed migrations. workflow.py migrate --preview returns the same invalidated and preserved lists before the write.",
+      "type": "array",
+      "items": {"type": "object", "required": ["reason", "from", "at", "invalidated", "preserved_as_historical"], "properties": {
+        "reason": {"type": "string", "minLength": 1}, "from": {"type": "string"}, "to": {"type": "string"},
+        "at": {"type": "string", "format": "date-time"}, "policy_from": {"type": "string"}, "policy_to": {"type": "string"},
+        "invalidated": {"type": "array", "items": {"type": "string"}},
+        "preserved_as_historical": {"type": "array", "items": {"type": "string"}}
+      }}
+    },
+    "relocations": {
+      "description": "Explicit, reviewed workflow.py relocate entries: a repo identity that legitimately moved (a fork, a renamed remote, a migrated org). Never invalidates a receipt.",
+      "type": "array",
+      "items": {"type": "object", "required": ["actor", "at", "reason", "old_identity", "new_identity"], "properties": {
+        "actor": {"type": "string", "minLength": 1}, "at": {"type": "string", "format": "date-time"},
+        "reason": {"type": "string", "minLength": 1},
+        "old_identity": {"type": "object"}, "new_identity": {"type": "object"},
+        "branch_rebound": {"type": "boolean"}, "history_changed": {"type": "boolean"}, "branch_from": {"type": "string"}, "branch_to": {"type": "string"},
+        "repository_renamed": {"type": "boolean"}, "old_repository": {"type": "string"}, "new_repository": {"type": "string"},
+        "new_issue": {"type": "string", "pattern": "^[^/]+/[^#]+#[1-9][0-9]*$"}
+      }}
+    },
+    "stage_plan": {
+      "description": "The selected, policy-filtered stage order at the time of the last write (1.12.0+).",
+      "type": "object", "required": ["v", "generation", "stages"],
+      "properties": {"v": {"const": 1}, "generation": {"type": "integer", "minimum": 0},
+                     "stages": {"type": "array", "items": {"type": "string"}}}
+    },
+    "next_action": {
+      "description": "Workflow's own next/next_stage evaluation at the time of the last write (1.12.0+); null when it could not be evaluated.",
+      "oneOf": [{"type": "null"}, {"type": "object", "required": ["text", "stage", "kind", "evaluated_at", "generation"], "properties": {
+        "text": {"type": "string"}, "stage": {"type": ["string", "null"]},
+        "kind": {"enum": ["active-claim", "next-stage"]},
+        "evaluated_at": {"type": "string", "format": "date-time"}, "generation": {"type": "integer", "minimum": 0}}}]
+    },
+    "lifecycle_outbox": {
+      "description": "Lifecycle events queued with a state change and not yet appended to workflow/lifecycle.jsonl (1.12.0+). Replayed on the next save; deduplicated by event_id.",
+      "type": "array",
+      "items": {"type": "object", "required": ["v", "event_id", "workflow_run_id", "generation", "at", "stage", "event", "episode_id", "claim_id", "delegation_run_ids", "reason"]}
+    },
+    "updated_at": {"type": "string", "format": "date-time"},
+    "project_sync": {
+      "description": "The last workflow.py project-sync (1.16.0+): pending is written before the Project script runs, done or failed after it; next and status report pending or failed for retry.",
+      "type": "object", "required": ["phase", "state", "at"],
+      "properties": {"phase": {"type": "string"}, "state": {"enum": ["pending", "done", "failed"]},
+                     "at": {"type": "string", "format": "date-time"}, "summary": {"type": ["string", "null"]}}
+    },
+    "lineage": {
+      "description": "Runtime-owned records of accepted changes to recorded fingerprints: a stage's permitted side effects, advisory consulted drift, and administrative-amendment records (sync-amend or migrate) that replace a legacy raw Project Sync state hash with its binding projection.",
+      "type": "array", "items": {"type": "object"}
+    },
+    "head": {"type": "string"},
+    "memory_session": {
+      "description": "The last Memory session handoff a claim ran (round 4, W14), recorded only when it neither blocked nor returned work to dispatch. A claim in another session, or at Scope or Specify, runs it again.",
+      "type": "object", "required": ["session_id", "status", "at"],
+      "properties": {"session_id": {"type": "string"}, "status": {"type": "string"},
+                     "at": {"type": "string", "format": "date-time"}}
+    },
+    "execute_protocol": {
+      "description": "The Execute protocol last printed in full by a claim: its files and the digest of their content. An Execute claim with the same digest names the files instead of printing them (1.15.0+).",
+      "type": "object",
+      "required": ["files", "digest", "printed_at"],
+      "properties": {
+        "files": {"type": "array", "items": {"type": "string"}},
+        "digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "printed_at": {"type": "string", "format": "date-time"}
+      }
+    }
+  },
+  "if": {"properties": {"schema_version": {"const": 2}}},
+  "then": {"not": {"required": ["repo_path"]}}
+}

@@ -1,0 +1,71 @@
+schema_version: "1.0"
+
+extension:
+  id: user-manual
+  name: "User Manual"
+  version: "2.0.4"
+  description: "Create and incrementally maintain bilingual-ready, audience-aware application manuals in Markdown that reads correctly on GitHub, rendered as Markdown, through your own templates and tools, or as MkDocs HTML and PDF, including modules, interfaces, tutorials, screenshots, APIs, releases, migrations, infrastructure, architecture, and complete data dictionaries."
+  author: "Samy K. Abushanab"
+  repository: "https://github.com/samykabu/sanduq"
+  category: "documentation"
+  license: MIT
+
+requires:
+  speckit_version: ">=0.2.0"
+  extensions:
+    - id: illustrate
+      version: ">=2.0.0,<3.0.0"
+      required: true
+  tools:
+    - name: git
+      required: false
+    - name: python
+      required: true
+      version: ">=3.11"
+    - name: node
+      required: false
+
+provides:
+  commands:
+    - name: speckit.user-manual.init
+      file: commands/speckit.user-manual.init.md
+      description: "Discovers the app, proposes a module map and scaffolds the audience-aware User Manual. Use when asked to 'create a user manual'."
+    - name: speckit.user-manual.analyze
+      file: commands/speckit.user-manual.analyze.md
+      description: "Adds the feature's User Manual content and asset tasks to tasks.md. Use before implementation or when asked to 'add manual tasks'."
+    - name: speckit.user-manual.update
+      file: commands/speckit.user-manual.update.md
+      description: "Updates the User Manual modules a feature affects, audits them and builds a private preview. Use when asked to 'update the manual'."
+    - name: speckit.user-manual.release
+      file: commands/speckit.user-manual.release.md
+      description: "Builds versioned User Manual release notes, migration guides and release editions. Use when asked to 'release the manual', never on a feature branch."
+
+hooks:
+  after_tasks:
+    command: speckit.user-manual.analyze
+    optional: true
+    prompt: "Analyze which User Manual modules and assets this feature must update?"
+    description: "Add documentation and evidence work to tasks.md before implementation"
+  after_implement:
+    command: speckit.user-manual.update
+    optional: true
+    prompt: "Update the audience-aware User Manual and generate a private preview?"
+    description: "Update affected manual modules after implemented behavior can be observed"
+
+tags:
+  - "user-manual"
+  - "documentation"
+  - "mkdocs"
+  - "material"
+  - "pdf"
+  - "bilingual"
+  - "arabic"
+  - "rtl"
+  - "api"
+  - "tutorial"
+  - "release-notes"
+  - "migration-guide"
+  - "screenshots"
+  - "architecture"
+  - "infrastructure"
+  - "data-dictionary"

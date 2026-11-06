@@ -1,0 +1,105 @@
+# Sanduq documentation
+
+Sanduq adds delivery processes to [Spec Kit](https://github.com/github/spec-kit) projects: QA, an
+application manual, pull requests, GitHub Project sync, diagrams, project memory and a live progress
+report. You can use one portable skill, a few extensions, or the managed Workflow that runs them all
+from one GitHub issue. Pick that [adoption level](reference/glossary.md#adoption-level) first, then
+install. [When each extension runs](start/how-it-runs.md) shows where each one fits in the lifecycle.
+
+## Choose an adoption level
+
+| Level | You get | Start here |
+| --- | --- | --- |
+| 1. Skills only | One task, such as a diagram or a manual, in any supported host. No Spec Kit. | [Skills only](scenarios/skills-only.md) |
+| 2. One extension | One process added to a Spec Kit project | [One extension](scenarios/one-extension.md) |
+| 3. Pick your extensions | Several standalone processes, such as QA, docs and board sync, with no Workflow | [Pick your extensions](scenarios/pick-your-extensions.md) |
+| 4. Managed Workflow | One GitHub issue taken to a verified pull request, resumable | [Managed Workflow](scenarios/managed-workflow.md) |
+
+## Start
+
+| Task | Page |
+| --- | --- |
+| See who Sanduq is for and how success is measured | [Product brief](start/product-brief.md) |
+| See when each extension runs and what sends work back | [How it runs](start/how-it-runs.md) |
+| Check the tools and versions you need | [Prerequisites](start/prerequisites.md) |
+| Create or prepare a Spec Kit project | [Set up Spec Kit](start/install-speckit.md) |
+| Install on Codex, Claude Code or Claude Desktop, and set recipes | [Install by host](start/install-by-host.md) |
+| Fix a common problem | [Troubleshooting](start/troubleshooting.md) |
+| Upgrade, read changelogs, find moved pages | [Upgrades](start/upgrades.md) |
+
+## Extensions
+
+![Product map: Scope is part of Workflow. Workflow, Assure, PR and User Manual require Illustrate; PR uses Assure and User Manual when installed; Workflow uses Progress when installed; Project, Memory and Progress stand alone. Portable skills from sanduq-skills are copied into the Illustrate, User Manual and Workflow extensions and listed by the sanduq marketplace.](diagrams/product-map.animated.svg)
+
+Scope requires Workflow and Illustrate. Assure, PR and User Manual require Illustrate, and PR uses
+Assure and User Manual when they are installed. Project and Memory need no other extension. The
+portable skills come from [sanduq-skills](https://github.com/samykabu/sanduq-skills) and are copied
+into the extensions. [Editable source](diagrams/product-map.html).
+
+One page per extension: purpose, lifecycle phase, hooks, dependencies, setup, an example and limits.
+
+| Job | Extension | Purpose |
+| --- | --- | --- |
+| Managed delivery | [Workflow](extensions/workflow.md) | Resumable issue-to-PR dispatcher |
+| Managed delivery | [Scope](extensions/scope.md) | Issue scope, prerequisites and decomposition; part of Workflow from 2.0.0 |
+| Checks and pull requests | [QA](extensions/assure.md) (`assure`) | QA readiness analysis and tester walkthrough |
+| Checks and pull requests | [Pull requests](extensions/pr.md) (`pr`) | Feature docs, PR description and review feedback |
+| Documentation | [User Manual](extensions/user-manual.md) | Manuals for the audiences and languages you choose |
+| Documentation | [Illustrate](extensions/illustrate.md) | Themed diagrams and charts |
+| Tracking and context | [Project sync](extensions/project.md) (`project`) | GitHub Project board sync |
+| Tracking and context | [Progress](extensions/progress.md) | Live, deterministic feature progress report |
+| Tracking and context | [Memory](extensions/memory.md) | Project memory and recoverable spec archiving |
+
+## Managed Workflow in depth
+
+| Task | Page |
+| --- | --- |
+| Follow a feature through every stage | [Worked lifecycle](workflow/lifecycle.md) |
+| Resume, upgrade or recover | [Operating guide](workflow/operating-guide.md) |
+| Inspect state, progress and runners | [State, evidence and runners](workflow/operations.md) |
+| Change QA or manual selection, or the CI gate | [Delivery policy](workflow/delivery-policy.md) |
+| Look up stages, state files, schemas, runner policy, utilities, delegation | [Stages](workflow/stages.md) · [State files](workflow/state-files.md) · [Schemas](workflow/schemas.md) · [Runner policy](workflow/runner-policy.md) · [Utilities](workflow/utilities.md) · [Delegation](workflow/delegation.md) · [Development](workflow/development.md) |
+
+## Reference
+
+| Page | Contents |
+| --- | --- |
+| [Commands](reference/commands.md) | All 42 commands with an example each, and host syntax |
+| [Hooks](reference/hooks.md) | Every hook: manifest defaults and the managed Workflow view (generated) |
+| [Error codes](reference/errors.md) | What each Workflow error code means and the command to run next (generated) |
+| [Compatibility](reference/compatibility.md) | Hosts, platforms, live-run evidence, tested versions and Spec Kit ranges |
+| [Licenses](reference/licenses.md) | License per package |
+| [Glossary](reference/glossary.md) | Terms used in these pages |
+
+## Examples
+
+| Example | Page |
+| --- | --- |
+| Draw a process and choose preset or custom colors | [Illustrate examples](illustrate-examples.md) |
+| Bound a debate, run parallel reviews, or automate delegation | [Delegate Task examples](delegate-examples.md) |
+| Compare real manual themes and install your own | [User Manual theme gallery](user-manual-examples.md) |
+
+## Example conventions
+
+The examples describe a **synthetic booking application** with Booking, Payments, and Operations
+modules. Its GitHub repository is `example-org/booking-app`; issue **412**, titled **Refund approval**,
+produces `specs/412-refund-approval/`. A customer requests a refund, an operator approves or rejects
+it, and the payment provider returns the settlement result. Repeated approval must not settle twice.
+
+Replace these identifiers with your own. Issue 412, task `T012`, PR 438, and release tags `v2.4.0`
+and `v3.0.0` illustrate different identities; they are not live Sanduq records or promised
+application behavior. Read your real API contract and tests before documenting the application.
+
+Prompts use **Claude Code `/…` syntax**; Codex uses `$` instead of `/`. See [command names](reference/commands.md#command-names) for other hosts.
+Shell commands run in the consumer repository unless a step says **Sanduq checkout**.
+Replace angle-bracket placeholders before execution. Screenshots and payloads use synthetic data.
+
+## Maintain and contribute
+
+| Task | Page |
+| --- | --- |
+| Find the owning source, test packages and submit a change | [Contributing](../CONTRIBUTING.md) |
+| Write or edit these pages | [Style guide](style-guide.md) |
+| Ship a release train | [Release process](start/release-process.md) |
+| Find logos and editable illustrations | [Asset index](assets/README.md) |
+| Look up an exact package contract | [Extension source index](../extensions/README.md) |

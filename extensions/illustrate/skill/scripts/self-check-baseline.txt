@@ -1,0 +1,8 @@
+# Gallery pages, not diagrams: they embed the examples in iframes, link the icon sources and run a
+# viewer script, so the single-diagram checks do not apply. Every template and example passes the check
+# SKILL.md step 7 requires (--strict, or --profile technical-color under assets/technical-color/);
+# tests/test_self_check.py fails on a new failure AND on a stale entry.
+icons.html
+index-variation-1.html
+index-variation-2.html
+index.html

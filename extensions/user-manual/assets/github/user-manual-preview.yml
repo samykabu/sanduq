@@ -1,0 +1,101 @@
+name: User Manual preview
+
+on:
+  pull_request:
+    paths:
+      - "User-Manual/**"
+      - "specs/**"
+      - ".specify/extensions/user-manual/**"
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  preview:
+    runs-on: __sanduq_runs_on_linux__
+    # sanduq:if self_hosted
+    # A self-hosted runner never executes a fork's checkout and scripts.
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    # sanduq:endif
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # sanduq:if python_setup_action
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "__sanduq_python_version__"
+          cache: pip
+          cache-dependency-path: User-Manual/requirements*.lock
+      # sanduq:endif
+      - name: Install the manual tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install -r User-Manual/requirements.lock
+          kind="$(python .specify/extensions/user-manual/scripts/build_manual.py --root User-Manual --print-renderer)"
+          # A renderer command's own tool is installed on the runner (or in a step here).
+          if [ "$kind" = mkdocs ]; then python -m pip install -r User-Manual/requirements-mkdocs.lock; fi
+      - name: Audit manual
+        run: python .specify/extensions/user-manual/scripts/audit_manual.py --root User-Manual
+      - name: Build private previews
+        shell: bash
+        run: |
+          set -euo pipefail
+          python .specify/extensions/user-manual/scripts/build_manual.py \
+            --root User-Manual --all --version "pr-${{ github.event.pull_request.number }}" --archive
+      - name: Protect preview bundle
+        env:
+          REPOSITORY_PRIVATE: ${{ github.event.repository.private }}
+          AGE_RECIPIENT: ${{ vars.USER_MANUAL_PREVIEW_AGE_RECIPIENT }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p User-Manual/preview-artifact
+          preview="User-Manual/site/pr-${{ github.event.pull_request.number }}"
+          if [ "$REPOSITORY_PRIVATE" = "true" ]; then
+            tar -C "$preview" -czf User-Manual/preview-artifact/user-manual-preview.tar.gz .
+          else
+            if [ -z "$AGE_RECIPIENT" ]; then
+              echo "::error::Public repositories must configure USER_MANUAL_PREVIEW_AGE_RECIPIENT as a GitHub Actions variable."
+              exit 1
+            fi
+            # sanduq:if system_packages_apt
+            sudo apt-get update -y
+            sudo apt-get install -y age
+            # sanduq:endif
+            tar -C "$preview" -czf - . | age -r "$AGE_RECIPIENT" -o User-Manual/preview-artifact/user-manual-preview.tar.gz.age
+          fi
+      - name: Upload private preview artifact
+        id: artifact
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: user-manual-preview-pr-${{ github.event.pull_request.number }}
+          path: User-Manual/preview-artifact/
+          if-no-files-found: error
+          # The Cloudflare preview workflow reads this once, right after the run; 14 days of ~20 MB copies per push filled
+          # the account's artifact storage and blocked every Bootstrap run (2026-09-28).
+          retention-days: 2
+      - name: Add preview link to pull request
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          ARTIFACT_URL: ${{ steps.artifact.outputs.artifact-url }}
+        with:
+          script: |
+            const marker = '<!-- user-manual-preview -->';
+            const protection = context.payload.repository.private
+              ? 'Access follows private repository permissions.'
+              : 'The bundle is age-encrypted; obtain the private key through the approved team channel.';
+            const body = `${marker}\nUser Manual private preview: [artifact](${process.env.ARTIFACT_URL}). ${protection}`;
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number
+            });
+            const existing = comments.find(c => c.body && c.body.includes(marker));
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner, repo: context.repo.repo, comment_id: existing.id, body
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number, body
+              });
+            }

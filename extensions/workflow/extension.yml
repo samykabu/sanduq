@@ -1,0 +1,103 @@
+schema_version: '1.0'
+extension:
+  id: workflow
+  name: Sanduq Workflow
+  version: "2.3.2"
+  description: GitHub issue decisions and resumable Scope-to-PR orchestration with
+    optional model-aware delegation, QA, User Manual, and workflow evidence CI.
+  author: Samy K. Abushanab
+  repository: https://github.com/samykabu/sanduq
+  license: MIT
+  category: process
+requires:
+  speckit_version: '>=1.0.0,<2.0.0'
+  tools:
+  - name: python
+    version: '>=3.11'
+    required: true
+  - name: git
+    required: true
+  - name: gh
+    required: true
+provides:
+  commands:
+  - name: speckit.workflow.init
+    file: commands/init.md
+    description: 'Sets up the Sanduq workflow in a Spec Kit project: processes, decision reviewers, delegation, CI runners and evidence gate. Use when configuring a project, or for "initialize the workflow".'
+  - name: speckit.workflow.scope
+    file: commands/scope.md
+    description: 'Scopes a GitHub issue and runs the managed lifecycle through Specify, Clarify and Plan. Use when starting work on an issue, or for "scope issue 42".'
+  - name: speckit.workflow.scope-run
+    file: commands/scope-run.md
+    description: "Scopes a GitHub issue: checks prerequisites, sizes effort, asks how many sub-issues to create and publishes only an approved decomposition. Use when asked to scope, size, estimate or split an issue."
+  - name: speckit.workflow.scope-plan
+    file: commands/scope-plan.md
+    description: "Redraws and validates the dependency plan with Illustrate after a Scope split is published. Use when asked to refresh the plan, or when the scope plan-pending marker exists."
+  - name: speckit.workflow.clarify
+    file: commands/clarify.md
+    description: 'Applies the GitHub answers to a feature''s clarification questions and continues the lifecycle. Use when the issue''s questions are answered, or for "apply the answers".'
+  - name: speckit.workflow.continue
+    file: commands/continue.md
+    description: 'Resumes an issue-bound feature at its earliest unfinished or stale stage. Use when a session was interrupted or paused, or for "continue the feature".'
+  - name: speckit.workflow.finalize
+    file: commands/finalize.md
+    description: 'Runs the managed Ready and PR stages of an issue-bound feature: readiness checks, its one pull request, then the merge check. Use when every earlier stage has passed in a project with .specify/workflow.yml, or for "open the PR".'
+  - name: speckit.workflow.status
+    file: commands/status.md
+    description: 'Prints the workflow record of one issue-bound feature: stage, active claim, receipts, blockers and evidence freshness; read-only. Use when asked which stage a feature is in or what blocks it, or for "where is this feature". For the live progress report use speckit.progress.status.'
+  - name: speckit.workflow.doctor
+    file: commands/doctor.md
+    description: 'Checks the workflow''s dependencies, policy, host commands, hooks and board setup. Use when a claim fails on setup or after an upgrade, or for "diagnose the workflow".'
+  - name: speckit.workflow.reconcile
+    file: commands/reconcile.md
+    description: 'Repairs the workflow''s managed hooks and presets from policy through Spec Kit. Use when doctor reports drift or after editing workflow.yml, or for "reconcile the workflow".'
+  - name: speckit.workflow.verify-affected
+    file: commands/verify-affected.md
+    description: 'Runs the feature''s affected test lanes locally as local evidence, never CI evidence. Use when testing before a push, or for "test what changed".'
+  - name: speckit.workflow.ci-report
+    file: commands/ci-report.md
+    description: 'Summarizes recent GitHub Actions runs into job durations and fixed overhead. Use when CI is slow or runners change, or for "why is CI slow".'
+  - name: speckit.workflow.gate-explain
+    file: commands/gate-explain.md
+    description: 'Explains a failing workflow evidence gate and its exact recovery recipe. Use when CI reports STALE_RECEIPT, or for "fix the gate".'
+  - name: speckit.workflow.worker-brief
+    file: commands/worker-brief.md
+    description: 'Generates a compact brief for one task so a worker skips the full spec set. Use when assigning a task to a worker, or for "brief T012".'
+  - name: speckit.workflow.apply-pending
+    file: commands/apply-pending.md
+    description: 'Applies queued pending artifact updates to contracts, data model or research. Use when Execute or Review ends, or for "apply pending updates".'
+# The Scope hook commands below are not listed under provides.commands (Spec Kit would register each as a
+# host skill with triggers that collide with speckit.specify and speckit.plan); the event dispatcher
+# finds them by file name, commands/<command name>.md.
+hooks:
+  before_specify:
+    command: speckit.workflow.scope-guard
+    priority: 1
+    optional: false
+    description: "Block Specify before side effects unless the explicit GitHub issue has a fresh scope and eligible prerequisites."
+  after_specify:
+    - command: speckit.workflow.scope-bind
+      priority: 1
+      optional: false
+      description: "Bind the source issue and set Feature Specification before Project sync."
+    - command: speckit.workflow.scope-after-specify
+      priority: 30
+      optional: false
+      description: "Run unattended Brainstorm when available, otherwise Clarify, after the spec is created."
+  before_plan:
+    command: speckit.workflow.scope-plan-guard
+    priority: 1
+    optional: false
+    description: "Require Ready before technical planning; unresolved clarification must not be bypassed."
+  after_implement:
+    command: speckit.workflow.scope-reconcile
+    priority: 30
+    optional: false
+    description: "Reconcile scope parents after Project sync updates child progress."
+tags:
+- workflow
+- qa
+- documentation
+- github
+- context
+- resumable

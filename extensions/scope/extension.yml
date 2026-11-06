@@ -1,0 +1,32 @@
+schema_version: "1.0"
+extension:
+  id: scope
+  name: Speckit Scope (retired)
+  version: "2.0.0"
+  description: "Retired: Scope is part of Sanduq Workflow 2.0.0. Run python .specify/extensions/workflow/scripts/upgrade.py --version 2.0.0 --apply; it removes this package and keeps .specify/scope."
+  author: "Samy K. Abushanab"
+  repository: "https://github.com/samykabu/sanduq"
+  license: MIT
+  deprecated: true
+  superseded_by: workflow
+requires:
+  speckit_version: ">=1.0.0"
+  extensions:
+    - id: workflow
+      version: ">=2.0.0,<3.0.0"
+      required: true
+  tools:
+    - name: python
+      version: ">=3.11"
+      required: true
+# No code, presets or hooks. Installing this release over Scope 1.x removes its commands, skills and hook
+# entries; Spec Kit prints the description above. Workflow's installer removes this package too.
+provides:
+  commands:
+    - name: speckit.scope.migrate
+      file: commands/migrate.md
+      description: "Prints the one command that moves a project from the retired Scope package to Workflow 2.0.0. Use only when asked how to migrate from Scope."
+tags:
+  - deprecated
+  - scope
+  - workflow

@@ -1,0 +1,19 @@
+{
+  "total_count": 1,
+  "artifacts": [
+    {
+      "id": 10936582719,
+      "name": "bootstrap-plan-36333797874-1",
+      "size_in_bytes": 759,
+      "expired": false,
+      "digest": "sha256:df6055f9cb4c26b2fe1763e6abb6f15322fb5672c07122a76c6b320e765dc3d3",
+      "workflow_run": {
+        "id": 36333797874,
+        "repository_id": 1357361414,
+        "head_repository_id": 1357361414,
+        "head_branch": "ci/a9a-verification-plan-artifact",
+        "head_sha": "270dfb5e43e2a66a95ba3b5e12dc3d1c46b22891"
+      }
+    }
+  ]
+}

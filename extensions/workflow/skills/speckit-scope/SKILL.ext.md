@@ -1,0 +1,12 @@
+---
+name: speckit-scope
+description: Alias kept for the /speckit-scope slash command; it hands the explicit issue to speckit-workflow-scope, the entry the model selects for "scope issue 42".
+disable-model-invocation: true
+---
+
+<!-- sanduq-workflow-scope-alias:v1 -->
+Read `.specify/extensions/workflow/skills/workflow/SKILL.md` and execute its scope
+entry point with the current invocation's explicit issue number or exact title.
+If project policy is missing, perform Init once, then continue with the same issue.
+Use the installed native Scope command through the dispatcher. Do not create a
+second scope run, bypass its issue guards, or select a feature from editor context.

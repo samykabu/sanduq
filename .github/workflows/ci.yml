@@ -1,0 +1,502 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  # Nightly full run, including the Windows workflow suite. The release gate only accepts
+  # `push` runs on main (release-extensions.yml), so this never triggers a release.
+  schedule:
+    - cron: '17 2 * * *'
+  workflow_dispatch:
+
+# Runners: every job runs on homek8-general except the windows-latest matrix legs (the self-hosted runners are Linux
+# pods) and jobs of pull requests from forks (ubuntu-latest: fork code never runs inside the self-hosted pool).
+jobs:
+  # Decides which expensive jobs run. Skipped jobs count as success for the release gate.
+  changes:
+    runs-on: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && 'ubuntu-latest' || 'homek8-general' }}
+    outputs:
+      matrix: ${{ steps.matrix.outputs.matrix }}
+      has_regression: ${{ steps.matrix.outputs.has_regression }}
+      memory_install: ${{ steps.matrix.outputs.memory_install }}
+      install_smoke: ${{ steps.matrix.outputs.install_smoke }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - id: matrix
+        run: |
+          if [[ "$EVENT" == pull_request ]]; then base="$PR_BASE"; head="$PR_HEAD"
+          else base="$PUSH_BEFORE"; head="$SHA"; fi
+          python3 .github/scripts/ci_matrix.py --event "$EVENT" --base "$base" --head "$head"
+        env:
+          EVENT: ${{ github.event_name }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD: ${{ github.event.pull_request.head.sha }}
+          PUSH_BEFORE: ${{ github.event.before }}
+          SHA: ${{ github.sha }}
+
+  lint:
+    runs-on: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && 'ubuntu-latest' || 'homek8-general' }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: No private product names (pattern held in the PRIVATE_NAMES repository secret)
+        env:
+          PRIVATE_NAMES: ${{ secrets.PRIVATE_NAMES }}
+        run: |
+          if [ -z "$PRIVATE_NAMES" ]; then echo "::notice::PRIVATE_NAMES is not set; the private-name check was skipped"; exit 0; fi
+          if git grep -I -i -n -E "$PRIVATE_NAMES" -- . ':!.github/workflows/ci.yml'; then
+            echo "::error::Private product or customer names found (lines above). Remove them; this repository never names third-party products."; exit 1
+          fi
+
+      - name: Install validation dependencies
+        run: python3 -m pip install --user pyyaml packaging markdown-it-py==3.0.0
+
+      - name: Claude Code validates the marketplace
+        run: npx -y @anthropic-ai/claude-code@2.1.310 plugin validate .
+
+      - name: Skills follow the Agent Skills frontmatter rules
+        run: python3 extensions/scripts/validate_skills.py extensions presets
+
+      - name: Vendored skills match vendor.lock.json
+        run: python3 extensions/scripts/vendor.py check
+
+      - name: No installable skills are listed from this repository
+        run: |
+          npx -y skills@1.7.2 add . --list > skills-list.txt 2>&1 || true
+          cat skills-list.txt
+          if grep -Eq 'illustrate|user-manual|delegate-task|scope-analyst|workflow' skills-list.txt; then
+            echo "a skill is discoverable here; skills live in samykabu/sanduq-skills"; exit 1
+          fi
+          # Named installs reach only byte-identical vendored copies, which must still work (R2).
+          mkdir -p /tmp/named && cd /tmp/named && git init -q
+          npx -y skills@1.7.2 add "$GITHUB_WORKSPACE" --skill delegate-task -a codex -y
+          node .agents/skills/delegate-task/delegate.mjs contract > /dev/null
+          npx -y skills@1.7.2 add "$GITHUB_WORKSPACE" --skill illustrate -a codex -y
+          test -f .agents/skills/illustrate/scripts/export_diagram.py
+
+      - name: Check documentation links and command coverage
+        run: |
+          python3 extensions/scripts/test_check_docs.py
+          python3 extensions/scripts/check_docs.py
+          python3 extensions/user-manual/scripts/audit_manual.py --root docs/examples/booking-manual
+
+      # X23: shipped files changed without a version bump (or a pending release above the catalog) fail.
+      - name: Packages changed without a version bump
+        run: python3 extensions/scripts/release.py check-bumps
+
+      - name: Repository tooling tests (CI matrix, vendoring, packaging)
+        run: python3 -m unittest discover -s extensions/scripts/tests -q
+
+      - name: Documentation diagrams end their arrows straight
+        run: python3 extensions/illustrate/skill/scripts/verify-arrow-ends.py docs/diagrams/*.html docs/diagrams/*.svg
+
+      - name: Validate JSON (catalog + configs + marketplace)
+        run: |
+          while IFS= read -r f; do
+            echo "checking $f"; jq empty "$f"
+          done < <(
+            {
+              printf '%s\n' catalog.json .claude-plugin/marketplace.json .agents/plugins/marketplace.json
+              find extensions -path '*/node_modules/*' -prune -o -name '*.json' -print
+            } | sort -u
+          )
+
+      - name: Validate extension and marketplace manifests
+        run: |
+          python3 - <<'PY'
+          import glob, json, pathlib, sys, yaml
+          from packaging.specifiers import InvalidSpecifier, SpecifierSet
+          from packaging.version import InvalidVersion, Version
+
+          root = pathlib.Path(".")
+          root_catalog = json.loads((root / "catalog.json").read_text(encoding="utf-8"))
+          ext_catalog = json.loads((root / "extensions/catalog.json").read_text(encoding="utf-8"))
+          pending_path = root / "extensions/pending-releases.json"
+          pending = json.loads(pending_path.read_text(encoding="utf-8")).get("versions", {}) if pending_path.exists() else {}
+          if root_catalog != ext_catalog:
+              sys.exit("catalog.json and extensions/catalog.json must match")
+
+          for yml_path in sorted(glob.glob("extensions/*/extension.yml")):
+              path = pathlib.Path(yml_path)
+              doc = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+              meta = doc.get("extension") or {}
+              ext_id = meta.get("id") or path.parent.name
+              if ext_id != path.parent.name:
+                  sys.exit(f"{path}: extension.id must match directory name")
+              entry = root_catalog.get("extensions", {}).get(ext_id)
+              if ext_id in pending:
+                  if pending[ext_id] != str(meta.get("version")):
+                      sys.exit(f"{path}: pending release version does not match manifest")
+                  if entry and Version(pending[ext_id]) <= Version(entry["version"]):
+                      sys.exit(f"{path}: pending version must be newer than published catalog")
+                  # Pending releases are validated without publishing broken download URLs.
+                  entry = {"version": pending[ext_id], "requires": doc.get("requires") or {},
+                           "download_url": f"https://github.com/samykabu/sanduq/releases/download/{ext_id}-v{pending[ext_id]}/{ext_id}.zip"}
+              if not entry:
+                  sys.exit(f"{path}: missing catalog entry for {ext_id}")
+              if str(entry.get("version")) != str(meta.get("version")):
+                  sys.exit(f"{path}: catalog version {entry.get('version')} != extension.yml {meta.get('version')}")
+              if f"/{ext_id}-v{meta.get('version')}/" not in entry.get("download_url", ""):
+                  sys.exit(f"{path}: download_url does not match extension version")
+              manifest_requires = doc.get("requires") or {}
+              catalog_requires = entry.get("requires") or {}
+              if catalog_requires != manifest_requires:
+                  sys.exit(f"{path}: catalog requires metadata must match extension.yml")
+              for dependency in manifest_requires.get("extensions", []):
+                  dep_id = dependency.get("id")
+                  constraint = dependency.get("version", "")
+                  dep_entry = root_catalog.get("extensions", {}).get(dep_id)
+                  if dep_id in pending:
+                      dep_entry = {"version": pending[dep_id]}
+                  if not dep_entry:
+                      sys.exit(f"{path}: required extension {dep_id!r} is missing from catalog")
+                  try:
+                      compatible = Version(str(dep_entry.get("version"))) in SpecifierSet(constraint)
+                  except (InvalidSpecifier, InvalidVersion) as exc:
+                      sys.exit(f"{path}: invalid dependency version contract for {dep_id}: {exc}")
+                  if not compatible:
+                      sys.exit(
+                          f"{path}: catalog {dep_id} version {dep_entry.get('version')} "
+                          f"does not satisfy {constraint}"
+                      )
+
+          marketplace = json.loads((root / ".claude-plugin/marketplace.json").read_text(encoding="utf-8"))
+          for plugin in marketplace.get("plugins", []):
+              source = plugin.get("source")
+              # Bundles install from samykabu/sanduq-skills at a pinned commit; plugin.json owns the version.
+              if not (isinstance(source, dict) and source.get("source") == "git-subdir"
+                      and source.get("url", "").startswith("https://github.com/samykabu/sanduq-skills")
+                      and source.get("path") == f"skills/{plugin.get('name')}" and source.get("ref")
+                      and len(source.get("sha", "")) == 40):
+                  sys.exit(f"marketplace plugin {plugin.get('name')}: expected a pinned git-subdir source")
+              if "version" in plugin:
+                  sys.exit(f"marketplace plugin {plugin.get('name')}: version belongs in plugin.json")
+
+          print("extension/catalog/plugin manifest validation ok")
+          PY
+
+      # SEC-09 pins: npx: <pkg>@<version>; Install-Module: -RequiredVersion; OS packages belong in the
+      # runner image. Allowed until it moves into the homek8-general image (runner-image work): shellcheck from
+      # apt-get below.
+      # The [x]/[e]/[t] brackets keep these patterns from matching their own lines.
+      - name: Workflow tool installs are pinned
+        run: |
+          {
+            grep -nE 'np[x] +(-y +)?(@[a-z0-9._-]+/)?[a-z0-9_.][a-z0-9._-]*( |$)' .github/workflows/*.yml
+            grep -nE 'Install-Modul[e] ' .github/workflows/*.yml | grep -v -- '-RequiredVersion '
+            grep -nE 'apt-ge[t] +install' .github/workflows/*.yml | grep -vF 'sudo apt-get install -y shellcheck'
+          } > "$RUNNER_TEMP/unpinned.txt" || true
+          if [ -s "$RUNNER_TEMP/unpinned.txt" ]; then
+            cat "$RUNNER_TEMP/unpinned.txt"
+            echo "::error::Unpinned tool install in .github/workflows (see the lines above): npx: <pkg>@<version>; Install-Module: -RequiredVersion; OS packages: the runner image."
+            exit 1
+          fi
+
+      - name: ShellCheck bash scripts
+        run: |
+          sudo apt-get update -y && sudo apt-get install -y shellcheck
+          find extensions -name '*.sh' -print -exec shellcheck -S warning {} +
+
+      # After ShellCheck, so actionlint also checks every `run:` script with it.
+      - name: Lint the workflow files (actionlint)
+        env:
+          ACTIONLINT: '1.7.12'
+          ACTIONLINT_SHA256: 8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8
+        run: |
+          archive="$RUNNER_TEMP/actionlint.tar.gz"
+          curl -fsSLo "$archive" "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT}/actionlint_${ACTIONLINT}_linux_amd64.tar.gz"
+          echo "$ACTIONLINT_SHA256  $archive" | sha256sum -c -
+          tar -xzf "$archive" -C "$RUNNER_TEMP" actionlint
+          "$RUNNER_TEMP/actionlint" -color
+
+      - name: PSScriptAnalyzer PowerShell scripts
+        shell: pwsh
+        run: |
+          $version = '1.25.0'
+          # The self-hosted runner image ships this version; a runner without it installs it from the gallery.
+          if (-not (Get-Module -ListAvailable PSScriptAnalyzer | Where-Object Version -eq $version)) {
+            if (-not (Get-PSRepository PSGallery -ErrorAction SilentlyContinue)) { Register-PSRepository -Default }
+            Set-PSRepository PSGallery -InstallationPolicy Trusted
+            Install-Module PSScriptAnalyzer -RequiredVersion $version -Force -Scope CurrentUser
+          }
+          Import-Module PSScriptAnalyzer -RequiredVersion $version -ErrorAction Stop
+          $issues = Get-ChildItem -Recurse -Filter *.ps1 | ForEach-Object {
+            Invoke-ScriptAnalyzer -Path $_.FullName -Severity Error,Warning
+          }
+          $issues | Format-Table -AutoSize
+          if ($issues | Where-Object Severity -eq 'Error') { throw 'PSScriptAnalyzer found errors' }
+
+  # Path-filtered by .github/scripts/ci_matrix.py: extensions/<suite>/** runs that suite (plus its
+  # dependents); release metadata, docs and repository tooling are lint-only; injected shared files run
+  # the suites that ship them; other shared paths run all. Windows workflow and Windows memory run on PRs
+  # and nightly only, as shards weighted by .github/scripts/shard_weights.json (workflow four by module,
+  # memory two by test class). Linux runs the whole workflow suite as four shards too, and every other
+  # selected suite in one batch job, each suite in its own log group with its own exit code.
+  # Progress runs its default (non-browser) set; Progress browser tests are not vendored here.
+  regression:
+    needs: changes
+    if: needs.changes.outputs.has_regression == 'true'
+    name: regression (${{ matrix.os }}, ${{ matrix.suite }}${{ matrix.shard && format(', {0}', matrix.shard) || '' }})
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.changes.outputs.matrix) }}
+    runs-on: ${{ matrix.os == 'windows-latest' && 'windows-latest' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository) && 'ubuntu-latest' || 'homek8-general' }}
+    # Tests create and delete many temporary repositories; a detached `git gc --auto` or background
+    # maintenance writing into one while it is removed fails cleanup (Errno 39) on Linux.
+    env:
+      GIT_CONFIG_COUNT: '2'
+      GIT_CONFIG_KEY_0: gc.auto
+      GIT_CONFIG_VALUE_0: '0'
+      GIT_CONFIG_KEY_1: maintenance.auto
+      GIT_CONFIG_VALUE_1: 'false'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # SAMY-11: the Linux legs run on the declared floor (python >=3.11 in every extension.yml); Windows, lint
+      # and the installation smokes stay on 3.13, so pull requests test both ends.
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: ${{ matrix.os == 'windows-latest' && '3.13' || '3.11' }}
+          cache: pip
+          cache-dependency-path: |
+            extensions/workflow/requirements.txt
+            extensions/*/test-requirements.txt
+            .github/requirements-ci-tests.txt
+      - run: python -m pip install -r extensions/workflow/test-requirements.txt -r .github/requirements-ci-tests.txt
+      - name: Install Progress test requirements
+        if: contains(matrix.suites, 'progress')
+        run: python -m pip install -r extensions/progress/test-requirements.txt
+      # Each suite runs under pytest-xdist; shard_weights.json still splits the slow suites across jobs.
+      # One "<suite> <tests> [modules...]" line per suite (several in the Linux batch). Every suite runs, each
+      # in its own log group with an rc line and an error annotation, and the step fails afterwards if any did.
+      - name: Run the suites
+        shell: bash
+        env:
+          RUNS: ${{ matrix.runs }}
+        run: |
+          failed=()
+          # pytest-xdist workers: the CPU limit the runner really has (a pod's cgroup quota), not the host's cores.
+          workers=$(python -c "import math, os; q = '/sys/fs/cgroup/cpu.max'; t = open(q).read().split() if os.path.exists(q) else ['max']; n = os.cpu_count() or 2; print(n if t[0] == 'max' else max(1, math.ceil(int(t[0]) / int(t[1]))))")
+          echo "pytest workers: $workers"
+          mapfile -t runs <<< "$RUNS"
+          for line in "${runs[@]}"; do
+            read -r suite tests modules <<< "$line"
+            echo "::group::=== $suite"
+            rc=0
+            # Workflow's classes share expensive per-class fixtures, so keep each class on one worker; other suites
+            # mark their expensive classes with xdist_group in their conftest.py (loadgroup acts as load otherwise).
+            dist=loadgroup; [[ "$suite" == workflow* ]] && dist=loadscope
+            if [[ -n "$modules" ]]; then
+              # A shard or a module list (modules or module.Class) becomes pytest node ids in the suite folder.
+              read -ra names <<< "$modules"
+              ids=()
+              for name in "${names[@]}"; do
+                module=${name%%.*}; class=${name#"$module"}
+                ids+=("$tests/$module.py${class:+::${class#.}}")
+              done
+              python -m pytest -q -p no:cacheprovider -n "$workers" --dist "$dist" "${ids[@]}" || rc=$?
+            else
+              python -m pytest -q -p no:cacheprovider -n "$workers" --dist "$dist" "$tests" || rc=$?
+            fi
+            echo "::endgroup::"
+            echo "=== $suite rc=$rc"
+            if (( rc )); then echo "::error title=regression $suite::$suite failed (rc=$rc)"; failed+=("$suite"); fi
+          done
+          if (( ${#failed[@]} )); then echo "Failed suites: ${failed[*]}"; exit 1; fi
+
+  # Memory install smoke only exercises extensions/memory, so it follows that path filter.
+  # installation, upgrade, project-init and dryrun run when an install-relevant path changed
+  # (workflow, project, extension manifests, packaging and smoke scripts, presets, vendor.lock.json,
+  # CI itself; see ci_matrix.py INSTALL_PREFIXES), and always nightly and on demand.
+  # Linux runs them in two jobs, one per host, each installing core then SuperSpec. The claude leg also
+  # runs the Project initialization and Memory registration smokes, the codex leg the upgrade smoke
+  # (smoke_upgrade.py installs its own fresh codex project), so both legs take about as long. Each smoke
+  # is its own step and runs even when an earlier one failed. A Memory-only change runs the claude leg
+  # with the Memory smoke alone. dryrun stays its own job; the Windows legs follow below.
+  # Spec Kit installs by name so pip reuses its cached wheel of the pinned commit (no clone).
+  installation:
+    needs: changes
+    if: needs.changes.outputs.install_smoke == 'true' || needs.changes.outputs.memory_install == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        host: ${{ fromJSON(needs.changes.outputs.install_smoke == 'true' && '["claude", "codex"]' || '["claude"]') }}
+    runs-on: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && 'ubuntu-latest' || 'homek8-general' }}
+    permissions:
+      contents: read
+    env:
+      SMOKE: ${{ needs.changes.outputs.install_smoke }}
+      HOST: ${{ matrix.host }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.13'
+          cache: pip
+          # ci.yml holds the Spec Kit pin, so a new pin gets a new pip cache.
+          cache-dependency-path: |
+            extensions/workflow/requirements.txt
+            .github/workflows/ci.yml
+      - name: Install the tested Spec Kit build
+        run: python -m pip install 'specify-cli @ git+https://github.com/github/spec-kit.git@0282d03eb6fc3091b3deaa3a855d4030dc40cd6c' -r extensions/workflow/requirements.txt
+      # These two ran without a global git identity in their own jobs, so they run before it is set.
+      - name: Project initialization smoke
+        if: ${{ !cancelled() && env.SMOKE == 'true' && matrix.host == 'claude' }}
+        run: python extensions/scripts/smoke_project_init.py
+      - name: Memory installation smoke
+        if: ${{ !cancelled() && needs.changes.outputs.memory_install == 'true' && matrix.host == 'claude' }}
+        run: python extensions/scripts/smoke_memory_install.py
+      - name: Configure the git identity the smokes commit with
+        run: |
+          git config --global user.name 'Sanduq CI'
+          git config --global user.email 'sanduq-ci@example.invalid'
+      - name: Fetch the tested optional SuperSpec source
+        if: env.SMOKE == 'true'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          repository: WangX0111/superspec
+          ref: c20ac6c1ba069cc9a72dacb8044b7b193d3dde81
+          path: dist/upstream-superspec
+      - name: Clean installation and reinstallation (core)
+        if: ${{ !cancelled() && env.SMOKE == 'true' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python extensions/scripts/smoke_install.py --host "$HOST"
+      - name: Clean installation and reinstallation (superspec)
+        if: ${{ !cancelled() && env.SMOKE == 'true' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python extensions/scripts/smoke_install.py --host "$HOST" --superspec-source "$GITHUB_WORKSPACE/dist/upstream-superspec"
+      - name: Installed skills follow the Agent Skills frontmatter rules
+        if: ${{ !cancelled() && env.SMOKE == 'true' }}
+        shell: bash
+        run: |
+          folders=(dist/install-tests/*/project/.claude/skills dist/install-tests/*/project/.agents/skills)
+          existing=(); for f in "${folders[@]}"; do [[ -d "$f" ]] && existing+=("$f"); done
+          python extensions/scripts/validate_skills.py "${existing[@]}"
+      - name: Verify actual version upgrade and failure rollback
+        if: ${{ !cancelled() && env.SMOKE == 'true' && matrix.host == 'codex' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python extensions/scripts/smoke_upgrade.py
+      - name: Preserve installation evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: installation-${{ matrix.host }}
+          retention-days: 7
+          path: |
+            dist/install-tests/*/result.json
+            dist/install-tests/*/upgrade-result.json
+            dist/install-tests/*/*.log
+            dist/project-init-tests/*/result.json
+            dist/project-init-tests/*/execution.log
+            dist/memory-install-tests/
+          if-no-files-found: ignore
+
+  # The Windows legs of the Memory and Project initialization smokes (GitHub-hosted, see README).
+  memory-installation:
+    needs: changes
+    if: needs.changes.outputs.memory_install == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest]
+    runs-on: ${{ matrix.os == 'windows-latest' && 'windows-latest' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository) && 'ubuntu-latest' || 'homek8-general' }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.13'
+          cache: pip
+          # ci.yml holds the Spec Kit pin, so a new pin gets a new pip cache.
+          cache-dependency-path: |
+            extensions/workflow/requirements.txt
+            .github/workflows/ci.yml
+      - run: python -m pip install 'specify-cli @ git+https://github.com/github/spec-kit.git@0282d03eb6fc3091b3deaa3a855d4030dc40cd6c'
+      - run: python extensions/scripts/smoke_memory_install.py
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: memory-installation-${{ matrix.os }}
+          retention-days: 7
+          path: dist/memory-install-tests/
+          if-no-files-found: ignore
+
+  project-init:
+    needs: changes
+    if: needs.changes.outputs.install_smoke == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest]
+    runs-on: ${{ matrix.os == 'windows-latest' && 'windows-latest' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository) && 'ubuntu-latest' || 'homek8-general' }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # On Windows the smoke builds its fake gh.exe from pip's launcher, which this interpreter has.
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.13'
+          cache: pip
+          cache-dependency-path: extensions/workflow/requirements.txt
+      - run: python -m pip install -r extensions/workflow/requirements.txt
+      - run: python extensions/scripts/smoke_project_init.py
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: project-init-${{ matrix.os }}
+          retention-days: 7
+          path: |
+            dist/project-init-tests/*/result.json
+            dist/project-init-tests/*/execution.log
+          if-no-files-found: ignore
+
+  dryrun:
+    needs: changes
+    if: needs.changes.outputs.install_smoke == 'true'
+    runs-on: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && 'ubuntu-latest' || 'homek8-general' }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: project-sync degrades gracefully without config/gh
+        run: |
+          # No config.json + no gh scope -> must exit 0 with a logged skip, never throw.
+          python3 extensions/project/scripts/project_sync.py --phase open --dry-run --json
+
+  # The release gate dispatches this workflow with GITHUB_TOKEN when the release commit has no run with the
+  # Windows legs. GitHub starts no workflow_run from a run that GITHUB_TOKEN caused, so the release would
+  # never hear that this run finished. This job closes the loop: when that bot-dispatched run on main passes,
+  # it dispatches the release (a workflow_dispatch from GITHUB_TOKEN does start a run). Runs started by a
+  # person, a push or the schedule trigger the release through workflow_run instead, so they skip this job
+  # and one commit still gets one release trigger. Pull requests and forks never match.
+  release-trigger:
+    needs: [changes, lint, regression, installation, memory-installation, project-init, dryrun]
+    if: >-
+      !cancelled() && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') &&
+      github.event_name == 'workflow_dispatch' && github.actor == 'github-actions[bot]' &&
+      github.ref == 'refs/heads/main' && github.repository == 'samykabu/sanduq'
+    runs-on: homek8-general
+    permissions:
+      actions: write
+    steps:
+      - name: Dispatch the release workflow on main
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        # The release gate counts this still-running run as passed once every other job in it has (release-extensions.yml).
+        run: gh api -X POST "repos/$GH_REPO/actions/workflows/release-extensions.yml/dispatches" -f ref=main -f "inputs[ci_run_id]=$GITHUB_RUN_ID"

@@ -1,0 +1,163 @@
+#!/usr/bin/env python3
+"""Upgrade the workflow package and its integrations inside an outer rollback boundary."""
+import argparse
+import hashlib
+import json
+import os
+import re
+import sys
+import uuid
+from pathlib import Path
+import yaml
+from packaging.version import Version
+from workflow import WorkflowError, ensure_local_excludes, explain, load_policy, locked, read, registry, require, write
+from install import (PACKAGE, CI_GATE, active_stage_blockers, ci_edit_blocker, command, delegation_preflight, managed_files,
+                     memory_archive_preflight, prune_backups, restore, snapshot, mark_in_progress, clear_in_progress)
+
+REPOSITORY = 'https://github.com/samykabu/sanduq'
+
+
+def recorded_preserve_ci(root):
+    """The --preserve-ci choice the last install recorded: the tracked lock, else the local receipt."""
+    lock = read(root / '.specify/workflow/install-lock.json', {})
+    receipt = read(root / '.specify/workflow/install-receipt.json', {})
+    return bool(lock.get('preserved_ci') or receipt.get('preserved_ci') or receipt.get('preserve_ci_requested'))
+
+
+def upgrade(root, version, apply=False, packages=None, runner=command, preserve_ci=None,
+            replace_unrecognized_aliases=False, with_optional=()):
+    """``preserve_ci``: True or False wins; None reuses the choice the last install recorded."""
+    root = root.resolve()
+    reused_ci = preserve_ci is None and recorded_preserve_ci(root)
+    preserve_ci = bool(preserve_ci) or reused_ci
+    require(re.fullmatch(r'\d+\.\d+\.\d+', version), 'EXPLICIT_RELEASE_VERSION_REQUIRED')
+    current = registry(root).get('workflow', {})
+    require(current.get('version') and Version(version) >= Version(current['version']), 'WORKFLOW_DOWNGRADE_UNSUPPORTED')
+    url = f'{REPOSITORY}/releases/download/workflow-v{version}/workflow.zip'
+    if packages:
+        source = packages.resolve() / 'workflow'
+        meta = yaml.safe_load((source / 'extension.yml').read_text(encoding='utf-8-sig'))['extension']
+        require((meta['id'], str(meta['version']), meta['repository']) == ('workflow', version, REPOSITORY), 'WORKFLOW_PACKAGE_IDENTITY_MISMATCH')
+        args = ['specify', 'extension', 'add', '--dev', str(source), '--force']
+    else:
+        args = ['specify', 'extension', 'add', 'workflow', '--from', url, '--force']
+    result = {'applied': False, 'from': current['version'], 'to': version, 'source': url,
+              'distribution': 'local-development' if packages else 'release', 'command': args,
+              'preserve_ci_requested': preserve_ci, 'preserve_ci_reused': reused_ci, 'preserved_ci': None,
+              'replace_unrecognized_aliases_requested': replace_unrecognized_aliases}
+    if not apply:
+        # The checks apply refuses on, run without changing anything, so a preview is never falsely clean.
+        result['blockers'] = active_stage_blockers(root)
+        try:
+            ci = ci_edit_blocker(root, load_policy(root), source if packages else PACKAGE, preserve_ci)
+        except WorkflowError as error:
+            ci = str(error)
+        result['blockers'] += [ci] if ci else []
+        return result
+    ensure_local_excludes(root)
+    with locked(root / '.specify/workflow/runtime/upgrade.lock'):
+        with locked(root / '.specify/workflow/runtime/dispatch.lock'):
+            blockers = active_stage_blockers(root)
+            require(not blockers, '; '.join(blockers))
+            require(read(root / '.specify/superpowers-handoff.json', {}).get('status') not in ('executing', 'blocked'), 'LEGACY_EXECUTOR_OWNS_FEATURE')
+            # Dispatchers refuse new ledger writes once upgrade.lock exists; this
+            # waits out earlier ones and refuses while any attempt is live, so a
+            # rollback can never overwrite a running attempt's record.
+            delegation_preflight(root)
+            memory_archive_preflight(root)
+            backup = root / '.specify/workflow/backups/upgrades' / uuid.uuid4().hex
+            before = snapshot(root, backup)
+            mark_in_progress(root, 'upgrade', backup)
+            delegation_before = load_policy(root)['delegation']
+            history_before = {path: content for path, content in before.items()
+                              if path.startswith('specs/') and path.endswith('/workflow/delegations.json')}
+            ci_path = CI_GATE
+            ci_before = before.get(ci_path) if preserve_ci else None
+        log = []
+        try:
+            with locked(root / '.specify/workflow/runtime/dispatch.lock'):
+                runner(root, args, log)
+                meta = yaml.safe_load((root / '.specify/extensions/workflow/extension.yml').read_text(encoding='utf-8-sig'))['extension']
+                require((meta['id'], str(meta['version']), meta['repository']) == ('workflow', version, REPOSITORY), 'INSTALLED_WORKFLOW_IDENTITY_MISMATCH')
+            # Run the new package's installer; do not assume the old adapter knows its contract.
+            tail = ['--packages', str(packages.resolve())] if packages else []
+            if preserve_ci:
+                tail.append('--preserve-ci')
+            if replace_unrecognized_aliases:
+                tail.append('--replace-unrecognized-aliases')
+            for name in with_optional:  # an already installed optional extension is kept in step without this
+                tail += ['--with', name]
+            if ci_before is not None:
+                # A target installer may check CI health before it records the
+                # preserved file, and older ones read only the git-excluded
+                # receipt, which a fresh clone or worktree lacks (#22). Record
+                # the choice there first; the snapshot restores it on rollback.
+                receipt_path = root / '.specify/workflow/install-receipt.json'
+                receipt = read(receipt_path, {})
+                if (receipt.get('preserved_ci') or {}).get('path') != ci_path:
+                    write(receipt_path, {**receipt, 'preserved_ci': {
+                        'path': ci_path, 'sha256': hashlib.sha256(ci_before).hexdigest()}})
+            runner(root, [sys.executable, str(root / '.specify/extensions/workflow/scripts/install.py'),
+                          '--root', str(root), '--apply', '--upgrade-owner', str(os.getpid()), *tail], log)
+            require(load_policy(root)['delegation'] == delegation_before,
+                    'DELEGATION_POLICY_PRESERVATION_FAILED')
+            after = managed_files(root)
+            require({path: content for path, content in after.items()
+                     if path.startswith('specs/') and path.endswith('/workflow/delegations.json')}
+                    == history_before, 'DELEGATION_HISTORY_PRESERVATION_FAILED')
+            if ci_before is not None:
+                require((root / ci_path).read_bytes() == ci_before, 'PROJECT_CI_PRESERVATION_FAILED')
+                result['preserved_ci'] = {'path': ci_path, 'sha256': hashlib.sha256(ci_before).hexdigest()}
+            try:
+                installed = json.loads((log[-1] if log else {}).get('stdout') or '{}')
+            except (ValueError, AttributeError):
+                installed = {}
+            result['replaced_unrecognized_aliases'] = (installed.get('replaced_unrecognized_aliases') or []
+                                                       if isinstance(installed, dict) else [])
+            # The new installer reconciled Illustrate's hook; surface its record and any Codex /hooks step.
+            for key in ('illustrate', 'illustrate_hook_approval', 'codex_hook_approval'):
+                if isinstance(installed, dict) and installed.get(key):
+                    result[key] = installed[key]
+            result.update(applied=True, backup=str(backup), commands=log)
+            write(backup / 'result.json', {'ok': True, **result})
+            result['backups'] = prune_backups(root)
+            clear_in_progress(root)
+            return result
+        except BaseException as error:  # Ctrl-C and SystemExit restore too, then re-raise as they are
+            write(backup / 'result.json', {'ok': False, 'error': str(error) or type(error).__name__, 'commands': log})
+            with locked(root / '.specify/workflow/runtime/dispatch.lock'):
+                restore(root, before, managed_files(root))
+            clear_in_progress(root)
+            if not isinstance(error, Exception): raise
+            raise WorkflowError('WORKFLOW_UPGRADE_ROLLED_BACK: ' + str(error) + '; backup: ' + str(backup)) from error
+
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--root', type=Path, default=Path.cwd())
+    parser.add_argument('--version', required=True)
+    parser.add_argument('--packages', type=Path, help='Verified extracted packages for development')
+    parser.add_argument('--apply', action='store_true')
+    ci = parser.add_mutually_exclusive_group()
+    ci.add_argument('--preserve-ci', dest='preserve_ci', action='store_const', const=True, default=None,
+                    help='Retain the project workflow-gates CI file during the upgrade (default: the choice the last install recorded)')
+    ci.add_argument('--no-preserve-ci', dest='preserve_ci', action='store_const', const=False,
+                    help='Replace the project workflow-gates CI file with the managed one, even if the last install kept it')
+    parser.add_argument('--replace-unrecognized-aliases', action='store_true',
+                        help='Back up, then replace, a managed alias file whose content Sanduq does not recognise')
+    parser.add_argument('--with', dest='with_optional', action='append', default=[], metavar='EXTENSION',
+                        help='Also install an optional extension (for example: progress) while upgrading')
+    args = parser.parse_args()
+    try:
+        result = upgrade(args.root, args.version, args.apply, args.packages, preserve_ci=args.preserve_ci,
+                         replace_unrecognized_aliases=args.replace_unrecognized_aliases, with_optional=args.with_optional)
+        print(json.dumps(result, indent=2))
+        if result['preserve_ci_reused']:
+            print('Reused the --preserve-ci choice the last install recorded; pass --no-preserve-ci to adopt the managed CI file.',
+                  file=sys.stderr)
+        for blocker in result.get('blockers') or []:
+            print('BLOCKER: ' + blocker, file=sys.stderr)
+        for key in ('codex_hook_approval', 'illustrate_hook_approval'):
+            if result.get(key): print(result[key], file=sys.stderr)
+    except (WorkflowError, ValueError, OSError, KeyError) as error:
+        print(json.dumps({'ok': False, 'error': str(error), **explain(str(error))})); sys.exit(1)

@@ -1,0 +1,11 @@
+{
+  "name": "sanduq-workflow-entry",
+  "version": "0.0.0",
+  "description": "Eval harness for the Sanduq workflow entry skills. Its skills/ folder is generated from a smoke install; see README.md.",
+  "author": {
+    "name": "Samy K. Abushanab"
+  },
+  "experimental": {
+    "evals": "cases"
+  }
+}

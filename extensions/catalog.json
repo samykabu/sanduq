@@ -1,0 +1,506 @@
+{
+  "schema_version": "1.0",
+  "updated_at": "2026-11-05T20:38:48.775104+00:00",
+  "catalog_url": "https://raw.githubusercontent.com/samykabu/sanduq/main/catalog.json",
+  "extensions": {
+    "project": {
+      "name": "GitHub Project Lifecycle Sync",
+      "id": "project",
+      "description": "Mirror each Spec Kit feature onto a GitHub Project (v2): create a parent feature issue, advance its Status column through the Spec Kit lifecycle (open -> analysis -> engineer-review -> ready -> in-progress -> in-review -> done), and, in standalone use, create one native sub-issue per task and close it as its task is checked off (under Sanduq Workflow, Workflow owns task issues). Board-agnostic initialization lets each repo choose required/automatic or optional/manual sync hooks. Idempotent and no-regress.",
+      "author": "Samy K. Abushanab",
+      "version": "2.7.2",
+      "download_url": "https://github.com/samykabu/sanduq/releases/download/project-v2.7.2/project.zip",
+      "repository": "https://github.com/samykabu/sanduq",
+      "homepage": "https://github.com/samykabu/sanduq/tree/main/extensions/project",
+      "documentation": "https://github.com/samykabu/sanduq/blob/main/extensions/project/README.md",
+      "changelog": "https://github.com/samykabu/sanduq/blob/main/extensions/project/CHANGELOG.md",
+      "license": "MIT",
+      "category": "process",
+      "effect": "read-write",
+      "requires": {
+        "speckit_version": ">=0.2.0",
+        "tools": [
+          {
+            "name": "git",
+            "required": false
+          },
+          {
+            "name": "gh",
+            "required": false
+          },
+          {
+            "name": "python",
+            "required": true,
+            "version": ">=3.11"
+          }
+        ]
+      },
+      "provides": {
+        "commands": 2,
+        "hooks": 6
+      },
+      "tags": [
+        "project",
+        "github",
+        "issues",
+        "sub-issues",
+        "lifecycle",
+        "workflow"
+      ],
+      "verified": false,
+      "downloads": 0,
+      "stars": 0,
+      "created_at": "2026-07-09T00:00:00Z",
+      "updated_at": "2026-10-29T22:39:43.289137+00:00",
+      "sha256": "eea664e17587341ab43649551147af9144e4d21c745c5e77fc90dbd5bbd0c61e",
+      "inventory_sha256": "adbb260ef9e1b4a5dc652787ccee289d02d7022031d570d18d20ebced0b36dc1"
+    },
+    "pr": {
+      "name": "Pull Request Workflow",
+      "id": "pr",
+      "version": "4.7.6",
+      "description": "Generate or update pull requests from Spec Kit artifacts, enforce installed QA and User Manual freshness policies, then process review feedback through an approval-gated fix and reply workflow.",
+      "author": "Samy K. Abushanab",
+      "repository": "https://github.com/samykabu/sanduq",
+      "homepage": "https://github.com/samykabu/sanduq/tree/main/extensions/pr",
+      "documentation": "https://github.com/samykabu/sanduq/blob/main/extensions/pr/README.md",
+      "changelog": "https://github.com/samykabu/sanduq/blob/main/extensions/pr/CHANGELOG.md",
+      "download_url": "https://github.com/samykabu/sanduq/releases/download/pr-v4.7.6/pr.zip",
+      "license": "MIT",
+      "category": "process",
+      "effect": "read-write",
+      "requires": {
+        "speckit_version": ">=0.2.0",
+        "extensions": [
+          {
+            "id": "illustrate",
+            "version": ">=2.0.0,<3.0.0",
+            "required": true
+          },
+          {
+            "id": "assure",
+            "version": ">=2.0.0,<3.0.0",
+            "required": false
+          },
+          {
+            "id": "user-manual",
+            "version": ">=1.0.0,<3.0.0",
+            "required": false
+          }
+        ],
+        "tools": [
+          {
+            "name": "git",
+            "required": false
+          },
+          {
+            "name": "gh",
+            "required": false
+          },
+          {
+            "name": "python",
+            "required": true,
+            "version": ">=3.11"
+          }
+        ]
+      },
+      "provides": {
+        "commands": 2,
+        "hooks": 1
+      },
+      "tags": [
+        "pr",
+        "changelog",
+        "documentation",
+        "diagram",
+        "sequence",
+        "flowchart",
+        "state-machine",
+        "data-model",
+        "review",
+        "feedback",
+        "code-review",
+        "workflow"
+      ],
+      "verified": false,
+      "created_at": "2026-07-09T20:26:15Z",
+      "updated_at": "2026-10-31T00:31:18.471788+00:00",
+      "sha256": "49f6748401af098d9c6d654e3deb0e8a7174a330c009133cf03864c1e5824681",
+      "inventory_sha256": "ee7be29e36738b06cd04ab724b9c848d34e86fbedc9b241e1914a85330c41ce4"
+    },
+    "illustrate": {
+      "name": "Illustrate",
+      "id": "illustrate",
+      "version": "2.7.3",
+      "description": "Generate, import, and export forty-four technical, product, architecture, process, and quantitative illustration types with tracked project-level light/dark color and font themes.",
+      "author": "Samy K. Abushanab",
+      "repository": "https://github.com/samykabu/sanduq",
+      "homepage": "https://github.com/samykabu/sanduq/tree/main/extensions/illustrate",
+      "documentation": "https://github.com/samykabu/sanduq/blob/main/extensions/illustrate/README.md",
+      "changelog": "https://github.com/samykabu/sanduq/blob/main/extensions/illustrate/CHANGELOG.md",
+      "download_url": "https://github.com/samykabu/sanduq/releases/download/illustrate-v2.7.3/illustrate.zip",
+      "license": "MIT",
+      "category": "documentation",
+      "effect": "read-write",
+      "requires": {
+        "speckit_version": ">=0.2.0",
+        "tools": [
+          {
+            "name": "git",
+            "required": false
+          },
+          {
+            "name": "python",
+            "required": false,
+            "version": ">=3.11"
+          }
+        ]
+      },
+      "provides": {
+        "commands": 4,
+        "hooks": 0
+      },
+      "tags": [
+        "diagram",
+        "architecture",
+        "process-flow",
+        "technical-color",
+        "flowchart",
+        "sequence",
+        "state-machine",
+        "er",
+        "timeline",
+        "swimlane",
+        "radar",
+        "gantt",
+        "data-platform",
+        "export",
+        "png",
+        "pdf",
+        "svg",
+        "visualization",
+        "documentation",
+        "project-theme",
+        "custom-fonts",
+        "sankey",
+        "waterfall",
+        "heatmap",
+        "deployment",
+        "uml",
+        "mermaid",
+        "drawio",
+        "excalidraw",
+        "animation"
+      ],
+      "verified": false,
+      "created_at": "2026-07-18T15:47:12Z",
+      "updated_at": "2026-10-27T23:43:03.519276+00:00",
+      "sha256": "271d2b80037a191ed6e66d6835efb2bba743580ecc6dd1efc3106750182f7c7c",
+      "inventory_sha256": "622e76d172d7f28dcfe905f269493f70bee287fdae269642e542e3de695a7bde"
+    },
+    "assure": {
+      "name": "Assure",
+      "id": "assure",
+      "version": "2.7.5",
+      "description": "Make QA part of the Spec Kit lifecycle: initialize project policy, require feature test-readiness analysis before implementation, and generate a current QA test manual before pull-request creation.",
+      "author": "Samy K. Abushanab",
+      "repository": "https://github.com/samykabu/sanduq",
+      "homepage": "https://github.com/samykabu/sanduq/tree/main/extensions/assure",
+      "documentation": "https://github.com/samykabu/sanduq/blob/main/extensions/assure/README.md",
+      "changelog": "https://github.com/samykabu/sanduq/blob/main/extensions/assure/CHANGELOG.md",
+      "download_url": "https://github.com/samykabu/sanduq/releases/download/assure-v2.7.5/assure.zip",
+      "license": "MIT",
+      "category": "process",
+      "effect": "read-write",
+      "requires": {
+        "speckit_version": ">=0.2.0",
+        "extensions": [
+          {
+            "id": "illustrate",
+            "version": ">=2.0.0,<3.0.0",
+            "required": true
+          }
+        ],
+        "tools": [
+          {
+            "name": "git",
+            "required": false
+          },
+          {
+            "name": "python",
+            "required": true,
+            "version": ">=3.11"
+          }
+        ]
+      },
+      "provides": {
+        "commands": 3,
+        "hooks": 3
+      },
+      "tags": [
+        "qa",
+        "testing",
+        "e2e",
+        "playwright",
+        "documentation",
+        "diagram",
+        "api",
+        "accessibility",
+        "quality-gate",
+        "workflow"
+      ],
+      "verified": false,
+      "created_at": "2026-07-18T18:35:58Z",
+      "updated_at": "2026-11-05T20:38:48.530837+00:00",
+      "sha256": "9e75148428b8d78e43d10cc9b67c726c7333813dfac0757e2b89d82477b81bac",
+      "inventory_sha256": "c305f58f1c6ac31fc65a222b2f0e699e3bcf466e39ffdc0d73ab7f8fdd1d3ea8"
+    },
+    "user-manual": {
+      "name": "User Manual",
+      "id": "user-manual",
+      "version": "2.0.4",
+      "description": "Create and incrementally maintain bilingual-ready, audience-aware application manuals in Markdown that reads correctly on GitHub, rendered as Markdown, through your own templates and tools, or as MkDocs HTML and PDF, including modules, interfaces, tutorials, screenshots, APIs, releases, migrations, infrastructure, architecture, and complete data dictionaries.",
+      "author": "Samy K. Abushanab",
+      "repository": "https://github.com/samykabu/sanduq",
+      "homepage": "https://github.com/samykabu/sanduq/tree/main/extensions/user-manual",
+      "documentation": "https://github.com/samykabu/sanduq/blob/main/extensions/user-manual/README.md",
+      "changelog": "https://github.com/samykabu/sanduq/blob/main/extensions/user-manual/CHANGELOG.md",
+      "download_url": "https://github.com/samykabu/sanduq/releases/download/user-manual-v2.0.4/user-manual.zip",
+      "license": "MIT",
+      "category": "documentation",
+      "effect": "read-write",
+      "requires": {
+        "speckit_version": ">=0.2.0",
+        "extensions": [
+          {
+            "id": "illustrate",
+            "version": ">=2.0.0,<3.0.0",
+            "required": true
+          }
+        ],
+        "tools": [
+          {
+            "name": "git",
+            "required": false
+          },
+          {
+            "name": "python",
+            "required": true,
+            "version": ">=3.11"
+          },
+          {
+            "name": "node",
+            "required": false
+          }
+        ]
+      },
+      "provides": {
+        "commands": 4,
+        "hooks": 2
+      },
+      "tags": [
+        "user-manual",
+        "documentation",
+        "mkdocs",
+        "material",
+        "pdf",
+        "bilingual",
+        "arabic",
+        "rtl",
+        "api",
+        "tutorial",
+        "release-notes",
+        "migration-guide",
+        "screenshots",
+        "architecture",
+        "infrastructure",
+        "data-dictionary"
+      ],
+      "verified": false,
+      "created_at": "2026-07-18T18:35:58Z",
+      "updated_at": "2026-11-05T20:38:48.563726+00:00",
+      "sha256": "25b43f3e268f93bca7f396ed8e54fa0505bbbe5752bc34f05bf9f0f9f485e684",
+      "inventory_sha256": "b9d15c256bc2ae15f9e1ba99dee50ac558ced1acb06337d50e402b1024005476"
+    },
+    "workflow": {
+      "name": "Sanduq Workflow",
+      "id": "workflow",
+      "version": "2.3.2",
+      "description": "GitHub issue decisions and resumable Scope-to-PR orchestration with optional model-aware delegation, QA, User Manual, and workflow evidence CI.",
+      "author": "Samy K. Abushanab",
+      "license": "MIT",
+      "repository": "https://github.com/samykabu/sanduq",
+      "homepage": "https://github.com/samykabu/sanduq/tree/main/extensions/workflow",
+      "documentation": "https://github.com/samykabu/sanduq/blob/main/extensions/workflow/README.md",
+      "changelog": "https://github.com/samykabu/sanduq/blob/main/extensions/workflow/CHANGELOG.md",
+      "download_url": "https://github.com/samykabu/sanduq/releases/download/workflow-v2.3.2/workflow.zip",
+      "requires": {
+        "speckit_version": ">=1.0.0,<2.0.0",
+        "tools": [
+          {
+            "name": "python",
+            "version": ">=3.11",
+            "required": true
+          },
+          {
+            "name": "git",
+            "required": true
+          },
+          {
+            "name": "gh",
+            "required": true
+          }
+        ]
+      },
+      "provides": {
+        "commands": 15,
+        "hooks": 4
+      },
+      "tags": [
+        "workflow",
+        "qa",
+        "documentation",
+        "github",
+        "context",
+        "resumable"
+      ],
+      "category": "process",
+      "effect": "read-write",
+      "verified": false,
+      "sha256": "a41329646b12bbc6ac3a0b1421ad03daea34ee60357b660c4fbd12ae498489b4",
+      "updated_at": "2026-11-05T20:38:48.775002+00:00",
+      "inventory_sha256": "8bc1fd7ba7211ca07abb88f1d0f15ad00001c6dd2867c2746743f22578d6eff2"
+    },
+    "scope": {
+      "name": "Speckit Scope (retired)",
+      "id": "scope",
+      "version": "2.0.0",
+      "description": "Retired: Scope is part of Sanduq Workflow 2.0.0. Run python .specify/extensions/workflow/scripts/upgrade.py --version 2.0.0 --apply; it removes this package and keeps .specify/scope.",
+      "author": "Samy K. Abushanab",
+      "license": "MIT",
+      "repository": "https://github.com/samykabu/sanduq",
+      "homepage": "https://github.com/samykabu/sanduq/tree/main/extensions/scope",
+      "documentation": "https://github.com/samykabu/sanduq/blob/main/extensions/scope/README.md",
+      "changelog": "https://github.com/samykabu/sanduq/blob/main/extensions/scope/CHANGELOG.md",
+      "download_url": "https://github.com/samykabu/sanduq/releases/download/scope-v2.0.0/scope.zip",
+      "requires": {
+        "speckit_version": ">=1.0.0",
+        "extensions": [
+          {
+            "id": "workflow",
+            "version": ">=2.0.0,<3.0.0",
+            "required": true
+          }
+        ],
+        "tools": [
+          {
+            "name": "python",
+            "version": ">=3.11",
+            "required": true
+          }
+        ]
+      },
+      "provides": {
+        "commands": 1,
+        "hooks": 0
+      },
+      "tags": [
+        "deprecated",
+        "scope",
+        "workflow"
+      ],
+      "category": "process",
+      "effect": "read-write",
+      "verified": false,
+      "sha256": "21c92ecd8ac2d237617c50a30232e64bf451f3f320af8fd0ff7d513604e06dca",
+      "updated_at": "2026-10-28T14:56:42.751891+00:00",
+      "inventory_sha256": "83502e3ccf93519eb356974061eaf04d208a4c69b8a182cbf67cd191c062487c",
+      "deprecated": true,
+      "superseded_by": "workflow"
+    },
+    "memory": {
+      "name": "Sanduq Memory",
+      "id": "memory",
+      "version": "2.6.3",
+      "description": "Reconcile verified feature specifications into current project memory, migrate required fixtures, and archive through scoped recoverable Git commits.",
+      "author": "Samy K. Abushanab",
+      "license": "MIT",
+      "repository": "https://github.com/samykabu/sanduq",
+      "homepage": "https://github.com/samykabu/sanduq/tree/main/extensions/memory",
+      "documentation": "https://github.com/samykabu/sanduq/blob/main/extensions/memory/README.md",
+      "changelog": "https://github.com/samykabu/sanduq/blob/main/extensions/memory/CHANGELOG.md",
+      "download_url": "https://github.com/samykabu/sanduq/releases/download/memory-v2.6.3/memory.zip",
+      "requires": {
+        "speckit_version": ">=1.0.0,<2.0.0",
+        "tools": [
+          {
+            "name": "python",
+            "required": true,
+            "version": ">=3.11"
+          },
+          {
+            "name": "git",
+            "required": true
+          }
+        ]
+      },
+      "provides": {
+        "commands": 7,
+        "hooks": 3
+      },
+      "tags": [
+        "archive",
+        "memory",
+        "workflow"
+      ],
+      "category": "process",
+      "effect": "read-write",
+      "verified": false,
+      "sha256": "074dd5e42138cb8fd3981419d251b313012b7d6d6e4ab055c98cc510498dfc52",
+      "updated_at": "2026-10-29T22:39:43.252988+00:00",
+      "inventory_sha256": "138ac4b01ede1c09b39f4ad9322aa606bf351befab21edf8b99e218d3c50431e"
+    },
+    "progress": {
+      "name": "Sanduq Progress Report",
+      "id": "progress",
+      "version": "1.7.0",
+      "description": "A live, deterministic progress report for a Spec Kit feature: stages over time, workstreams, runs, blockers and decisions, collected from the host's native hooks and the feature files with no agent spent on upkeep.",
+      "author": "Samy K. Abushanab",
+      "license": "MIT",
+      "repository": "https://github.com/samykabu/sanduq",
+      "homepage": "https://github.com/samykabu/sanduq/tree/main/extensions/progress",
+      "documentation": "https://github.com/samykabu/sanduq/blob/main/extensions/progress/README.md",
+      "changelog": "https://github.com/samykabu/sanduq/blob/main/extensions/progress/CHANGELOG.md",
+      "download_url": "https://github.com/samykabu/sanduq/releases/download/progress-v1.7.0/progress.zip",
+      "requires": {
+        "speckit_version": ">=1.1.1.dev0,<2.0.0",
+        "tools": [
+          {
+            "name": "python",
+            "required": true,
+            "version": ">=3.11"
+          }
+        ]
+      },
+      "provides": {
+        "commands": 5,
+        "hooks": 2
+      },
+      "tags": [
+        "progress",
+        "report",
+        "dashboard",
+        "lanes",
+        "telemetry",
+        "hooks",
+        "workflow"
+      ],
+      "category": "process",
+      "effect": "read-write",
+      "verified": false,
+      "sha256": "b4c6677042bb1673784a7db701144636ecde0b299069788988d77f6f4dd23d92",
+      "updated_at": "2026-10-27T21:31:59.872409+00:00",
+      "inventory_sha256": "b2a8ee9a4040b67fc68babb81fc95ea45f7beec473f97f8f157ab4123134dd6a"
+    }
+  }
+}

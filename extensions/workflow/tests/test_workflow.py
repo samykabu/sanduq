@@ -1,0 +1,704 @@
+import atexit
+import copy
+import hashlib
+import json
+import os
+import shutil
+import subprocess
+import sys
+import tempfile
+import time
+import unittest
+from unittest import mock
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+
+import yaml
+
+WORKFLOW_SOURCE = (Path(os.environ['SANDUQ_WORKFLOW_TEST_PACKAGE']) if os.environ.get('SANDUQ_WORKFLOW_TEST_PACKAGE')
+                   else Path(__file__).resolve().parents[1])
+sys.path.insert(0, str(WORKFLOW_SOURCE / 'scripts'))
+import workflow as w  # noqa: E402
+import lifecycle  # noqa: E402
+
+
+_TEMPLATE = []
+HOST_ENV = [name for names in sys.modules['wf_health'].RUNNING_HOST_ENV.values() for name in names]
+
+
+def clear_host_env(test):
+    """Unset the host CLI variables for one test: claim compares them with the fixture's default host (T05), and the
+    suite itself may run under Claude Code or Codex."""
+    patcher = mock.patch.dict(os.environ)
+    patcher.start()
+    test.addCleanup(patcher.stop)
+    for name in HOST_ENV:
+        os.environ.pop(name, None)
+
+
+def template_git():
+    """One fixture repository per process (init, identity, empty commit, origin); each test copies its `.git`.
+    The commit's identity and dates are fixed, so every process builds the same commit."""
+    if not _TEMPLATE:
+        holder = tempfile.TemporaryDirectory()
+        atexit.register(holder.cleanup)
+        root = Path(holder.name)
+        fixed = {**os.environ, 'GIT_AUTHOR_DATE': '2026-01-01T00:00:00+00:00',
+                 'GIT_COMMITTER_DATE': '2026-01-01T00:00:00+00:00'}
+        for name in ('GIT_AUTHOR_NAME', 'GIT_AUTHOR_EMAIL', 'GIT_COMMITTER_NAME', 'GIT_COMMITTER_EMAIL'):
+            fixed.pop(name, None)  # the repository's user.name/user.email below
+        for args in [('init', '-q'), ('config', 'user.name', 'Test'), ('config', 'user.email', 'test@example.invalid'),
+                     ('commit', '--allow-empty', '-qm', 'init'),
+                     ('remote', 'add', 'origin', 'https://github.com/acme/app.git')]:
+            subprocess.run(['git', *args], cwd=root, check=True, capture_output=True, env=fixed)
+        shutil.rmtree(root / '.git/hooks', ignore_errors=True)  # sample hooks only; never run
+        _TEMPLATE.append(root / '.git')
+    return _TEMPLATE[0]
+
+
+class WorkflowTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.root = Path(self.tmp.name).resolve()
+        shutil.copytree(template_git(), self.root / '.git')
+        self.feature = 'specs/001-example'
+        self.policy = w.default_policy(True, True)
+        self.configure()
+        clear_host_env(self)
+
+    def configure(self, superspec=False):
+        path = self.root / '.specify/workflow.yml'
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(yaml.safe_dump(self.policy), encoding='utf-8')
+        w.write(self.root/'.specify/init-options.json',{'integration':'codex','ai_skills':True})
+        w.write(self.root / '.specify/extensions/project/config.json', {
+            'owner': 'acme', 'projectNumber': 1, 'projectId': 'P', 'statusFieldId': 'F',
+            'stateFile': '.specify/project-sync-state.json', 'hookMode': 'required',
+            'statusOptions': {name: name for name in ('Backlog', 'Feature Specification', 'Need Clarifications', 'Ready', 'In progress', 'In review', 'Done')},
+            'phaseToStatus': {'open': 'Feature Specification', 'analysis': 'Ready', 'engineer-review': 'Ready',
+                              'ready': 'Ready', 'in-progress': 'In progress', 'in-review': 'In review', 'done': 'Done'},
+        })
+        (self.root / '.specify/extensions.yml').write_text('hooks: {}\n', encoding='utf-8')
+        for preset in ('workflow', 'scope-gate', 'scope-brainstorm'):
+            p = self.root / '.specify/presets' / preset / 'preset.yml'
+            p.parent.mkdir(parents=True, exist_ok=True)
+            p.write_text('schema_version: "1.0"\n', encoding='utf-8')
+        w.write(self.root / '.specify/presets/.registry', {'presets': {p: {'enabled':True} for p in ('workflow','scope-gate','scope-brainstorm')}})
+        versions = {'project': '2.2.0', 'pr': '4.2.0', 'assure': '2.2.0', 'user-manual': '2.0.0'}
+        if superspec: versions['superspec'] = '1.0.2'
+        w.write(self.root / '.specify/extensions/.registry', {'extensions': {n: {'version': v, 'enabled': True} for n, v in versions.items()}})
+        for n, v in versions.items():
+            p = self.root / '.specify/extensions' / n / 'extension.yml'
+            p.parent.mkdir(parents=True, exist_ok=True)
+            p.write_text(yaml.safe_dump({'extension':{'id':n,'version':v,'repository':'https://github.com/samykabu/sanduq','author':'Samy K. Abushanab'}}), encoding='utf-8')
+        commands = list(w.COMMANDS.values())
+        if superspec: commands += ['speckit.superspec.' + suffix for suffix in ('brainstorm', 'tasks', 'execute', 'review')]
+        for command in commands:
+            if command.startswith('workflow:'): continue
+            p = self.root / '.agents/skills' / command.replace('.', '-') / 'SKILL.md'
+            p.parent.mkdir(parents=True, exist_ok=True)
+            p.write_text('fixture command', encoding='utf-8')
+        if self.policy.get('delegation', {}).get('enabled'):
+            import hosts
+            for host in ('codex', 'claude'):
+                hosts.install_roles(self.root, host, WORKFLOW_SOURCE, self.policy)
+
+    def usage(self, fraction=.1, method='estimated'):
+        return {'session_id': 'new-session', 'observed_at': w.now(), 'method': method,
+                'fraction': fraction, 'next_fraction': .05}
+
+    def claim_any(self, run):
+        """Claim whatever is next, the PR included: finalize is Ready plus PR, never a stage before (AHMED-07)."""
+        claim = run.claim(self.usage())
+        return run.claim(self.usage(), finalize=True) if claim.get('status') == 'ready_to_finalize' else claim
+
+    def run_object(self):
+        run = w.Run(self.root, self.feature)
+        run.start('acme/app#10')
+        return run
+
+    def invalidated(self, run):
+        events, torn = lifecycle.read_events(run.feature / 'workflow/lifecycle.jsonl')
+        self.assertFalse(torn)
+        return [e for e in events if e['event'] == 'invalidated']
+
+    def test_issue_identity_uses_issue_number_and_title(self):
+        class GitHub:
+            def api(self, endpoint):
+                assert endpoint in ('repos/acme/app', 'repos/acme/app/issues/42'), endpoint
+                return {'number': 42, 'title': 'Fix checkout timeout!', 'fork': False}
+        identity = w.issue_identity(self.root, '42', GitHub())
+        self.assertEqual(identity['feature'], 'specs/42-fix-checkout-timeout')
+        self.assertEqual(identity['branch'], '42-fix-checkout-timeout')
+
+    def test_a_fork_origin_is_refused_before_binding_and_names_the_parent(self):
+        # AHMED-13: #42 on the fork is not the upstream #42; nothing is bound.
+        class GitHub:
+            def api(self, endpoint):
+                assert endpoint == 'repos/acme/app', endpoint
+                return {'fork': True, 'parent': {'full_name': 'upstream/app'}}
+        with self.assertRaisesRegex(w.WorkflowError, r'^ORIGIN_IS_FORK: .*acme/app is a fork of upstream/app.*git remote -v'):
+            w.prepare_issue(self.root, '42', GitHub())
+        self.assertFalse((self.root / 'specs/42-fix-checkout-timeout').exists())
+
+    def test_finalize_before_ready_claims_nothing_and_lists_the_remaining_stages(self):
+        # AHMED-07: at Tasks, finalize is not "run everything"; the stages before Ready are reported.
+        run = self.run_object()
+        for stage in ('scope', 'specify', 'clarify', 'plan', 'tasks'):
+            claim = run.claim(self.usage()); run.complete(claim['token'], self.receipt(stage))
+        result = run.claim(self.usage(), finalize=True)
+        self.assertEqual((result['stage'], result['status'], result['command']),
+                         (None, 'not_ready_to_finalize', 'speckit.workflow.continue'))
+        self.assertEqual(result['remaining'], [s for s in w.stages(self.policy) if s not in
+                                               ('scope', 'specify', 'clarify', 'plan', 'tasks', 'ready', 'pr')])
+        self.assertEqual(run.next(run.load(), finalize=True)['status'], 'not_ready_to_finalize')
+        self.assertIsNone(run.load()['active'])
+        self.assertEqual(run.claim(self.usage())['stage'], result['remaining'][0])
+
+    def test_prepare_issue_creates_branch_when_no_git_hook(self):
+        class GitHub:
+            def api(self, endpoint):
+                return {'number': 42, 'title': 'Fix checkout timeout!'}
+        result = w.prepare_issue(self.root, '42', GitHub())
+        self.assertEqual(result['branch_owner'], 'sanduq')
+        self.assertEqual(w.git(self.root, 'branch', '--show-current'),
+                         '42-fix-checkout-timeout')
+        self.assertEqual(w.prepare_issue(self.root, '42', GitHub())['branch'],
+                         result['branch'])
+        w.Run(self.root, result['feature']).start('acme/app#42')
+        class EditedGitHub:
+            def api(self, endpoint):
+                return {'number': 42, 'title': 'Newly edited issue title'}
+        resumed = w.prepare_issue(self.root, '42', EditedGitHub())
+        self.assertEqual((resumed['feature'], resumed['branch_owner']),
+                         (result['feature'], 'existing-run'))
+
+    def test_start_records_the_branch_it_forked_from_as_the_bound_target(self):
+        # F16: assure_state.py/manual_state.py default --base-ref to this field.
+        original = w.git(self.root, 'branch', '--show-current')
+        subprocess.run(['git', 'switch', '-qc', '42-fix-checkout-timeout'], cwd=self.root, check=True)
+        run = w.Run(self.root, self.feature)
+        state = run.start('acme/app#10')
+        self.assertEqual(state['target_branch'], original)
+        self.assertEqual(run.load()['target_branch'], original)
+
+    def test_start_leaves_target_branch_none_without_a_prior_checkout(self):
+        # No branch switch happened before start in this fresh fixture repo, so
+        # Git's reflog has nothing for `@{-1}` to resolve.
+        run = self.run_object()
+        self.assertIsNone(run.load().get('target_branch'))
+
+    def receipt(self, stage, inputs=None):
+        # Semantic commands create these artifacts; fixtures provide the minimal outputs.
+        directory = self.root / self.feature
+        directory.mkdir(parents=True, exist_ok=True)
+        for name, first in (('spec.md', 'specify'), ('plan.md', 'plan'), ('tasks.md', 'tasks')):
+            path = directory / name
+            if w.BASE_STAGES.index(stage) >= w.BASE_STAGES.index(first) and not path.exists():
+                path.write_text('- [x] T001 Done behavior' if name == 'tasks.md' else '# Fixture ' + name, encoding='utf-8')
+        if w.BASE_STAGES.index(stage) >= w.BASE_STAGES.index('specify') and not (directory / 'scope-source.json').exists():
+            # Scope's bind caches the score its gate verified; fix_profile checks the receipt against it (OMAR-05).
+            score = ((w.read(directory / 'workflow/checkpoint.json', {}).get('receipts') or {}).get('scope') or {}).get('effort_score')
+            w.write(directory / 'scope-source.json', {'repo': 'acme/app', 'issue': 10, **({'score': score} if score else {})})
+        if w.BASE_STAGES.index(stage) >= w.BASE_STAGES.index('taskstoissues') and not (directory / 'workflow/task-issues.json').exists():
+            w.write(directory / 'workflow/task-issues.json', {'repo': 'acme/app', 'parent': 10, 'feature': self.feature,
+                                                           'tasks': {'T001': {'number': 11, 'linked': True}}})
+        path = self.feature + '/evidence/' + stage + '.txt'
+        p = self.root / path
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text('actual fixture evidence', encoding='utf-8')
+        return {'stage': stage, 'summary': stage + ' tested', 'outcome': 'passed', 'inputs': inputs or [path],
+                'evidence': [path], 'unresolved': 0, 'answers_applied': True, 'blocking_findings': 0,
+                'parent_issue': 'acme/app#10', 'native_links_verified': True,
+                'images_verified': True, 'pr_url': 'https://github.com/acme/app/pull/11'}
+
+    def test_four_process_combinations_and_provider_choices(self):
+        for qa in (False, True):
+            for manual in (False, True):
+                for superspec in (False, True):
+                    with self.subTest(qa=qa, manual=manual, superspec=superspec):
+                        self.policy = w.default_policy(qa, manual)
+                        self.configure(superspec)
+                        ordered = w.stages(self.policy)
+                        self.assertEqual('qa_analyze' in ordered, qa)
+                        self.assertEqual('qa_document' in ordered, qa)
+                        self.assertEqual('manual_analyze' in ordered, manual)
+                        self.assertEqual('manual_update' in ordered, manual)
+                        self.assertLess(ordered.index('analyze'), ordered.index('taskstoissues'))
+                        self.assertLess(ordered.index('taskstoissues'), ordered.index('execute'))
+                        commands = w.resolve_commands(self.root, self.policy)
+                        self.assertEqual(commands['tasks'], 'speckit.superspec.tasks' if superspec else 'speckit.tasks')
+                        self.assertEqual(commands['execute'], 'speckit.superspec.execute' if superspec else 'speckit.implement')
+
+    def test_installed_but_unselected_dependencies_do_not_enable_process(self):
+        self.policy = w.default_policy(False, False)
+        self.configure()
+        self.assertNotIn('manual_analyze', w.stages(self.policy))
+        self.assertTrue(w.doctor(self.root, self.policy)['ok'])
+
+    def test_doctor_project_names_versions_and_upgrade_command_for_an_older_dependency(self):
+        # MARWA-14: Workflow updated alone through Spec Kit leaves an older Project behind.
+        lock = json.loads((Path(w.__file__).resolve().parents[1] / 'dependencies.json').read_text(encoding='utf-8'))
+        w.write(self.root / '.specify/extensions/workflow/dependencies.json', lock)
+        registered = w.registry(self.root)
+        registered['workflow'] = {'version': '1.18.0', 'enabled': True}
+        registered['project'] = {'version': '2.0.0', 'enabled': True}
+        w.write(self.root / '.specify/extensions/.registry', {'extensions': registered})
+        w.write(self.root / '.specify/workflow/install-lock.json', {'host': 'codex'})  # installed before: not a fresh install
+        command = 'python .specify/extensions/workflow/scripts/upgrade.py --version 1.18.0 --apply'
+        errors = [e for e in w.doctor(self.root, self.policy, project=True)['errors'] if e.startswith('DEPENDENCY_UNAVAILABLE: project')]
+        self.assertEqual(len(errors), 1)
+        for text in ('project 2.0.0 is installed', 'Workflow 1.18.0 requires project ' + lock['required']['project'], command):
+            self.assertIn(text, errors[0])
+        # Inside RANGES but older than the lock: only `doctor --project` reports it.
+        lock['required']['project'] = '2.3.0'
+        w.write(self.root / '.specify/extensions/workflow/dependencies.json', lock)
+        registered['project'] = {'version': '2.2.0', 'enabled': True}
+        w.write(self.root / '.specify/extensions/.registry', {'extensions': registered})
+        self.assertIn('DEPENDENCY_UNAVAILABLE: project 2.2.0 is installed; Workflow 1.18.0 requires project 2.3.0 '
+                      '(>=2.1,<3); run "' + command + '"', w.doctor(self.root, self.policy, project=True)['errors'])
+        self.assertFalse(any(e.startswith('DEPENDENCY_UNAVAILABLE: project') for e in w.doctor(self.root, self.policy)['errors']))
+
+    def test_doctor_fails_when_an_installed_scope_or_memory_is_not_sanduqs(self):
+        """SEC-14: the community catalogs publish other packages under the ids scope and memory."""
+        self.assertTrue(w.doctor(self.root, self.policy, explicit=True)['ok'])
+        memory = self.root / '.specify/extensions/memory'
+        memory.mkdir(parents=True)
+        (memory / 'extension.yml').write_text(yaml.safe_dump({'extension': {
+            'id': 'memory', 'version': '1.0.0', 'repository': 'https://github.com/someone/memory', 'author': 'Someone'}}),
+            encoding='utf-8')
+        registered = w.registry(self.root)
+        registered['memory'] = {'version': '1.0.0', 'enabled': True, 'source': {'kind': 'catalog', 'catalog': 'community'}}
+        w.write(self.root / '.specify/extensions/.registry', {'extensions': registered})
+        self.assertIn('DEPENDENCY_SOURCE_MISMATCH: memory must come from samykabu/sanduq',
+                      w.doctor(self.root, self.policy)['errors'])
+        # Sanduq's repository and author, but no release inventory from a catalog: still refused.
+        (memory / 'extension.yml').write_text(yaml.safe_dump({'extension': {
+            'id': 'memory', 'version': '1.0.0', 'repository': 'https://github.com/samykabu/sanduq',
+            'author': 'Samy K. Abushanab'}}), encoding='utf-8')
+        self.assertTrue(w.doctor(self.root, self.policy)['ok'])
+        self.assertTrue(any(e.startswith('DEPENDENCY_SOURCE_MISMATCH: memory was installed from a catalog without')
+                            for e in w.doctor(self.root, self.policy, explicit=True)['errors']))
+        # With the inventory, a file that differs from it is named.
+        (memory / 'run.py').write_bytes(b'print(1)\n')
+        w.write(memory / 'package-inventory.json', {'memory/run.py': '0' * 64})
+        self.assertIn('DEPENDENCY_SOURCE_MISMATCH: memory differs from its package inventory: memory/run.py',
+                      w.doctor(self.root, self.policy, explicit=True)['errors'])
+        w.write(memory / 'package-inventory.json', {'memory/run.py': hashlib.sha256(b'print(1)\n').hexdigest()})
+        self.assertFalse(any('memory' in e for e in w.doctor(self.root, self.policy, explicit=True)['errors']))
+        # A core.autocrlf checkout holds the untouched file as CRLF: still Sanduq's. A real edit is not.
+        (memory / 'run.py').write_bytes(b'print(1)\r\n')
+        self.assertFalse(any('memory' in e for e in w.doctor(self.root, self.policy, explicit=True)['errors']))
+        (memory / 'run.py').write_bytes(b'print(2)\r\n')
+        self.assertIn('DEPENDENCY_SOURCE_MISMATCH: memory differs from its package inventory: memory/run.py',
+                      w.doctor(self.root, self.policy, explicit=True)['errors'])
+
+    def test_doctor_names_the_upgrade_while_a_scope_with_code_is_installed(self):
+        """DEC-03: Workflow provides Scope; no scope package is needed, a foreign one fails, an old one names the fix."""
+        self.assertNotIn('scope', w.registry(self.root))
+        self.assertTrue(w.doctor(self.root, self.policy, explicit=True)['ok'])
+        folder = self.root / '.specify/extensions/scope'
+        folder.mkdir(parents=True)
+
+        def install(version, repository='https://github.com/samykabu/sanduq', author='Samy K. Abushanab'):
+            (folder / 'extension.yml').write_text(yaml.safe_dump({'extension': {
+                'id': 'scope', 'version': version, 'repository': repository, 'author': author}}), encoding='utf-8')
+            registered = w.registry(self.root)
+            registered['scope'] = {'version': version, 'enabled': True}
+            w.write(self.root / '.specify/extensions/.registry', {'extensions': registered})
+            return w.doctor(self.root, self.policy)['errors']
+        errors = install('1.0.0', 'https://github.com/someone/scope', 'Someone')
+        self.assertIn('DEPENDENCY_SOURCE_MISMATCH: scope must come from samykabu/sanduq', errors)
+        w.write(self.root / '.specify/workflow/install-lock.json', {'host': 'codex'})
+        version = w.registry(self.root).get('workflow', {}).get('version') or '<workflow version>'
+        errors = install('1.14.0')
+        self.assertEqual([e for e in errors if 'scope' in e], [
+            'SCOPE_MERGED_INTO_WORKFLOW: scope 1.14.0 is installed, but Workflow provides Scope now (speckit.scope.<x> is '
+            'speckit.workflow.scope-<x>); run "python .specify/extensions/workflow/scripts/upgrade.py --version ' + version +
+            ' --apply" to remove it; its state in .specify/scope is kept'])
+        self.assertIn('SCOPE_MERGED_INTO_WORKFLOW', w.ERRORS)
+        self.assertEqual([e for e in install('2.0.0') if 'scope' in e], [])  # the retired shim carries no code
+
+    def test_unreliable_context_never_pauses_or_blocks_default_claims(self):
+        cases = [self.usage(.99), {'session_id': 'host-without-telemetry'},
+                 dict(self.usage(.99, 'measured'), reliable=False),
+                 dict(self.usage(.99, 'measured'), observed_at='invalid'),
+                 dict(self.usage(.99, 'measured'), fraction=None),
+                 dict(self.usage(.99, 'measured'), observed_at=(datetime.now(timezone.utc)-timedelta(minutes=5)).isoformat())]
+        for usage in cases:
+            with self.subTest(usage=usage):
+                self.assertFalse(w.context_gate(self.policy, usage)['pause'])
+        legacy = copy.deepcopy(self.policy)
+        legacy['context']['mode'] = 'measured-with-estimated-fallback'
+        with self.subTest(mode=legacy['context']['mode']):
+            self.assertFalse(w.context_gate(legacy, self.usage(.99))['pause'])
+        run = self.run_object()
+        self.assertEqual(run.claim({'session_id': 'host-without-telemetry'})['stage'], 'scope')
+
+    def test_claim_resume_and_explicit_finalize(self):
+        run = self.run_object()
+        for stage in w.stages(self.policy):
+            if stage == 'pr':
+                self.assertEqual(run.next(run.load())['status'], 'ready_to_finalize')
+            claim = run.claim(self.usage(), finalize=stage == 'pr')
+            self.assertEqual(claim['stage'], stage)
+            # B8: the claim names the exact per-stage reference the dispatcher must read.
+            self.assertEqual(claim['reference'], w.stage_reference(stage))
+            with self.assertRaisesRegex(w.WorkflowError, 'ALREADY_ACTIVE'): run.claim(self.usage())
+            run.complete(claim['token'], self.receipt(stage))
+            run = w.Run(self.root, self.feature)  # fresh runtime instance every stage
+        self.assertEqual(run.next(run.load())['status'], 'pr_open')
+
+    def test_claim_from_another_host_refuses_and_the_host_is_recorded(self):
+        run = self.run_object()  # the fixture's default host is codex
+        with mock.patch.dict(os.environ, {'CLAUDE_CODE_ENTRYPOINT': 'cli'}):
+            with self.assertRaisesRegex(w.WorkflowError, 'HOST_MISMATCH: this session runs under claude but the '
+                                        'project default host is codex; .*"python .specify/extensions/workflow/'
+                                        'scripts/workflow.py host --use claude --preview"'):
+                run.claim(self.usage())
+        self.assertIsNone(run.load()['active'])
+        with mock.patch.dict(os.environ, {'CODEX_SANDBOX_NETWORK_DISABLED': '1'}):
+            claim = run.claim(self.usage())
+        self.assertEqual(run.load()['active']['agent_host'], 'codex')
+        run.complete(claim['token'], self.receipt('scope'))
+        self.assertEqual(run.load()['receipts']['scope']['agent_host'], 'codex')
+        claim = run.claim(self.usage())  # no host variables: unknown, no check
+        self.assertEqual(run.load()['active']['agent_host'], 'unknown')
+        run.complete(claim['token'], self.receipt('specify'))
+        self.assertEqual(run.load()['receipts']['specify']['agent_host'], 'unknown')
+
+    def test_missing_evidence_and_unresolved_answers_never_advance(self):
+        run = self.run_object()
+        for stage in ('scope', 'specify'):
+            c = run.claim(self.usage()); run.complete(c['token'], self.receipt(stage))
+        c = run.claim(self.usage()); r = self.receipt('clarify'); r['unresolved'] = 1
+        with self.assertRaisesRegex(w.WorkflowError, 'UNRESOLVED'): run.complete(c['token'], r)
+        self.assertEqual(run.load()['active']['stage'], 'clarify')
+
+    def test_changed_or_deleted_evidence_invalidates_stage(self):
+        run = self.run_object(); claim = run.claim(self.usage()); r = self.receipt('scope')
+        run.complete(claim['token'], r)
+        (self.root / r['evidence'][0]).unlink()
+        self.assertEqual(run.next(run.load())['stage'], 'scope')
+        self.assertEqual(run.next(run.load())['reason'], 'inputs-or-evidence-changed')
+
+    def test_checkpoint_generated_before_context_ceiling(self):
+        run = self.run_object(); result = run.claim(self.usage(.51, method='measured'))
+        self.assertEqual(result['status'], 'paused')
+        self.assertTrue((run.path.parent / 'resume-prompt.md').is_file())
+        self.assertIsNone(run.load()['active'])
+
+    def test_policy_change_invalidates_and_preserves_explicit_selection(self):
+        run = self.run_object(); c = run.claim(self.usage()); run.complete(c['token'], self.receipt('scope'))
+        self.policy['processes']['qa'] = False; self.configure()
+        run = w.Run(self.root, self.feature)
+        self.assertEqual(run.next(run.load())['stage'], 'specify')  # Scope does not repeat for a QA toggle.
+
+    def test_later_process_opt_in_invalidates_from_tasks_and_keeps_prior_evidence(self):
+        self.policy = w.default_policy(False, False)
+        self.configure()
+        run = self.run_object()
+        for stage in ('scope', 'specify', 'clarify', 'plan', 'tasks'):
+            claim = run.claim(self.usage())
+            run.complete(claim['token'], self.receipt(stage))
+        self.policy['processes']['qa'] = True
+        self.configure()
+        run = w.Run(self.root, self.feature)
+        result = run.migrate('Enable QA after review')
+        self.assertEqual(result['next']['stage'], 'tasks')
+        self.assertEqual(set(run.load()['receipts']), {'scope', 'specify', 'clarify', 'plan'})
+        invalidated = self.invalidated(run)  # the lifecycle log records each invalidated stage
+        self.assertEqual([e['stage'] for e in invalidated], ['tasks'])
+        self.assertEqual(invalidated[0]['reason'], 'migrate: Enable QA after review')
+        self.assertIsNone(invalidated[0]['claim_id'])
+
+    def test_checkbox_changes_do_not_invalidate_semantic_tasks(self):
+        p = self.root / self.feature / 'tasks.md';p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text('- [ ] T001 Implement behavior\n')
+        a = w.fingerprint_files(self.root, [p.relative_to(self.root).as_posix()])
+        p.write_text('- [x] T001 Implement behavior\n')
+        self.assertEqual(a, w.fingerprint_files(self.root, a))
+        p.write_text('- [x] T001 Implement different behavior\n')
+        self.assertNotEqual(a, w.fingerprint_files(self.root, a))
+
+    def test_path_traversal_and_binding_conflict_rejected(self):
+        with self.assertRaises(w.WorkflowError): w.Run(self.root, '../other')
+        run = self.run_object()
+        with self.assertRaisesRegex(w.WorkflowError, 'BINDING_CONFLICT'): run.start('acme/app#12')
+
+    def test_unknown_explicit_executor_never_falls_back(self):
+        self.policy['execution']['engine'] = 'superspec'
+        with self.assertRaisesRegex(w.WorkflowError, 'UNAVAILABLE'): w.resolve_commands(self.root, self.policy)
+
+    def test_specify_can_bind_created_branch_only_with_matching_source(self):
+        run = self.run_object(); claim = run.claim(self.usage())
+        run.complete(claim['token'], self.receipt('scope'))
+        claim = run.claim(self.usage())
+        subprocess.run(['git', 'switch', '-qc', 'feature-example'], cwd=self.root, check=True)
+        with self.assertRaisesRegex(w.WorkflowError, 'BRANCH_MISMATCH'): run.load()
+        with self.assertRaisesRegex(w.WorkflowError, 'BINDING_MISMATCH'): run.bind(claim['token'])
+        w.write(run.feature / 'scope-source.json', {'repo':'acme/app','issue':10})
+        (run.feature / 'spec.md').write_text('# Example', encoding='utf-8')
+        self.assertEqual(run.bind(claim['token'])['branch'], 'feature-example')
+        run.complete(claim['token'], self.receipt('specify'))
+
+    def test_changed_package_requires_reviewed_migration(self):
+        run = self.run_object(); c = run.claim(self.usage()); run.complete(c['token'], self.receipt('scope'))
+        (self.root / '.specify/presets/workflow/preset.yml').write_text('schema_version: "1.0"\n# updated', encoding='utf-8')
+        with self.assertRaisesRegex(w.WorkflowError, 'DEPENDENCY_CHANGED'): run.claim(self.usage())
+        self.assertEqual(run.migrate('Reviewed compatible package update')['next']['stage'], 'specify')
+        self.assertEqual(len(list((run.path.parent / 'backups').glob('*.json'))), 1)
+
+    def test_a_same_size_package_edit_with_an_old_mtime_is_still_a_dependency_change(self):
+        # Codex round 5, finding 4: the claim hashes every installed package file; no stat-keyed cache decides it.
+        old = time.time() - 60
+        for path in (self.root / '.specify').rglob('*'):
+            if path.is_file(): os.utime(path, (old, old))
+        run = self.run_object(); c = run.claim(self.usage()); run.complete(c['token'], self.receipt('scope'))
+        preset = self.root / '.specify/presets/workflow/preset.yml'
+        text = preset.read_text(encoding='utf-8')
+        preset.write_text(text.replace('1.0', '1.1'), encoding='utf-8')
+        os.utime(preset, (old, old))
+        with self.assertRaisesRegex(w.WorkflowError, 'DEPENDENCY_CHANGED'): run.claim(self.usage())
+
+    def test_migration_rebinds_a_policy_section_an_upgrade_added(self):
+        """A release that only adds a policy section must not orphan finished evidence."""
+        run = self.run_object(); claim = run.claim(self.usage()); run.complete(claim['token'], self.receipt('scope'))
+        # Model a checkpoint written before delivery/CI digests were split.
+        state = w.read(run.path)
+        state.pop('policy_digest_version')
+        state.pop('ci_policy_digest')
+        state['policy_digest'] = w.digest(state['policy'])
+        w.write(run.path, state)
+        self.policy['ci'] = {'provider': 'github-actions', 'policy': 'self-hosted-required',
+                             'runners': {'linux': ['private-runner']},
+                             'capabilities': {'system_packages': 'sudo-apt', 'python': 'setup-action', 'python_version': '3.13'},
+                             'exceptions': []}
+        self.configure()
+        run = self.run_object()
+        state = w.read(run.path)
+        self.assertNotEqual(state['policy_digest'], w.digest(run.policy))
+        result = run.migrate('Upgrade added the ci selection')
+        state = w.read(run.path)
+        self.assertEqual(state['policy_digest'], w.delivery_digest(run.policy))
+        self.assertEqual(state['policy_digest_version'], w.POLICY_DIGEST_VERSION)
+        self.assertEqual(state['ci_policy_digest'], w.digest(run.policy['ci']))
+        self.assertIn('scope', state['receipts'])
+        self.assertEqual(state['policy_changes'][-1]['via'], 'migrate')
+        self.assertEqual(state['migrations'][-1]['invalidated'], [])
+        self.assertEqual(result['next']['stage'], 'specify')
+
+    def test_migration_still_invalidates_a_semantic_policy_change(self):
+        run = self.run_object(); claim = run.claim(self.usage()); run.complete(claim['token'], self.receipt('scope'))
+        self.policy['scope'] = dict(self.policy.get('scope', {}), artifact_directory='design/scope')
+        self.configure()
+        run = self.run_object()
+        run.migrate('Scope artifact location changed')
+        state = w.read(run.path)
+        self.assertEqual(state['policy_digest'], w.delivery_digest(run.policy))
+        self.assertNotIn('scope', state['receipts'])
+
+    def test_runner_only_change_keeps_new_delivery_receipts_current(self):
+        run = self.run_object(); claim = run.claim(self.usage()); run.complete(claim['token'], self.receipt('scope'))
+        before = run.load()['policy_digest']
+        self.policy['ci']['runners']['linux'] = ['self-hosted', 'project-runner']
+        self.configure()
+        run = self.run_object()
+        state = run.load()
+        self.assertEqual(before, w.delivery_digest(run.policy))
+        self.assertEqual(run.next(state)['stage'], 'specify')
+        self.assertIn('scope', state['receipts'])
+
+    def test_delegation_selection_and_route_edits_keep_receipts_current(self):
+        run = self.run_object(); claim = run.claim(self.usage()); run.complete(claim['token'], self.receipt('scope'))
+        state = w.read(run.path)
+        # A 1.4.0 checkpoint: CI split out, no delegation section in its snapshot.
+        legacy = copy.deepcopy(state)
+        legacy['policy'].pop('delegation')
+        legacy['policy_digest_version'] = 2
+        legacy['policy_digest'] = w.digest({k: v for k, v in legacy['policy'].items() if k != 'ci'})
+        for name, recorded in (('current', state), ('v2-before-delegation', legacy)):
+            with self.subTest(checkpoint=name):
+                w.write(run.path, recorded)
+                for edit in ({'enabled': True}, {'enabled': True, 'install_scope': 'global'},
+                             {'enabled': False}):
+                    self.policy['delegation'].update(edit)
+                    self.policy['delegation']['models']['codex']['standard'] = 'team-model-' + str(len(edit))
+                    self.configure()
+                    run = self.run_object()
+                    current = run.load()
+                    self.assertEqual(current['policy_digest'], w.checkpoint_policy_digest(current, run.policy))
+                    self.assertEqual(run.next(current)['stage'], 'specify')
+                    self.assertIn('scope', current['receipts'])
+
+    def test_explicit_upgrade_revalidation_invalidates_from_selected_stage(self):
+        run=self.run_object();c=run.claim(self.usage());run.complete(c['token'],self.receipt('scope'))
+        self.assertEqual(run.migrate('Scope contract changed',invalidate_from='scope')['next']['stage'],'scope')
+
+    def test_claim_activates_explicit_feature_and_prevents_concurrent_other_feature(self):
+        run=self.run_object();run.claim(self.usage())
+        self.assertEqual(w.read(self.root/'.specify/feature.json')['feature_directory'],self.feature)
+        other=w.Run(self.root,'specs/002-other');other.start('acme/app#20')
+        with self.assertRaisesRegex(w.WorkflowError,'OTHER_FEATURE'):other.claim(self.usage())
+
+    def test_existing_wrong_feature_and_wrong_repository_rejected(self):
+        w.write(self.root/self.feature/'scope-source.json',{'repo':'acme/app','issue':20})
+        with self.assertRaisesRegex(w.WorkflowError,'FEATURE_BINDING'):self.run_object()
+        with self.assertRaisesRegex(w.WorkflowError,'REPOSITORY_MISMATCH'):w.Run(self.root,'specs/002-other').start('other/app#1')
+
+    def test_doctor_blocks_duplicate_hook_ownership(self):
+        (self.root / '.specify/extensions.yml').write_text('hooks:\n  after_tasks:\n    - extension: project\n      command: speckit.project.sync\n', encoding='utf-8')
+        self.assertIn('DUPLICATE_STAGE_OWNER', str(w.doctor(self.root, self.policy)))
+
+    def test_active_legacy_bridge_blocks_competing_executor(self):
+        w.write(self.root/'.specify/superpowers-handoff.json',{'status':'executing','feature_directory':self.feature})
+        self.assertIn('LEGACY_EXECUTOR_OWNS_FEATURE',str(w.doctor(self.root,self.policy)))
+
+    def test_inactive_host_commands_cannot_satisfy_active_host(self):
+        w.write(self.root/'.specify/integration.json',{'default_integration':'claude'})
+        self.assertFalse(w.command_exists(self.root,'speckit.plan'))
+        w.write(self.root/'.specify/integration.json',{'default_integration':'unsupported'})
+        self.assertIn('HOST_UNSUPPORTED',str(w.doctor(self.root,self.policy)))
+
+    def test_core_command_drift_requires_reviewed_upgrade(self):
+        run=self.run_object()
+        path=self.root/'.agents/skills/speckit-specify/SKILL.md';path.write_text('Changed upstream contract')
+        with self.assertRaisesRegex(w.WorkflowError,'DEPENDENCY_CHANGED'):run.claim(self.usage())
+
+    def test_required_spec_cannot_be_omitted_from_receipt_inputs(self):
+        run = self.run_object()
+        for stage in ('scope', 'specify'):
+            claim = run.claim(self.usage()); run.complete(claim['token'], self.receipt(stage))
+        self.assertIn(self.feature + '/spec.md', run.load()['receipts']['specify']['fingerprints'])
+        (run.feature / 'spec.md').write_text('Changed requirement', encoding='utf-8')
+        self.assertEqual(run.next(run.load())['stage'], 'specify')
+
+    def test_missing_required_plan_cannot_pass(self):
+        run = self.run_object()
+        for stage in ('scope', 'specify', 'clarify'):
+            claim = run.claim(self.usage()); run.complete(claim['token'], self.receipt(stage))
+        claim = run.claim(self.usage()); receipt = self.receipt('plan')
+        (run.feature / 'plan.md').unlink()
+        with self.assertRaisesRegex(w.WorkflowError, 'INPUT_MISSING'):
+            run.complete(claim['token'], receipt)
+
+    def test_explicit_clarify_refresh_preserves_artifacts_and_rechecks_remote_stage(self):
+        run = self.run_object()
+        for stage in ('scope', 'specify', 'clarify', 'plan', 'tasks'):
+            claim = run.claim(self.usage()); run.complete(claim['token'], self.receipt(stage))
+        before = {name: (run.feature / name).read_bytes() for name in ('spec.md', 'plan.md', 'tasks.md')}
+        result = run.refresh('clarify', 'Explicit invocation must reread current GitHub answers')
+        self.assertEqual(result['next']['stage'], 'clarify')
+        invalidated = self.invalidated(run)  # the lifecycle log records each invalidated stage
+        self.assertEqual([e['stage'] for e in invalidated], ['clarify', 'plan', 'tasks'])
+        self.assertTrue(all(e['reason'] == 'refresh clarify: Explicit invocation must reread current GitHub answers'
+                            for e in invalidated))
+        self.assertEqual(set(run.load()['receipts']), {'scope', 'specify'})
+        self.assertEqual(before, {name: (run.feature / name).read_bytes() for name in before})
+        self.assertEqual(len(list((run.path.parent / 'backups').glob('*.json'))), 1)
+        claim = run.claim(self.usage())
+        self.assertEqual(claim['mode'], 'revalidate')
+        with self.assertRaisesRegex(w.WorkflowError, 'ACTIVE_CLAIM'):
+            run.refresh('clarify', 'Cannot take over a running claim')
+
+    def test_refresh_cannot_skip_stale_scope_evidence(self):
+        run = self.run_object()
+        for stage in ('scope', 'specify', 'clarify'):
+            claim = run.claim(self.usage()); run.complete(claim['token'], self.receipt(stage))
+        (run.feature / 'evidence/scope.txt').unlink()
+        self.assertEqual(run.refresh('clarify', 'New issue comments')['next']['stage'], 'scope')
+
+    def test_claim_requires_project_setup_but_installation_doctor_does_not(self):
+        (self.root / '.specify/extensions/project/config.json').unlink()
+        self.assertTrue(w.doctor(self.root, self.policy)['ok'])
+        run = self.run_object()
+        with self.assertRaisesRegex(w.WorkflowError, 'PROJECT_NOT_CONFIGURED'):
+            run.claim(self.usage())
+
+    def test_project_doctor_uses_real_column_names_and_detects_missing_mapping(self):
+        path = self.root / '.specify/extensions/project/config.json'; config = w.read(path)
+        names = {name: 'Custom ' + name for name in config['statusOptions']}
+        config['statusOptions'] = {names[name]: value for name, value in config['statusOptions'].items()}
+        config['phaseToStatus'] = {phase: names[name] for phase, name in config['phaseToStatus'].items()}
+        w.write(path, config); self.policy['scope'] = {'statuses': names}
+        self.assertEqual(w.project_errors(self.root, self.policy), [])
+        config['phaseToStatus'].pop('ready'); w.write(path, config)
+        self.assertIn('PROJECT_PHASE_UNMAPPED: ready (expected column Custom Ready, or map it in config.json phaseToStatus)',
+                      w.project_errors(self.root, self.policy))
+
+    def test_managed_project_defaults_do_not_regress_new_spec_to_backlog(self):
+        path = self.root / '.specify/extensions/project/config.json'; path.unlink()
+        self.policy['scope'] = {'statuses': {'Feature Specification': 'Discovery', 'Ready': 'Planned'}}
+        phases = w.project_defaults(self.root, self.policy)['phaseToStatus']
+        self.assertEqual(phases['open'], 'Discovery')
+        self.assertEqual(phases['analysis'], 'Planned')
+        w.write(path, {'projectId': 'P', 'phaseToStatus': {'analysis': 'Technical planning'}})
+        self.assertEqual(w.project_defaults(self.root, self.policy)['phaseToStatus']['analysis'], 'Technical planning')
+        w.write(path, [])
+        with self.assertRaisesRegex(w.WorkflowError, 'PROJECT_CONFIG_INVALID'):
+            w.project_defaults(self.root, self.policy)
+        self.assertEqual(w.project_errors(self.root, self.policy), ['PROJECT_CONFIG_INVALID: expected a JSON object'])
+
+    def test_malformed_policy_and_hooks_fail_before_dispatch(self):
+        policy=w.default_policy(False,False);policy['processes']='invalid'
+        with self.assertRaisesRegex(w.WorkflowError,'SECTION_INVALID'):w.validate_policy(policy)
+        (self.root/'.specify/extensions.yml').write_text('hooks: wrong')
+        with self.assertRaisesRegex(w.WorkflowError,'HOOK_CONFIG_INVALID'):w.doctor(self.root,self.policy)
+
+
+class PureFunctionTests(unittest.TestCase):
+    """Context, host and packaging checks that need no fixture repository (no WorkflowTests.setUp)."""
+    usage = WorkflowTests.usage
+
+    def setUp(self):
+        self.policy = w.default_policy(True, True)
+
+    def test_context_reserves_space_and_labels_estimation(self):
+        gate = w.context_gate(self.policy, self.usage(.46))
+        self.assertFalse(gate['pause'])  # Estimates must never force a fresh session
+        self.assertFalse(gate['guaranteed'])
+        self.assertEqual(gate['method'], 'unavailable')
+        self.policy['context']['mode'] = 'strict'
+        with self.assertRaisesRegex(w.WorkflowError, 'UNENFORCEABLE'): w.context_gate(self.policy, self.usage())
+        usage = self.usage(method='measured'); usage['pre_call_bound'] = True
+        self.assertTrue(w.context_gate(self.policy, usage)['guaranteed'])
+
+    def test_stale_context_rejected(self):
+        self.policy['context']['mode'] = 'strict'
+        usage = self.usage(method='measured'); usage['pre_call_bound'] = True; usage['observed_at'] = (datetime.now(timezone.utc) - timedelta(minutes=3)).isoformat()
+        with self.assertRaisesRegex(w.WorkflowError, 'STALE'): w.context_gate(self.policy, usage)
+
+    def test_running_host_is_detected_from_the_host_cli_environment(self):
+        for env, host in (({'CLAUDECODE': '1'}, 'claude'), ({'CLAUDE_CODE_ENTRYPOINT': 'cli'}, 'claude'),
+                          ({'CODEX_SANDBOX': 'seatbelt'}, 'codex'), ({'CODEX_SANDBOX_NETWORK_DISABLED': '1'}, 'codex'),
+                          ({'CODEX_HOME': '/x', 'CODEX_THREAD_ID': 't'}, None), ({}, None),
+                          ({'CLAUDECODE': '1', 'CODEX_SANDBOX': 'seatbelt'}, None)):  # both present: unknown
+            with self.subTest(env=env):
+                self.assertEqual(w.running_host(env), host)
+
+    def test_every_stage_has_an_installed_reference_file(self):
+        # B8: the core SKILL.md tells the dispatcher exactly which reference to load for
+        # each stage (`claim`'s `reference` field, `stage_reference()`); this proves the
+        # source tree actually ships one references/stage-<name>.md per BASE_STAGES entry,
+        # so no stage's `claim` can ever name a file that does not exist. `reference` is
+        # project-relative (matches the installed layout: `.specify/extensions/workflow/...`),
+        # so it is resolved against the package root by stripping WORKFLOW_PACKAGE_PREFIX.
+        package_root = Path(__file__).resolve().parents[1]
+        seen = set()
+        for stage in w.BASE_STAGES:
+            reference = w.stage_reference(stage)
+            self.assertTrue(reference.startswith(w.WORKFLOW_PACKAGE_PREFIX + 'skills/workflow/references/stage-'), reference)
+            package_relative = reference[len(w.WORKFLOW_PACKAGE_PREFIX):]
+            self.assertTrue((package_root / package_relative).is_file(), reference)
+            seen.add(reference)
+        self.assertEqual(len(seen), len(w.BASE_STAGES), 'stage_reference() must be unique per stage')
+
+    def test_core_skill_stays_under_the_six_kilobyte_budget(self):
+        package_root = Path(__file__).resolve().parents[1]
+        core = package_root / 'skills/workflow/SKILL.ext.md'
+        self.assertLessEqual(core.stat().st_size, 6144, 'Core SKILL.md over the 6 KB budget')
+
+
+if __name__ == '__main__':
+    unittest.main()

@@ -1,0 +1,76 @@
+schema_version: "1.0"
+
+extension:
+  id: progress
+  name: "Sanduq Progress Report"
+  version: "1.7.0"
+  description: "A live, deterministic progress report for a Spec Kit feature: stages over time, workstreams, runs, blockers and decisions, collected from the host's native hooks and the feature files with no agent spent on upkeep."
+  author: "Samy K. Abushanab"
+  repository: "https://github.com/samykabu/sanduq"
+  homepage: "https://github.com/samykabu/sanduq/tree/main/extensions/progress"
+  category: "process"
+  license: MIT
+
+requires:
+  speckit_version: ">=1.1.1.dev0,<2.0.0"
+  tools:
+    - name: python
+      required: true
+      version: ">=3.11"
+
+provides:
+  commands:
+    - name: speckit.progress.init
+      file: commands/init.md
+      description: "Creates the live progress report for the active feature and can install the Claude status line. Use when asked to 'track progress'."
+    - name: speckit.progress.refresh
+      file: commands/refresh.md
+      description: "Forces one progress snapshot now (hooks already refresh it); never marks the feature complete. Use when asked to 'refresh the progress report'."
+    - name: speckit.progress.status
+      file: commands/status.md
+      description: "Prints the one-line progress state (stage, lanes, blockers, decisions), or JSON with --json. Use when asked to 'show progress status'."
+    - name: speckit.progress.theme
+      file: commands/theme.md
+      description: "Sets the progress report look from a preset, the Illustrate theme or a theme file, or shows it. Use when asked to 'change the report theme'."
+    - name: speckit.progress.export
+      file: commands/export.md
+      description: "Writes the progress projection as deterministic Markdown or JSON at no model cost. Use when asked to 'export the progress report'."
+
+hooks:
+  after_tasks:
+    command: speckit.progress.init
+    optional: true
+    prompt: "Create the live progress report for this feature?"
+    description: "Create the report as soon as the task list exists"
+  after_implement:
+    command: speckit.progress.refresh
+    optional: true
+    prompt: "Write a final progress snapshot?"
+    description: "Forces one snapshot. It does not declare the feature complete"
+
+events:
+  session_start:
+    command: speckit.progress.hook
+    timeout: 10
+  pre_tool_use:
+    command: speckit.progress.hook
+    matcher: "Task|Agent|spawn_agent"
+    timeout: 10
+  post_tool_use:
+    command: speckit.progress.hook
+    timeout: 10
+  stop:
+    command: speckit.progress.hook
+    timeout: 10
+  session_end:
+    command: speckit.progress.hook
+    timeout: 10
+
+tags:
+  - "progress"
+  - "report"
+  - "dashboard"
+  - "lanes"
+  - "telemetry"
+  - "hooks"
+  - "workflow"

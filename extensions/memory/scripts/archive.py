@@ -1,0 +1,1559 @@
+#!/usr/bin/env python3
+"""Sanduq Spec Kit Memory archival. All CLI results are JSON; failures exit 1."""
+
+from __future__ import annotations
+
+import argparse
+import base64
+from datetime import datetime, timezone
+import fnmatch
+import json
+import os
+from pathlib import Path
+import re
+import subprocess
+import sys
+import tempfile
+import uuid
+from contextlib import nullcontext
+
+from git_state import ArchiveError, Repository, atomic_write, digest, write_json
+from memory import MEMORY, REGISTRY, inventory, read_memory, validate_knowledge
+import memory_delta
+import memory_query
+import memory_store
+import orchestration
+
+try:
+    import check_inputs
+    import bounded_json
+except ModuleNotFoundError:
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'scripts' / 'shared'))
+    import check_inputs
+    import bounded_json
+
+EXTENSION = ".specify/extensions/memory"
+HELPER = "python " + EXTENSION + "/scripts/archive.py"
+FORMAT_1_REFERENCE = EXTENSION + "/references/format-1.md"
+STUB = """# Project memory
+
+Project memory moved to [`specs/memory/`](memory/INDEX.md): one file per entry, a domain catalog for browsing, and
+provenance kept out of the reading path. Start at `specs/memory/INDEX.md`.
+
+For the full single-document view, run
+`python .specify/extensions/memory/scripts/archive.py memory export`.
+"""
+POLICY = ".specify/memory-policy.json"
+PRODUCT_PREFIXES = ("src/", "tests/", "scripts/", "e2e/")
+PRODUCT_FILES = ("Directory.Build.props", "global.json", "package.json", "package-lock.json")
+GUARD_PATHS = [f"{directory}/{language}/create-new-feature.{suffix}"
+               for directory in (".specify/scripts", ".specify/extensions/git/scripts")
+               for language, suffix in (("bash", "sh"), ("powershell", "ps1"))]
+GUARD_PATHS += [f".specify/extensions/git/scripts/{language}/auto-commit.{suffix}"
+                for language, suffix in (("bash", "sh"), ("powershell", "ps1"))]
+# Sanduq Workflow's reconcile disables these two in a managed project and runs their handoff itself, so
+# their `enabled:` line is not bound by the approval. Everything else in every Memory hook entry is.
+WORKFLOW_OWNED_HOOKS = ("speckit.memory.session", "speckit.memory.prepare")
+
+
+def portable(content: bytes) -> bytes:
+    """Approved text with CRLF folded to LF, so a checkout under core.autocrlf keeps the approval. Binary and
+    non-UTF-8 content stays byte exact and a lone CR is kept, as in Workflow's `sanduq_hash.portable_content`."""
+    if b"\0" in content:
+        return content
+    try:
+        content.decode("utf-8")
+    except UnicodeDecodeError:
+        return content
+    return content.replace(b"\r\n", b"\n")
+
+
+def memory_hooks(text: str) -> list[str]:
+    """Each Memory hook entry of `.specify/extensions.yml` as `event` + its block, sorted, for the approval hash.
+    The block keeps command, condition, priority and every other line; `enabled:` is dropped only for the two
+    Workflow-owned hooks. A Memory entry in a layout this reader does not parse refuses instead of being skipped."""
+    text = text.replace("\r\n", "\n")
+    found = []
+    section = re.search(r"^hooks:[ \t]*\n((?:(?:[ \t]+.*|[ \t]*)(?:\n|$))*)", text, re.M)
+    events = re.split(r"^  ([A-Za-z_][\w-]*):[ \t]*\n", section.group(1), flags=re.M) if section else [""]
+    for event, body in zip(events[1::2], events[2::2]):
+        for block in re.findall(r"^  - extension: memory[ \t]*\n(?:(?!  - |  \S).*(?:\n|$))*", body, re.M):
+            command = re.search(r"^    command: (speckit\.memory\.[\w-]+)[ \t]*$", block, re.M)
+            if not command:
+                raise ArchiveError(f"A Memory hook entry under {event} in .specify/extensions.yml has no readable "
+                                   "command; restore it (run speckit.memory.init) and review the policy again.")
+            if command.group(1) in WORKFLOW_OWNED_HOOKS:
+                block = re.sub(r"^    enabled:.*(?:\n|$)", "", block, flags=re.M)
+            found.append(event + ":\n" + block.rstrip("\n"))
+    mentions = len(re.findall(r"\bextension:[ \t]*[\"']?memory[\"']?(?=[\s,}]|$)", text))
+    if mentions != len(found):
+        raise ArchiveError(f".specify/extensions.yml has {mentions} Memory hook entries but only {len(found)} in the "
+                           "layout the approval reads (`hooks:` > event > `- extension: memory` first); restore them "
+                           "(run speckit.memory.init) and review the policy again.")
+    return sorted(found)
+
+
+def now() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def load(path: Path, default=None):
+    if not path.exists() and default is not None:
+        return default
+    try:
+        return json.loads(path.read_text(encoding="utf-8-sig"))
+    except (OSError, ValueError) as error:
+        raise ArchiveError(f"Cannot read JSON at {path}: {error}") from error
+
+
+def verification_report(run: dict) -> dict:
+    """Report an explicit manual override without turning a skip into a pass."""
+    reason = run.get("skip_verification")
+    if reason is None:
+        return {"status": "passed" if run.get("phase") == "done" else "required"}
+    if (run.get("automatic") or not isinstance(reason, str) or not reason.strip()
+            or len(reason.strip()) > 500
+            or not reason.isprintable()):
+        raise ArchiveError("Skipping verification requires a nonempty single-line reason of at most 500 characters and manual selection.")
+    return {"status": "skipped", "reason": reason.strip()}
+
+
+class Archive:
+    def __init__(self, root: str | Path):
+        self.repo = Repository(root)
+        self.policy = load(self.repo.path(POLICY))
+        if self.policy.get("schema_version") != 1:
+            raise ArchiveError("Unsupported memory policy. Run the memory init command first.")
+        if (self.policy.get("memory_path", MEMORY) != MEMORY
+                or self.policy.get("memory_root", memory_store.MEMORY_DIR) != memory_store.MEMORY_DIR
+                or self.policy.get("fixture_root", "tests/Fixtures/spec-memory") != "tests/Fixtures/spec-memory"):
+            raise ArchiveError("Memory and fixture locations are fixed for this extension version.")
+        branch = self.policy.get("target_branch", "")
+        if not isinstance(branch, str) or not branch or branch.startswith("-"):
+            raise ArchiveError("Configure a valid target_branch in .specify/memory-policy.json.")
+        self.repo.git("check-ref-format", "--branch", branch)
+        if not isinstance(self.policy.get("guard_hooks", False), bool):
+            raise ArchiveError("guard_hooks in .specify/memory-policy.json must be true or false.")
+        self.product_prefixes = tuple(self.policy.get("product_prefixes", PRODUCT_PREFIXES))
+        self.product_files = tuple(self.policy.get("product_files", PRODUCT_FILES))
+        for prefix in self.product_prefixes:
+            if not isinstance(prefix, str) or not prefix.endswith("/"):
+                raise ArchiveError("Product prefixes must be canonical directories with a trailing slash.")
+            self.repo.path(prefix[:-1])
+        for path in self.product_files:
+            self.repo.path(path)
+
+    def policy_hash(self) -> str:
+        values = [POLICY.encode(), portable(self.repo.path(POLICY).read_bytes())]
+        root = self.repo.path(EXTENSION)
+        for file in sorted(root.rglob("*")):
+            if file.is_file() and "__pycache__" not in file.parts and "tests" not in file.relative_to(root).parts:
+                values.extend([file.relative_to(root).as_posix().encode(), portable(file.read_bytes())])
+        for path in self.approval_paths():
+            values.extend([path.encode(), portable(self.repo.path(path).read_bytes())])
+        for path in ("AGENTS.md", "CLAUDE.md", ".github/copilot-instructions.md"):
+            target = self.repo.path(path)
+            if target.exists():
+                block = re.search(r"<!-- SANDUQ MEMORY SESSION START -->.*?<!-- SANDUQ MEMORY SESSION END -->", target.read_text(encoding="utf-8"), re.S)
+                values.extend([path.encode(), block.group().encode() if block else b"missing"])
+        config = self.repo.path(".specify/extensions.yml")
+        if config.exists():
+            values.extend([b"hooks:v2", "\n".join(memory_hooks(config.read_text(encoding="utf-8"))).encode()])
+        return digest(b"\0".join(values))
+
+    def approval_paths(self) -> list[str]:
+        paths = list(GUARD_PATHS)
+        for command in self.repo.path(EXTENSION + "/commands").glob("*.md"):
+            for host in (".agents", ".claude"):
+                paths.append(f"{host}/skills/speckit-memory-{command.stem}/SKILL.md")
+            for host, suffix in (("agents", "agent"), ("prompts", "prompt")):
+                paths.append(f".github/{host}/speckit.memory.{command.stem}.{suffix}.md")
+        return sorted(p for p in paths if self.repo.path(p).is_file())
+
+    def approval(self) -> dict:
+        approval = load(self.repo.state / "approval.json", {})
+        if approval.get("policy_hash") != self.policy_hash():
+            raise ArchiveError("Automatic mode is disabled or needs policy/implementation review and renewal.")
+        return approval
+
+    def enable(self, approved_hash: str) -> dict:
+        if approved_hash != self.policy_hash():
+            raise ArchiveError("Review the current policy and pass its exact policy_hash to enable.")
+        if not self.policy.get("checks"):
+            raise ArchiveError("Configure verification commands before enabling automatic archival.")
+        self.repo.check_scope([EXTENSION], clean=True)
+        committed_integration = [POLICY] + [p for p in self.approval_paths() if not p.startswith(".agents/")]
+        committed_integration += [p for p in ("AGENTS.md", "CLAUDE.md", ".github/copilot-instructions.md", ".specify/extensions.yml")
+                                  if self.repo.path(p).exists()]
+        self.repo.check_scope(committed_integration, clean=True)
+        approval = {"policy_hash": approved_hash, "enabled_at": now(), "root": str(self.repo.root)}
+        write_json(self.repo.state / "approval.json", approval)
+        return approval
+
+    def spec(self, name: str) -> str:
+        path = self.repo.path(name)
+        # Spec Kit's `001-name` and `20260101-120000-name`, and Workflow's unpadded `<issue>-<slug>` (its slug keeps
+        # Unicode word characters); never `specs/memory` or another folder without a leading number.
+        if path.parent != self.repo.root / "specs" or not re.fullmatch(r"\d+[a-z]?(?:-\w+)+", path.name):
+            raise ArchiveError("Select a full feature directory directly under specs/.")
+        if not path.is_dir():
+            raise ArchiveError(f"Feature directory does not exist: {name}")
+        return name
+
+    def queue(self, spec: str, checks: list[str] | None = None) -> dict:
+        spec = self.spec(spec)
+        approval = self.approval()
+        branch = self.repo.git("branch", "--show-current").decode().strip()
+        if branch == self.policy["target_branch"]:
+            raise ArchiveError("Automatic work must be queued on its implementation branch before merge.")
+        checks = checks or self.policy.get("default_checks", [])
+        self.require_checks(checks, [])
+        base = self.repo.git("merge-base", "HEAD", self.policy["target_branch"]).decode().strip()
+        changed = set(self.repo.names("diff", "--name-only", "-z", base, "HEAD")) | self.repo.dirty()
+        links = {p for p, details in self.repo.index().items() if details.startswith("160000 ")}
+        merge_inputs = {p: (self.product_state()[p] if p in links else self.repo.file_hash(p))
+                        for p in changed if p.startswith(self.product_prefixes) or p in self.product_files or p in links}
+        self.require_checks(checks, list(merge_inputs))
+        merge_inputs[spec + "/spec.md"] = self.repo.file_hash(spec + "/spec.md")
+        queue = load(self.repo.state / "pending.json", {})
+        queue[spec] = {"queued_at": now(), "enabled_at": approval["enabled_at"],
+                       "root": str(self.repo.root), "head": self.repo.head(), "branch": branch,
+                       "checks": checks, "base": base, "spec_hashes": self.spec_files([spec]), "merge_inputs": merge_inputs}
+        write_json(self.repo.state / "pending.json", queue)
+        return {"queued": spec, "deletion": False}
+
+    def product_state(self) -> dict:
+        result = {}
+        for path, details in self.repo.index().items():
+            if details.startswith("160000 "):
+                sub = self.repo.path(path)
+                actual = subprocess.run(["git", "rev-parse", "HEAD"], cwd=sub, capture_output=True)
+                dirty = subprocess.run(["git", "status", "--porcelain"], cwd=sub, capture_output=True)
+                expected = details.split()[1]
+                if actual.returncode or dirty.returncode or actual.stdout.decode().strip() != expected or dirty.stdout:
+                    raise ArchiveError(f"Submodule evidence is missing, dirty or differs from its gitlink: {path}")
+                result[path] = expected
+            elif path.startswith(self.product_prefixes) or path in self.product_files:
+                result[path] = self.repo.file_hash(path)
+        for path in self.repo.names("ls-files", "--others", "--exclude-standard", "-z"):
+            if path.startswith(self.product_prefixes) or path in self.product_files:
+                result[path] = self.repo.file_hash(path)
+        return result
+
+    def complete(self, spec: str) -> None:
+        taskfile = self.repo.path(spec + "/tasks.md")
+        if not taskfile.is_file():
+            raise ArchiveError(f"Completion requires tasks.md: {spec}")
+        tasks = re.findall(r"^\s*[-*]\s+\[([ xX])\]", taskfile.read_text(encoding="utf-8-sig"), re.M)
+        if not tasks or any(marker == " " for marker in tasks):
+            raise ArchiveError(f"Feature has absent or unfinished tasks: {spec}")
+        context = load(self.repo.path(spec + "/.spec-context.json"), {})
+        if context and context.get("status") not in ("implemented", "completed"):
+            raise ArchiveError(f"Feature is not at a completion boundary: {spec}")
+
+    def run_checks(self, checks: list[str]) -> list[dict]:
+        if not checks or len(set(checks)) != len(checks):
+            raise ArchiveError("Specify a nonempty unique list of approved checks.")
+        # Validate the complete selection before the first expensive command.
+        self.check_commands(checks)
+        results = []
+        for name in checks:
+            check = self.policy.get("checks", {}).get(name)
+            if not check or not isinstance(check.get("argv"), list) or not check["argv"]:
+                raise ArchiveError(f"Unknown/invalid approved check: {name}")
+            argv = [sys.executable if a == "{python}" else a for a in check["argv"]]
+            if any(not isinstance(a, str) for a in argv):
+                raise ArchiveError("Verification commands must be argument arrays, not shell text.")
+            before, unknown = self.check_identity(name)
+            logdir = self.repo.state / 'checks'
+            pointer = logdir / (digest(name.encode('utf-8')) + '.json')
+            try:
+                prior = load(pointer, {})
+            except ArchiveError as exc:
+                prior = {'invalid_pointer': str(exc)}
+            if before and self.reusable_check(prior, before):
+                results.append({**prior['result'], 'status': 'reused'})
+                continue
+            attempt = logdir / 'attempts' / uuid.uuid4().hex
+            attempt.mkdir(parents=True, exist_ok=False)
+            logfile = attempt / 'output.log'
+            exit_code, failure = None, None
+            try:
+                with logfile.open("wb") as log:
+                    executed = subprocess.run(argv, cwd=self.repo.root, stdout=log, stderr=subprocess.STDOUT,
+                                              timeout=check.get("timeout_seconds", 900), shell=False,
+                                              env=check_inputs.execution_environment())
+                    exit_code = executed.returncode
+            except (OSError, subprocess.TimeoutExpired) as error:
+                failure = str(error)
+            after, after_unknown = self.check_identity(name)
+            stable = before is not None and before == after
+            result = {'name': name, 'exit_code': exit_code, 'log': str(logfile),
+                      'sha256': check_inputs.file_digest(logfile), 'status': 'executed',
+                      'reuse_status': 'unknown' if unknown else 'invalidated' if prior else 'executed',
+                      'reuse_reason': unknown or after_unknown,
+                      'inputs_unchanged': stable, 'attempt_id': attempt.name}
+            receipt = {'schema_version': 1, 'identity': before, 'result': result,
+                       'outcome': ('invalidated' if before is not None and not stable else
+                                   'passed' if exit_code == 0 and not failure else 'failed'),
+                       'failure': failure, 'previous_attempt': prior.get('result', {}).get('attempt_id')}
+            receipt_path = attempt / 'receipt.json'
+            with receipt_path.open('x', encoding='utf-8', newline='\n') as stream:
+                json.dump(receipt, stream, ensure_ascii=False, indent=2)
+                stream.write('\n')
+            result = {**result, 'receipt': str(receipt_path), 'receipt_sha256': check_inputs.file_digest(receipt_path)}
+            write_json(pointer, {'result': result, 'identity': before})
+            if failure or exit_code:
+                raise ArchiveError(f"Check {name} failed ({exit_code}): {failure or 'command failure'}. Log: {logfile}")
+            if before is not None and not stable:
+                raise ArchiveError(f"Check {name} changed declared inputs during execution. Receipt: {receipt_path}")
+            results.append(result)
+        return results
+
+    def check_identity(self, name):
+        check = self.policy['checks'][name]
+        argv = [sys.executable if a == '{python}' else a for a in check['argv']]
+        try:
+            return check_inputs.manifest_identity(self.repo.root, check, argv, check.get('inputs')), None
+        except (check_inputs.InputIdentityError, OSError) as exc:
+            return None, str(exc)
+
+    def reusable_check(self, pointer, expected):
+        try:
+            result = pointer['result']
+            path = Path(result['receipt'])
+            if not path.resolve().is_relative_to((self.repo.state / 'checks' / 'attempts').resolve()):
+                return False
+            if check_inputs.file_digest(path) != result['receipt_sha256']:
+                return False
+            receipt = load(path)
+            recorded = receipt['result']
+            return (receipt['identity'] == expected == pointer['identity']
+                    and receipt['outcome'] == 'passed' and recorded['exit_code'] == 0
+                    and recorded['inputs_unchanged'] is True
+                    and {k: v for k, v in result.items() if k not in ('receipt', 'receipt_sha256')} == recorded
+                    and Path(recorded['log']).resolve().parent == path.resolve().parent
+                    and check_inputs.file_digest(recorded['log']) == recorded['sha256'])
+        except (ArchiveError, OSError, ValueError, KeyError, TypeError):
+            return False
+
+    def declared_hashes(self, checks):
+        """Transaction freshness also binds declared inputs outside the product prefixes."""
+        files = {item['path'] for item in self.policy.get('project_checks', [])}
+        for name in checks:
+            check = self.policy['checks'][name]
+            files.update(check.get('references', []))
+            declaration = check.get('inputs', {})
+            if not isinstance(declaration, dict):
+                continue
+            files.update(declaration.get('files', []))
+            for label in declaration.get('directories', []):
+                directory = self.repo.path(label)
+                # Directory membership is part of the map, including empty directories.
+                files.add(label)
+                if directory.is_dir():
+                    files.update(p.relative_to(self.repo.root).as_posix() for p in directory.rglob('*'))
+        result = {}
+        for label in sorted(files):
+            path = self.repo.path(label)
+            result[label + '/' if path.is_dir() else label] = 'directory' if path.is_dir() else self.repo.file_hash(label)
+        return result
+
+    def proof_guard(self, result):
+        try:
+            if type(result['exit_code']) is not int or result['exit_code'] != 0 or check_inputs.file_digest(result['log']) != result['sha256']:
+                raise ValueError('output changed')
+            if 'receipt' in result:
+                path = Path(result['receipt'])
+                if not path.resolve().is_relative_to((self.repo.state / 'checks/attempts').resolve()) or check_inputs.file_digest(path) != result['receipt_sha256']:
+                    raise ValueError('receipt changed')
+                receipt = load(path)
+                expected = {k: v for k, v in result.items() if k not in ('receipt', 'receipt_sha256', 'status')}
+                recorded = {k: v for k, v in receipt['result'].items() if k != 'status'}
+                if receipt['outcome'] != 'passed' or expected != recorded:
+                    raise ValueError('receipt did not pass')
+                if receipt.get('identity') is not None and receipt['identity'] != self.check_identity(result['name'])[0]:
+                    raise ValueError('identity changed')
+        except (OSError, ValueError, KeyError, TypeError) as exc:
+            raise ArchiveError('Completion proof is missing or changed; verify again.') from exc
+
+    def check_commands(self, names):
+        if not names or len(names) != len(set(names)):
+            raise ArchiveError('Specify a nonempty unique list of approved checks.')
+        for name in names:
+            check = self.policy.get('checks', {}).get(name)
+            if not isinstance(check, dict):
+                raise ArchiveError(f'Unknown/invalid approved check: {name}')
+            argv = check.get('argv')
+            if not isinstance(argv, list) or not argv or not all(isinstance(a, str) and a.strip() for a in argv):
+                raise ArchiveError(f'Invalid argv for check: {name}')
+            argv = [sys.executable if a == '{python}' else a for a in argv]
+            try:
+                executable = check_inputs.executable_identity(self.repo.root, argv)
+            except check_inputs.InputIdentityError as exc:
+                raise ArchiveError(str(exc)) from exc
+            timeout = check.get('timeout_seconds', 900)
+            if type(timeout) is not int or not 0 < timeout <= 28800:
+                raise ArchiveError(f'Invalid timeout for check: {name}')
+            for field in ('required_args', 'forbidden_args'):
+                if not isinstance(check.get(field, []), list) or not all(isinstance(a, str) for a in check.get(field, [])):
+                    raise ArchiveError(f'Invalid {field} for check: {name}')
+            if any(a not in argv[1:] for a in check.get('required_args', [])):
+                raise ArchiveError(f'Missing required argument for check: {name}')
+            if any(a in argv[1:] for a in check.get('forbidden_args', [])):
+                raise ArchiveError(f'Forbidden argument for check: {name}')
+            try:
+                check_inputs.command_input(self.repo.root, argv)
+            except check_inputs.InputIdentityError as exc:
+                raise ArchiveError(str(exc)) from exc
+            for label in check.get('references', []):
+                if not self.repo.path(label).is_file():
+                    raise ArchiveError(f'Declared checker/configuration/fixture/reference missing: {label}')
+            branch = check.get('required_branch')
+            if branch is not None and branch != self.policy['target_branch']:
+                raise ArchiveError(f'Check {name} assumes retiring branch {branch}; configure target branch {self.policy["target_branch"]}.')
+
+    def preflight(self, specs, checks, related=None, *, run=None, skip_verification=False, preparing=False):
+        """Deterministic archive guards; repairable references remain synthesis inputs."""
+        specs = sorted({self.spec(s) for s in specs})
+        if not specs:
+            raise ArchiveError('Preflight requires explicit specs or a prepared run.')
+        related = related or []
+        for label in related:
+            path = self.repo.path(label)
+            if label.startswith('.specify/') or label in (MEMORY, REGISTRY) or path.is_dir():
+                raise ArchiveError('Related changes must be explicit implementation files, not directories or archive configuration.')
+            if label not in self.repo.tracked() and not path.is_file():
+                raise ArchiveError('Related scope must enumerate existing or tracked files: ' + label)
+        references = self.references(specs)
+        files = self.spec_files(specs)
+        memory_paths = [MEMORY, REGISTRY]
+        if self.memory_format() == 2:
+            memory_paths += [memory_store.INDEX, memory_store.TAXONOMY]
+            self.repo.check_scope([memory_store.MEMORY_DIR], clean=True)
+        self.repo.check_scope(specs + references + related + memory_paths)
+        self.repo.check_scope(references + memory_paths, clean=True)
+        ignored = self.repo.ignored(memory_paths)
+        if ignored:
+            raise ArchiveError(f'Archive output would be ignored and unrecoverable from Git: {ignored[0]}')
+        if not skip_verification:
+            self.check_commands(checks)
+            self.require_checks(checks, references + sorted({p for s in specs for p in self.verification_paths(s)}))
+        pending_inputs = []
+        for name in checks:
+            declaration = self.policy['checks'][name].get('inputs', {})
+            if not isinstance(declaration, dict):
+                raise ArchiveError(f'Check input declaration must be an object: {name}')
+            for key in ('files', 'directories'):
+                labels = declaration.get(key, [])
+                if not isinstance(labels, list):
+                    raise ArchiveError(f'Check input {key} must be a list: {name}')
+                for label in labels:
+                    path = self.repo.path(label)
+                    present = path.is_file() if key == 'files' else path.is_dir()
+                    if not present:
+                        source = 'specs/' + label.removeprefix('tests/Fixtures/spec-memory/')
+                        if (preparing or run is not None) and label.startswith('tests/Fixtures/spec-memory/') and source in files:
+                            pending_inputs.append({'check': name, 'path': label, 'status': 'candidate-migration-required'})
+                        else:
+                            raise ArchiveError(f'Declared checker/configuration/fixture input missing: {label}')
+        # Explicit project checks bind real configuration fields, never historical prose.
+        for item in self.policy.get('project_checks', []):
+            if not isinstance(item, dict) or set(item) != {'path', 'json_pointer', 'equals'}:
+                raise ArchiveError('project_checks require path, json_pointer and equals.')
+            value = load(self.repo.path(item['path']))
+            pointer = item['json_pointer']
+            if not isinstance(pointer, str) or not pointer.startswith('/'):
+                raise ArchiveError('Project check json_pointer must start with /.')
+            for part in pointer[1:].split('/'):
+                part = part.replace('~1', '/').replace('~0', '~')
+                value = value[int(part)] if isinstance(value, list) else value[part]
+            expected = self.policy['target_branch'] if item['equals'] == '{target_branch}' else item['equals']
+            if value != expected:
+                raise ArchiveError(f'Project configuration assumption failed: {item["path"]}{pointer}; expected {expected!r}, found {value!r}.')
+        result = {'schema_version': 1, 'ok': True, 'specs': specs, 'checks': checks,
+                  'files': len(files), 'references': [{'path': p, 'status': 'repair-required'} for p in references],
+                  'pending_inputs': pending_inputs,
+                  'candidate_guards': 'pending', 'verification': 'skipped' if skip_verification else 'selected'}
+        if run is not None:
+            self.source_guard(run)
+            outputs, report = self.materialize(run)
+            for pending in pending_inputs:
+                if outputs.get(pending['path']) is None:
+                    raise ArchiveError('Candidate must materialize declared fixture: ' + pending['path'])
+            result.update(candidate_guards='passed', output_count=len(outputs), paths=sorted(outputs), **(report or {}))
+        return result
+
+    def evidence_file(self, spec: str) -> Path:
+        return self.repo.state / "verification" / (Path(spec).name + ".json")
+
+    def verify(self, spec: str, checks: list[str], related: list[str] | None = None) -> dict:
+        spec = self.spec(spec)
+        self.complete(spec)
+        related = related or []
+        self.repo.check_scope([spec, *related])
+        for path in related:
+            self.repo.path(path)
+            if self.repo.path(path).is_dir() or not path.startswith(self.product_prefixes):
+                raise ArchiveError("Verification related scope must enumerate implementation files.")
+        other = [p for p in self.repo.dirty() if p.startswith(self.product_prefixes) and p not in related]
+        if other:
+            raise ArchiveError(f"Commit other implementation changes or enumerate related files: {other}")
+        head = self.repo.head()
+        product = self.product_state()
+        spec_hashes = self.spec_files([spec])
+        self.require_checks(checks, self.verification_paths(spec))
+        self.preflight([spec], checks, related)
+        declared = self.declared_hashes(checks)
+        results = self.run_checks(checks)
+        if (head != self.repo.head() or product != self.product_state() or spec_hashes != self.spec_files([spec])
+                or declared != self.declared_hashes(checks)):
+            raise ArchiveError("Verification changed source inputs. Commit those changes and verify again.")
+        result = {"spec": spec, "completed": True, "head": head, "policy_hash": self.policy_hash(),
+                  "product": product, "spec_hashes": spec_hashes, "checks": results, "verified_at": now(),
+                  'declared_hashes': declared}
+        write_json(self.evidence_file(spec), result)
+        return result
+
+    def verification_paths(self, spec: str) -> list[str]:
+        queued = load(self.repo.state / "pending.json", {}).get(spec, {})
+        base = queued.get("base")
+        # Unqueued features: only what their own mainline merges brought in, not all later history.
+        merges = [] if base else self.repo.git("log", "--first-parent", "--merges", "--diff-merges=first-parent",
+                                               "--no-patch", "--format=%H", "HEAD", "--", *self.repo.pathspec([spec])).decode().split()
+        if merges:
+            changed = {p for m in merges for p in self.repo.names("diff", "--name-only", "-z", m + "^1", m)} | self.repo.dirty()
+        else:
+            if not base:
+                introduced = self.repo.git("log", "--reverse", "--diff-filter=A", "--format=%H", "--", spec + "/spec.md").decode().splitlines()
+                if introduced:
+                    parents = self.repo.git("rev-list", "--parents", "-n", "1", introduced[0]).decode().split()
+                    base = parents[1] if len(parents) > 1 else None
+            if base:
+                changed = set(self.repo.names("diff", "--name-only", "-z", base, "HEAD")) | self.repo.dirty()
+            else:
+                changed = set(self.product_state())
+        links = {p for p, details in self.repo.index().items() if details.startswith("160000 ")}
+        return sorted(p for p in changed if p.startswith(self.product_prefixes) or p in self.product_files or p in links)
+
+    def spec_files(self, specs: list[str], *, allow_empty=False) -> dict:
+        files = {}
+        tracked = set(self.repo.tracked())
+        for spec in specs:
+            directory = self.repo.path(spec)
+            for path in sorted(directory.rglob("*")):
+                relative = path.relative_to(self.repo.root).as_posix()
+                self.repo.path(relative)
+                if path.is_file():
+                    files[relative] = self.repo.file_hash(relative)
+                elif not path.is_dir():
+                    raise ArchiveError(f"Nonregular archive artifact: {relative}")
+            # Checkpoints start from HEAD; ignored index-only additions cannot be recovered from that tree.
+            ignored = self.repo.ignored([p for p in files if self.repo.within(p, [spec])])
+            committed = self.repo.exists_at(self.repo.head(), ignored)
+            ignored = [p for p in ignored if not committed[p]]
+            runtime = self.repo.local_runtime([p for p in ignored if p not in tracked])
+            for path in runtime:
+                files.pop(path)
+            ignored = [p for p in ignored if p not in runtime]
+            if ignored:
+                raise ArchiveError(f"Ignored artifacts are not recoverable from the checkpoint: {ignored}")
+        if not files and not allow_empty:
+            raise ArchiveError("Selected features contain no artifacts.")
+        return files
+
+    @staticmethod
+    def live_reference(text: str, specs: list[str]) -> bool:
+        # Historical references name an immutable commit and can survive deletion.
+        text = re.sub(r"(?:git:[0-9a-f]{40,64}:|git show [0-9a-f]{40,64}:)[^\s`<>\"]+", "", text)
+        text = re.sub(r"https?://[^\s)]+/blob/[0-9a-f]{40,64}/[^\s)]+", "", text)
+        text = re.sub(r"tests/Fixtures/spec-memory/[^\s`<>\"']+", "", text)
+        for spec in specs:
+            text = re.sub(r"(['\"]spec-memory['\"]\s*,\s*['\"])" + re.escape(Path(spec).name) + r"(['\"])", r"\1fixture\2", text)
+        return any(re.search(r"specs[/\\\\]" + re.escape(Path(spec).name) + r"(?:[/\\\\\"'\s)<>`]|$)", text)
+                   or re.search(r"['\"]specs['\"]\s*(?:,|/)\s*['\"]" + re.escape(Path(spec).name) + r"['\"]", text)
+                   for spec in specs)
+
+    def references(self, specs: list[str]) -> list[str]:
+        result = []
+        for path in self.repo.tracked():
+            if (self.repo.within(path, specs) or path in (MEMORY, REGISTRY)
+                    or self.repo.within(path, [memory_store.MEMORY_DIR])
+                    or path.startswith((".specify/extensions/", "tests/Fixtures/spec-memory/"))):
+                continue
+            target = self.repo.path(path)
+            if not target.is_file():
+                continue
+            try:
+                text = target.read_text(encoding="utf-8-sig")
+            except UnicodeError:
+                continue
+            if self.live_reference(text, specs):
+                result.append(path)
+        return result
+
+    def eligibility(self, spec: str) -> dict:
+        self.complete(spec)
+        evidence = load(self.evidence_file(spec), {})
+        if not evidence.get("completed") or evidence.get("policy_hash") != self.policy_hash():
+            raise ArchiveError(f"Run verified completion checks for {spec} under the current policy.")
+        if evidence["product"] != self.product_state() or evidence["spec_hashes"] != self.spec_files([spec]):
+            raise ArchiveError(f"Completion evidence is stale: {spec}")
+        checks = [check['name'] for check in evidence['checks']]
+        if not checks or len(checks) != len(set(checks)):
+            raise ArchiveError(f'Run verified completion checks for {spec}.')
+        if 'declared_hashes' in evidence and evidence['declared_hashes'] != self.declared_hashes(checks):
+            raise ArchiveError(f'Completion declared inputs are stale: {spec}')
+        for check in evidence['checks']:
+            self.proof_guard(check)
+        self.repo.git("merge-base", "--is-ancestor", evidence["head"], self.repo.head())
+        return evidence
+
+    def pending(self) -> dict:
+        try:
+            approval = self.approval()
+        except ArchiveError as error:
+            return {"enabled": False, "ready": [], "blocked": [], "reason": str(error),
+                    **self.operational_state()}
+        queue = load(self.repo.state / "pending.json", {})
+        branch = self.repo.git("branch", "--show-current").decode().strip()
+        # The policy facts Workflow's handoff needs, so it skips a second helper process (`policy`).
+        result = {"enabled": True, "ready": [], "needs_verification": [], "blocked": [], **self.operational_state(),
+                  "policy_hash": approval["policy_hash"],
+                  "policy": {"target_branch": self.policy["target_branch"],
+                             "default_checks": self.policy.get("default_checks", [])}}
+        if result["guard_blockers"]:
+            result["blocked"].append({"reason": "Archive number guards need reinstall/repair", "paths": result["guard_blockers"]})
+            return result
+        for spec, item in queue.items():
+            try:
+                if item["root"] != str(self.repo.root):
+                    raise ArchiveError("Queue entry belongs to another worktree.")
+                if item["enabled_at"] != approval["enabled_at"]:
+                    # Kept as queued, never re-stamped: the owner approved a different policy then.
+                    raise ArchiveError("Queue entry predates current enablement (queued under the approval of "
+                                       f"{item['enabled_at']}): archive it manually with speckit.memory.run --spec "
+                                       f"{spec}, or re-queue it from its implementation branch.")
+                if branch != self.policy["target_branch"]:
+                    raise ArchiveError("Awaiting local merge/check-out of the configured target branch.")
+                current_product = self.product_state()
+                if any((current_product[p] if p in current_product else self.repo.file_hash(p)) != value
+                       for p, value in item.get("merge_inputs", {}).items()):
+                    raise ArchiveError("Queued feature inputs changed; re-queue after final review fixes or archive manually.")
+                try:
+                    self.repo.git("merge-base", "--is-ancestor", item["head"], "HEAD")
+                except ArchiveError:
+                    # Squash/rebase merges do not retain the queued commit. Require
+                    # identical feature inputs on the configured target branch, then fresh verification.
+                    inputs = item.get("merge_inputs", {})
+                    if len(inputs) < 2:
+                        raise ArchiveError("Queued implementation is not merged, or its squash/rebase inputs differ.") from None
+                self.complete(self.spec(spec))
+                try:
+                    self.eligibility(spec)
+                except ArchiveError as error:
+                    result["needs_verification"].append({"spec": spec, "checks": item["checks"], "reason": str(error)})
+                    continue
+                result["ready"].append(spec)
+            except ArchiveError as error:
+                result["blocked"].append({"spec": spec, "reason": str(error)})
+        return result
+
+    def active_id(self) -> str | None:
+        return load(self.repo.state / "active.json", {}).get("run_id")
+
+    def operational_state(self) -> dict:
+        active = self.active_id()
+        phase = self.journal(active)["phase"] if active else None
+        guards = []
+        if self.repo.path(REGISTRY).exists():
+            for path in self.policy.get("guard_paths", GUARD_PATHS):
+                target = self.repo.path(path)
+                if not target.exists() and path.startswith(".specify/extensions/git/") and "guard_paths" not in self.policy:
+                    continue
+                if not target.is_file():
+                    guards.append(path)
+                    continue
+                text = target.read_text(encoding="utf-8-sig")
+                if "pending --gate" not in text or ("create-new-feature" in path and "memory/scripts/numbering.py" not in text):
+                    guards.append(path)
+        lock = self.repo.state / "writer.lock"
+        writer = load(lock, {}) if lock.exists() else None
+        if writer:
+            writer["state"] = self.repo.process_state(writer.get("pid"))
+        return {"active_run": active, "active_phase": phase, "guard_blockers": guards, "writer": writer}
+
+    def run_path(self, run_id: str) -> Path:
+        if not re.fullmatch(r"[a-f0-9]{32}", run_id):
+            raise ArchiveError("Invalid archive run ID.")
+        return self.repo.state / "runs" / run_id
+
+    def journal(self, run_id: str) -> dict:
+        run = load(self.run_path(run_id) / "journal.json")
+        if run["root"] != str(self.repo.root):
+            raise ArchiveError("Resume this run in the worktree that prepared it.")
+        return run
+
+    def save(self, run: dict) -> None:
+        write_json(self.run_path(run["run_id"]) / "journal.json", run)
+
+    def prepare(self, specs: list[str], related: list[str], checks: list[str], *, automatic=False, retire="",
+                skip_verification: str | None = None) -> dict:
+        if self.active_id():
+            raise ArchiveError("An archive is unfinished. Inspect/resume it before preparing another.")
+        v2 = self.memory_format() == 2
+        memory_paths = [MEMORY, REGISTRY] + ([memory_store.MEMORY_DIR] if v2 else [])
+        verification = verification_report({"skip_verification": skip_verification, "automatic": automatic})
+        skip_verification = verification.get("reason")
+        if skip_verification is not None and checks:
+            raise ArchiveError("--skip-verification cannot combine with --check.")
+        if (skip_verification is not None
+                and self.repo.git("branch", "--show-current").decode().strip() != self.policy["target_branch"]):
+            raise ArchiveError("Prepare a verification override on the configured target branch.")
+        specs = sorted({self.spec(s) for s in specs})
+        if not specs or (retire and (automatic or len(specs) != 1)):
+            raise ArchiveError("Retirement selects exactly one explicit feature and never runs automatically.")
+        if automatic:
+            ready = self.pending()["ready"]
+            if related or retire or any(spec not in ready for spec in specs):
+                raise ArchiveError("Automatic mode accepts only ready queued features and committed scope.")
+        if skip_verification is not None and not retire:
+            for spec in specs:
+                self.complete(spec)
+        evidence = [self.eligibility(s) for s in specs] if not retire and skip_verification is None else []
+        references = self.references(specs)
+        # Repairs are enumerated before checkpointing. Their current edits cannot be silently attributed to archival.
+        self.repo.check_scope(references + memory_paths, clean=True)
+        files = self.spec_files(specs)
+        for path in related:
+            self.repo.path(path)
+            if path not in self.repo.tracked() and not self.repo.path(path).is_file():
+                raise ArchiveError(f"Related scope must enumerate existing or tracked files: {path}")
+            if path.startswith(".specify/") or path in (MEMORY, REGISTRY) or self.repo.path(path).is_dir():
+                raise ArchiveError("Related changes must be explicit implementation files, not directories or archive configuration.")
+        scopes = sorted(set(specs + references + related + [p for p in memory_paths if self.repo.path(p).exists()]))
+        self.repo.check_scope(scopes, clean=automatic)
+        # Other product edits make implementation evidence ambiguous even if the selected spec is untouched.
+        outside_product = [p for p in self.repo.dirty() if p.startswith(self.product_prefixes) and p not in related]
+        if outside_product:
+            raise ArchiveError(f"Uncommitted implementation evidence needs explicit related scope: {outside_product}")
+        all_checks = checks or sorted({c["name"] for e in evidence for c in e["checks"]})
+        if skip_verification is None:
+            self.require_checks(all_checks, references)
+            if not retire:
+                self.require_checks(all_checks, sorted({p for spec in specs for p in self.verification_paths(spec)}))
+        self.preflight(specs, all_checks, related, skip_verification=skip_verification is not None, preparing=True)
+        run_id = uuid.uuid4().hex
+        run = {"schema_version": 1, "run_id": run_id, "root": str(self.repo.root), "specs": specs,
+               "retire": retire, "automatic": automatic, "skip_verification": skip_verification,
+               "checks": all_checks, "scope": scopes, "references": references, "original_files": files}
+        if v2:
+            run.update(memory_format=2, base_memory_root=memory_store.memory_root(self.repo.root),
+                       registry_hash=self.repo.file_hash(REGISTRY))
+        else:
+            run.update(memory_hash=self.repo.file_hash(MEMORY), registry_hash=self.repo.file_hash(REGISTRY),
+                       previous_entries=read_memory(self.repo.path(MEMORY)))
+        run.update(product=self.product_state(), policy_hash=self.policy_hash(), phase="checkpoint",
+                   created_at=now(), input_head=self.repo.head(), input_index=self.repo.scoped_index(scopes))
+        run["source_hashes"] = {p: self.repo.file_hash(p) for p in set(references + related)}
+        run['declared_hashes'] = self.declared_hashes(all_checks)
+        run['input_identities'] = {name: self.check_identity(name)[0] for name in all_checks}
+        pointer = self.repo.path(".specify/feature.json")
+        run["local_pointer_hash"] = (self.repo.file_hash(".specify/feature.json")
+                                     if pointer.exists() and self.live_reference(pointer.read_text(encoding="utf-8"), specs) else None)
+        run["checkpoint_tree"] = self.repo.expected_tree(scopes)
+        self.save(run)
+        write_json(self.repo.state / "active.json", {"run_id": run_id})
+        message = "[Spec Kit Archive] Checkpoint " + ", ".join(Path(s).name for s in specs)
+        if skip_verification is not None:
+            message += "\n\nVerification-Skipped: " + skip_verification
+        checkpoint = self.repo.commit(scopes, message, run["checkpoint_tree"])
+        run.update(checkpoint=checkpoint, phase="synthesis")
+        self.verification_guard(run)
+        run["units"] = inventory(self.repo, checkpoint, list(files))
+        self.save(run)
+        candidate = (memory_delta.empty_candidate(run["base_memory_root"], checkpoint) if v2 else
+                     {"entries": run["previous_entries"], "coverage": {}, "removed": {}, "migrations": [], "repairs": []})
+        write_json(self.run_path(run_id) / "candidate.json", candidate)
+        return {"run_id": run_id, "checkpoint": checkpoint, "units": str(self.run_path(run_id) / "journal.json"),
+                "candidate": str(self.run_path(run_id) / "candidate.json"), "references": references,
+                "phase": run["phase"], "verification": verification, "memory_format": 2 if v2 else 1,
+                **({} if v2 else {"reference": FORMAT_1_REFERENCE})}
+
+    def require_checks(self, names: list[str], paths: list[str]) -> None:
+        if not names or len(set(names)) != len(names) or any(name not in self.policy.get("checks", {}) for name in names):
+            raise ArchiveError("Select named verification commands from .specify/memory-policy.json.")
+        for name in names:
+            check = self.policy['checks'][name]
+            if (not isinstance(check, dict) or not isinstance(check.get('covers', []), list)
+                    or not all(isinstance(p, str) for p in check.get('covers', []))):
+                raise ArchiveError('Invalid coverage declaration: ' + name)
+        for path in paths:
+            if path.startswith(self.product_prefixes) or path in self.product_files or path.startswith(".github/workflows/") or self.repo.path(path).is_dir():
+                if not any(fnmatch.fnmatchcase(path, glob) for name in names for glob in self.policy["checks"][name].get("covers", [])):
+                    raise ArchiveError(f"No selected verification command covers repaired consumer: {path}")
+
+    def candidate(self, run: dict) -> tuple[dict, bytes]:
+        path = self.run_path(run["run_id"]) / "candidate.json"
+        try:
+            raw = path.read_bytes()
+            return json.loads(raw.decode("utf-8-sig")), raw
+        except (OSError, ValueError) as error:
+            raise ArchiveError(f"Cannot read JSON at {path}: {error}") from error
+
+    def verification_guard(self, run: dict) -> dict:
+        verification = verification_report(run)
+        if run.get("checkpoint"):
+            message = self.repo.git("show", "-s", "--format=%B", run["checkpoint"]).decode("utf-8")
+            markers = [line.removeprefix("Verification-Skipped: ") for line in message.splitlines()
+                       if line.startswith("Verification-Skipped: ")]
+            expected = [verification["reason"]] if verification["status"] == "skipped" else []
+            if markers != expected:
+                raise ArchiveError("Journal override differs from checkpoint verification marker; use explicit recovery, not journal edits.")
+        return verification
+
+    def validate(self, run: dict) -> tuple[dict[str, bytes | None], dict | None]:
+        outputs, report = self.materialize(run)
+        if report and report["review"]["status"] != "passed":
+            raise ArchiveError("Independent critique must pass and bind this exact result: "
+                               + "; ".join(report["review"]["problems"]))
+        return outputs, report
+
+    def memory_result_guard(self, run: dict) -> None:
+        """Format 2 commits all of specs/memory, so it must be exactly the reviewed result plus nothing unreviewed."""
+        if run.get("memory_format") != 2:
+            return
+        if memory_store.memory_root(self.repo.root) != run.get("result_memory_root"):
+            raise ArchiveError("Project memory differs from the reviewed result; preserve edits and inspect.")
+        scope = self.repo.pathspec([memory_store.MEMORY_DIR])
+        changed = (set(self.repo.names("ls-files", "--others", "--exclude-standard", "-z", "--", *scope))
+                   | set(self.repo.names("diff", "--name-only", "--no-renames", "-z", run["final_parent"], "--", *scope)))
+        stray = sorted(changed - set(run["outputs"]))
+        if stray:
+            raise ArchiveError(f"Unreviewed project memory files would be committed; preserve edits and inspect: {stray}")
+
+    @staticmethod
+    def review_v2(review_path: Path, raw: bytes, run: dict, verification: dict, m) -> dict:
+        """Report whether review.json binds the exact candidate and materialized result; never raises."""
+        if not review_path.exists():
+            return {"status": "missing", "problems": ["review.json does not exist yet."]}
+        try:
+            review = load(review_path)
+        except ArchiveError as error:
+            return {"status": "mismatch", "problems": [str(error)]}
+        if not isinstance(review, dict):
+            return {"status": "mismatch", "problems": ["review.json must be an object."]}
+        expected = {"candidate_sha256": digest(raw), "base_memory_root": run["base_memory_root"],
+                    "result_memory_root": m.result_root, "outputs_sha256": m.outputs_sha256}
+        if verification["status"] == "skipped":
+            expected["verification_override"] = verification["reason"]
+        problems = [f"{key} must be {value}." for key, value in expected.items() if review.get(key) != value]
+        if review.get("passed") is not True or review.get("findings") != []:
+            problems.append("passed must be true with findings: [].")
+        if not all(isinstance(review.get(k), str) and review[k].strip() for k in ("reviewer", "summary")):
+            problems.append("reviewer and summary must be nonempty.")
+        return {"status": "mismatch" if problems else "passed", "problems": problems}
+
+    def materialize(self, run: dict) -> tuple[dict[str, bytes | None], dict | None]:
+        """Outputs map plus, for format 2, the bindings and review status (the review is not enforced here)."""
+        verification = self.verification_guard(run)
+        candidate, raw = self.candidate(run)
+        registry = load(self.repo.path(REGISTRY), {"schema_version": 1, "archived": {}, "high_water": 0})
+        report = None
+        if run.get("memory_format") == 2:
+            m = memory_delta.validate(self.repo, run, candidate, self.budgets(),
+                                      set(registry.get("retired_memory_ids", {})))
+            run_dir = self.run_path(run["run_id"])
+            review = self.review_v2(run_dir / "review.json", raw, run, verification, m)
+            # A run that made packets must pass partition and integration review, even if merge.json is deleted.
+            packeted = (run_dir / "merge.json").exists() or any((run_dir / "packets").glob("*.json"))
+            if packeted and review["status"] != "missing":
+                try:
+                    approval = load(run_dir / "review.json")
+                    if isinstance(approval, dict):
+                        review["problems"] += orchestration.approval_problems(
+                            run_dir, approval, orchestration.current_hashes(self.repo, run, run_dir, m, raw))
+                except ArchiveError as error:
+                    review["problems"].append(str(error))
+                review["status"] = "mismatch" if review["problems"] else "passed"
+            self.materialized = m  # review-packets needs the result, not just its roots
+            report = {"candidate_sha256": digest(raw), "base_memory_root": run["base_memory_root"],
+                      "result_memory_root": m.result_root, "outputs_sha256": m.outputs_sha256, "summary": m.summary,
+                      "review": review}
+            outputs = dict(m.outputs)
+            retired = {r["id"]: {"reason": r["reason"], "replacement": r["replacement"]}
+                       for r in candidate.get("removals", [])}
+        else:
+            outputs = {MEMORY: validate_knowledge(self.repo, run, candidate)}
+            review_path = self.run_path(run['run_id']) / 'review.json'
+            try:
+                review = load(review_path, {})
+            except ArchiveError:
+                review = {}
+            if not isinstance(review, dict):
+                review = {}
+            problems = []
+            if (review.get("candidate_sha256") != digest(raw) or review.get("passed") is not True
+                    or not all(isinstance(review.get(k), str) and review[k].strip() for k in ('reviewer', 'summary'))
+                    or review.get("findings") != []):
+                problems.append('Independent critique must pass for the exact candidate hash with no unresolved findings.')
+            if (verification["status"] == "skipped"
+                    and review.get("verification_override") != verification["reason"]):
+                problems.append('Independent critique must acknowledge the exact verification override reason.')
+            report = {'candidate_sha256': digest(raw), 'review': {
+                'status': ('missing' if not review_path.exists() else 'mismatch') if problems else 'passed', 'problems': problems}}
+            retired = {identifier: {"replacement": info.get("replacement")}
+                       for identifier, info in candidate.get("removed", {}).items()}
+        outputs.update({p: None for p in run["original_files"]})
+        for migration in candidate.get("migrations", []):
+            source, destination = migration["source"], migration["destination"]
+            if source not in run["original_files"]:
+                raise ArchiveError("Only selected feature artifacts can become permanent fixtures.")
+            expected = "tests/Fixtures/spec-memory/" + source.removeprefix("specs/")
+            if destination != expected or self.repo.path(destination).exists() or destination in outputs:
+                raise ArchiveError(f"Fixture destination must be new and exactly {expected}.")
+            outputs[destination] = self.repo.blob(run["checkpoint"], source)
+        repaired = set()
+        for repair in candidate.get("repairs", []):
+            path = repair["path"]
+            if path not in run["references"] or path in repaired:
+                raise ArchiveError("Repairs must uniquely name a preflight reference path.")
+            content = self.repo.path(path).read_text(encoding="utf-8")
+            for change in repair.get("replacements", []):
+                before, after = change["before"], change["after"]
+                if not before or before == after or content.count(before) != change.get("count", 1):
+                    raise ArchiveError(f"Repair context/count changed: {path}")
+                content = content.replace(before, after)
+            if self.live_reference(content, run["specs"]):
+                raise ArchiveError(f"Unresolved feature-folder reference after repair: {path}")
+            outputs[path] = content.encode()
+            repaired.add(path)
+        if repaired != set(run["references"]):
+            raise ArchiveError("All preflight references need explicit repairs.")
+        if verification["status"] != "skipped":
+            self.require_checks(run["checks"], list(repaired))
+        for spec in run["specs"]:
+            if spec in registry["archived"]:
+                raise ArchiveError("Feature ID is already reserved in archive registry.")
+            registry["archived"][spec] = {"checkpoint": run["checkpoint"], "retired": bool(run["retire"])}
+            if verification["status"] == "skipped":
+                registry["archived"][spec]["verification"] = verification
+            match = re.match(r"specs/(\d{3,})-", spec)
+            if match and not re.match(r"specs/\d{8}-\d{6}-", spec):
+                registry["high_water"] = max(registry["high_water"], int(match.group(1)))
+        registry.setdefault("retired_memory_ids", {}).update(retired)
+        outputs[REGISTRY] = (json.dumps(registry, indent=2) + "\n").encode()
+        written = [p for p, content in outputs.items() if content is not None]
+        ignored = self.repo.ignored(written)
+        if ignored:
+            raise ArchiveError(f"Archive output would be ignored and unrecoverable from Git: {ignored[0]}")
+        return outputs, report
+
+    def source_guard(self, run: dict) -> None:
+        if run["policy_hash"] != self.policy_hash():
+            raise ArchiveError("Policy/implementation changed since preparation. Candidate cannot be applied.")
+        if self.repo.git("branch", "--show-current").decode().strip() != self.policy["target_branch"]:
+            raise ArchiveError("Deletion requires the locally merged configured target branch.")
+        self.repo.git("merge-base", "--is-ancestor", run["checkpoint"], "HEAD")
+        memory_changed = (memory_store.memory_root(self.repo.root) != run["base_memory_root"]
+                          if run.get("memory_format") == 2 else self.repo.file_hash(MEMORY) != run["memory_hash"])
+        if memory_changed or self.repo.file_hash(REGISTRY) != run["registry_hash"]:
+            raise ArchiveError("Project memory/registry changed. Reconcile a new candidate; do not apply the stale proposal.")
+        if self.spec_files(run["specs"]) != run["original_files"] or self.product_state() != run["product"]:
+            raise ArchiveError("Feature artifacts or implementation evidence changed since preparation.")
+        if any(self.repo.file_hash(p) != h for p, h in run["source_hashes"].items()):
+            raise ArchiveError("A repair/related input changed since checkpointing.")
+        if ('declared_hashes' in run and self.declared_hashes(run['checks']) != run['declared_hashes']
+                or any(expected is not None and self.check_identity(name)[0] != expected
+                       for name, expected in run.get('input_identities', {}).items())):
+            raise ArchiveError('Declared check inputs changed since preparation; candidate is stale.')
+        # git diff has no --pathspec-from-file; chunk to stay under the Windows command-line limit.
+        scope = run["scope"]
+        if any(self.repo.git("diff", "--name-only", run["checkpoint"], "HEAD", "--", *self.repo.pathspec(scope[i:i + 100]))
+               for i in range(0, len(scope), 100)):
+            raise ArchiveError("Merged history changed archive scope since checkpointing.")
+        if self.repo.scoped_index(run["scope"]) != run["input_index"]:
+            raise ArchiveError("Unrelated index changed during this archive. Resolve before resuming.")
+
+    def output_parents(self, after: dict) -> set[str]:
+        """Exact validated directories required by approved nondeleted file outputs."""
+        parents = set()
+        for name, content_hash in after.items():
+            if content_hash is None:
+                continue
+            for parent in self.repo.path(name).parents:
+                if parent == self.repo.root:
+                    break
+                label = parent.relative_to(self.repo.root).as_posix()
+                directory = self.repo.path(label)
+                if directory.exists() and not directory.is_dir():
+                    raise ArchiveError('Archive output parent is not a directory: ' + label)
+                parents.add(label)
+        return parents
+
+    def publishing_guard(self, run: dict) -> None:
+        output_parents = self.output_parents(run['after'])
+        current = self.product_state()
+        for path in set(current) | set(run["product"]):
+            expected = {run["product"].get(path)}
+            if path in run["after"]:
+                expected.add(run["after"][path])
+            if current.get(path) not in expected:
+                raise ArchiveError(f"Implementation evidence changed during publication: {path}")
+        if 'declared_hashes' in run:
+            current = self.declared_hashes(run['checks'])
+            for path in set(current) | set(run['declared_hashes']):
+                expected = {run['declared_hashes'].get(path)}
+                if path.endswith('/') and self.repo.within(path.rstrip('/'), run['specs']):
+                    expected.add(None)  # selected feature directories are removed with their inventoried files
+                if path.endswith('/') and path[:-1] in output_parents:
+                    expected.add('directory')
+                if path in run['after']:
+                    expected.add(run['after'][path])
+                if current.get(path) not in expected:
+                    raise ArchiveError('Declared input changed during publication: ' + path)
+
+    def cleanup_terminal(self, run: dict) -> None:
+        queue = load(self.repo.state / "pending.json", {})
+        for spec in run["specs"]:
+            queue.pop(spec, None)
+        write_json(self.repo.state / "pending.json", queue)
+        if self.active_id() == run["run_id"]:
+            (self.repo.state / "active.json").unlink(missing_ok=True)
+
+    def rollback(self, run_id: str) -> dict:
+        run = self.journal(run_id)
+        if run["phase"] == "rolled-back":
+            self.cleanup_terminal(run)
+            return {"run_id": run_id, "phase": "rolled-back", "checkpoint": run["checkpoint"]}
+        if self.active_id() != run_id or run["phase"] not in ("publishing", "checking", "committing", "rolling-back"):
+            raise ArchiveError("Rollback requires an active published run that has not made its final commit.")
+        if self.repo.head() != run["final_parent"]:
+            raise ArchiveError("HEAD changed; inspect the committed archive before considering recovery.")
+        if self.repo.scoped_index(run["scope"]) != run["input_index"]:
+            raise ArchiveError("Unrelated index changed; preserving user work before rollback.")
+        self.publishing_guard(run)
+        output_parents = self.output_parents(run['after'])
+        created_directories = run.get('created_output_directories', [])
+        if any(path not in output_parents for path in created_directories):
+            raise ArchiveError('Recorded output directory is not an approved file parent.')
+        for path in run["outputs"]:
+            if self.repo.file_hash(path) not in (run["before"][path], run["after"][path]):
+                raise ArchiveError(f"Unexpected edit to archive output; preserving user work: {path}")
+        run["phase"] = "rolling-back"
+        self.save(run)
+        # Restore recorded worktree bytes, preserving CRLF and the exact checkpoint inputs.
+        for path, encoded in run["original_outputs"].items():
+            target = self.repo.path(path)
+            if encoded is None:
+                target.unlink(missing_ok=True)
+            else:
+                atomic_write(target, base64.b64decode(encoded))
+        # Restore discovery membership too; rmdir preserves any unexpected user contents.
+        for path in sorted(created_directories, key=lambda p: len(p.split('/')), reverse=True):
+            directory = self.repo.path(path)
+            if directory.exists():
+                directory.rmdir()
+        indexed = [p for p in self.repo.index() if p in run["outputs"]]
+        if indexed:
+            self.repo.git_paths("restore", "--source=" + run["final_parent"], "--staged", paths=indexed)
+        run.update(phase="rolled-back", rolled_back_at=now())
+        self.save(run)
+        self.cleanup_terminal(run)
+        return {"run_id": run_id, "phase": "rolled-back", "checkpoint": run["checkpoint"]}
+
+    def abandon(self, run_id: str) -> dict:
+        run = self.journal(run_id)
+        if self.active_id() != run_id or run["phase"] not in ("checkpoint", "synthesis"):
+            raise ArchiveError("Only an unpublished active proposal can be abandoned. Resume a published transaction.")
+        run.update(phase="abandoned", abandoned_at=now())
+        self.save(run)
+        (self.repo.state / "active.json").unlink()
+        return {"run_id": run_id, "phase": "abandoned", "checkpoint": run.get("checkpoint"), "files_changed": False}
+
+    def finalize(self, run_id: str) -> dict:
+        run = self.journal(run_id)
+        self.verification_guard(run)
+        if run["phase"] == "done":
+            self.cleanup_terminal(run)
+            return {"run_id": run_id, "phase": "done", "checkpoint": run["checkpoint"], "final_commit": run["final_commit"],
+                    "verification": verification_report(run), "next": self.next_step(run)}
+        if self.active_id() != run_id:
+            raise ArchiveError("This is not the active archive run.")
+        if run["automatic"]:
+            self.approval()
+        if run["phase"] == "checkpoint":
+            # Recover the commit->journal interruption without creating a second checkpoint.
+            if (self.repo.git("rev-parse", "HEAD^{tree}").decode().strip() != run["checkpoint_tree"]
+                    or self.repo.git("rev-parse", "HEAD^").decode().strip() != run["input_head"]):
+                raise ArchiveError("Checkpoint was not recorded. Inspect Git before resuming; no reset performed.")
+            run.update(checkpoint=self.repo.head(), phase="synthesis")
+            run["units"] = inventory(self.repo, run["checkpoint"], list(run["original_files"]))
+            self.save(run)
+            candidate = self.run_path(run_id) / "candidate.json"
+            if run.get("memory_format") == 2 and not candidate.exists():
+                write_json(candidate, memory_delta.empty_candidate(run["base_memory_root"], run["checkpoint"]))
+            raise ArchiveError("Checkpoint recovered. Create/review candidate.json before finalizing.")
+        if run["phase"] == "synthesis":
+            self.source_guard(run)
+            outputs, report = self.validate(run)
+            if run.get('memory_format') == 2 and report:
+                run["result_memory_root"] = report["result_memory_root"]
+            scope = sorted(set(run["scope"] + list(outputs)))
+            self.repo.check_scope(scope)
+            run["outputs"] = {p: None if data is None else base64.b64encode(data).decode() for p, data in outputs.items()}
+            run["before"] = {p: self.repo.file_hash(p) for p in outputs}
+            run["original_outputs"] = {p: base64.b64encode(self.repo.path(p).read_bytes()).decode()
+                                       if run["before"][p] is not None else None for p in outputs}
+            run["after"] = {p: None if data is None else digest(data) for p, data in outputs.items()}
+            run['created_output_directories'] = sorted(
+                path for path in self.output_parents(run['after']) if not self.repo.path(path).exists())
+            run["scope"] = scope
+            run["input_index"] = self.repo.scoped_index(scope)
+            run["final_parent"] = self.repo.head()
+            run["phase"] = "publishing"
+            self.save(run)
+        if run["policy_hash"] != self.policy_hash():
+            raise ArchiveError("Implementation/policy changed; inspect the unfinished run before recovery.")
+        if self.repo.git("branch", "--show-current").decode().strip() != self.policy["target_branch"]:
+            raise ArchiveError("Resume finalization on the configured target branch.")
+        for path in run["outputs"]:
+            if self.repo.file_hash(path) not in (run["before"][path], run["after"][path]):
+                raise ArchiveError(f"Unexpected edit to archive output; preserving user work: {path}")
+        self.publishing_guard(run)
+        for spec in run["specs"]:
+            if self.repo.path(spec).exists():
+                current = self.spec_files([spec], allow_empty=True)
+                if set(current) - set(run["original_files"]):
+                    raise ArchiveError("New feature artifacts appeared during archive publication.")
+        if run["phase"] == "publishing":
+            if self.repo.head() != run["final_parent"]:
+                raise ArchiveError("HEAD changed during publication; inspect before resuming.")
+            if self.repo.scoped_index(run["scope"]) != run["input_index"]:
+                raise ArchiveError("Unrelated index changed during publication.")
+            # Refuse new files in a selected folder, even during a partially completed delete.
+            for spec in run["specs"]:
+                if self.repo.path(spec).exists():
+                    current = self.spec_files([spec], allow_empty=True)
+                    if set(current) - set(run["original_files"]):
+                        raise ArchiveError("New feature artifacts appeared during archive publication.")
+            for path, encoded in run["outputs"].items():
+                if encoded is not None and self.repo.file_hash(path) != run["after"][path]:
+                    atomic_write(self.repo.path(path), base64.b64decode(encoded))
+            for path, encoded in run["outputs"].items():
+                if encoded is None:
+                    self.repo.path(path).unlink(missing_ok=True)
+            for spec in run["specs"]:
+                directory = self.repo.path(spec)
+                if directory.exists():
+                    leftovers = [p.relative_to(self.repo.root).as_posix() for p in directory.rglob("*") if p.is_file()]
+                    for path in self.repo.local_runtime(self.repo.ignored(leftovers)):
+                        self.repo.path(path).unlink()  # disposable runtime only; anything else stops rmdir
+                    for subdir in sorted((p for p in directory.rglob("*") if p.is_dir()), key=lambda p: len(p.parts), reverse=True):
+                        subdir.rmdir()
+                    directory.rmdir()
+            self.memory_result_guard(run)
+            run["phase"] = "checking"
+            self.save(run)
+        if run["phase"] == "checking":
+            if self.repo.head() != run["final_parent"] or self.repo.scoped_index(run["scope"]) != run["input_index"]:
+                raise ArchiveError("HEAD/unrelated index changed during checking; inspect before recovery.")
+            remaining = self.references(run["specs"])
+            if remaining:
+                raise ArchiveError(f"References still require deleted feature folders: {remaining}")
+            run["final_checks"] = None if run.get("skip_verification") is not None else self.run_checks(run["checks"])
+            self.publishing_guard(run)
+            for path, expected in run["after"].items():
+                if self.repo.file_hash(path) != expected:
+                    raise ArchiveError(f"Verification changed archive outputs: {path}")
+            self.memory_result_guard(run)
+            run["final_tree"] = self.repo.expected_tree(run["scope"])
+            run["phase"] = "committing"
+            self.save(run)
+        if run["phase"] == "committing":
+            if self.repo.scoped_index(run["scope"]) != run["input_index"]:
+                raise ArchiveError("Unrelated index changed before final commit; preserving user work.")
+            if any(self.repo.file_hash(p) != expected for p, expected in run["after"].items()):
+                raise ArchiveError("Archive outputs changed after verification; preserve edits and inspect before recovery.")
+            self.memory_result_guard(run)
+            if self.repo.head() != run["final_parent"]:
+                # Recover a successful final commit whose journal update was interrupted.
+                if (self.repo.git("rev-parse", "HEAD^{tree}").decode().strip() != run["final_tree"]
+                        or self.repo.git("rev-parse", "HEAD^").decode().strip() != run["final_parent"]):
+                    raise ArchiveError("Unexpected commit during archive. Inspect Git without resetting.")
+                final = self.repo.head()
+            else:
+                message = "[Spec Kit Archive] Finalize " + ", ".join(Path(s).name for s in run["specs"])
+                if run.get("skip_verification") is not None:
+                    message += "\n\nVerification-Skipped: " + run["skip_verification"]
+                final = self.repo.commit(run["scope"], message, run["final_tree"])
+            self.publishing_guard(run)
+            pointer = ".specify/feature.json"
+            if run.get("local_pointer_hash") and self.repo.file_hash(pointer) == run["local_pointer_hash"]:
+                self.repo.path(pointer).unlink()
+            run.update(phase="done", final_commit=final, finalized_at=now())
+            self.save(run)
+            self.cleanup_terminal(run)
+        return {"run_id": run_id, "phase": run["phase"], "checkpoint": run["checkpoint"], "final_commit": run.get("final_commit"),
+                "verification": verification_report(run), "next": self.next_step(run)}
+
+    def memory_format(self) -> int:
+        return load(self.repo.path(REGISTRY), {}).get("memory_format", 1)
+
+    def budgets(self) -> dict:
+        return {**memory_store.DEFAULT_BUDGETS, **self.policy.get("memory_budgets", {})}
+
+    def memory_check(self) -> dict:
+        store = memory_store.Store(self.repo.root)
+        retired = set(load(self.repo.path(REGISTRY), {}).get("retired_memory_ids", {}))
+        problems = memory_store.check(store, self.budgets(), retired)
+        if problems:
+            raise ArchiveError(f"{len(problems)} memory problem(s): " + "; ".join(problems[:20]))
+        return {"entries": len(store.entries), "domains": len(store.domains), "ledgers": len(store.ledgers),
+                "memory_root": memory_store.memory_root(self.repo.root), "problems": []}
+
+    def memory_index(self) -> dict:
+        store = memory_store.Store(self.repo.root)
+        outputs = memory_store.generated(store, self.budgets())
+        catalogs = self.repo.root / memory_store.CATALOGS
+        stale = [p for p in catalogs.rglob("*") if p.is_file()
+                 and p.relative_to(self.repo.root).as_posix() not in outputs]
+        for path in stale:
+            path.unlink()
+        for path, data in outputs.items():
+            if self.repo.file_hash(path) != digest(data):
+                atomic_write(self.repo.path(path), data)
+        return {"written": sorted(outputs), "removed": sorted(p.relative_to(self.repo.root).as_posix() for p in stale)}
+
+    def migrate(self) -> dict:
+        """Mechanical, lossless conversion of specs/project-memory.md to format 2, proven by byte-exact export."""
+        if self.active_id():
+            raise ArchiveError("Finish or roll back the active archive run before migrating memory.")
+        if self.memory_format() == 2:
+            raise ArchiveError("Project memory is already format 2.")
+        if self.repo.path(memory_store.MEMORY_DIR).exists():
+            raise ArchiveError(f"{memory_store.MEMORY_DIR} already exists; inspect or remove it before migrating.")
+        scopes = [memory_store.MEMORY_DIR, MEMORY, REGISTRY]
+        self.repo.check_scope(scopes, clean=True)
+        original = self.repo.path(MEMORY).read_bytes()
+        legacy_sha = digest(original)
+        outputs = memory_store.migration_outputs(read_memory(self.repo.path(MEMORY)), legacy_sha)
+        self.repo.state.mkdir(parents=True, exist_ok=True)
+        with tempfile.TemporaryDirectory(prefix="memory-migrate-", dir=self.repo.state) as temp:
+            for path, data in outputs.items():
+                atomic_write(Path(temp) / path, data)
+            outputs.update(memory_store.generated(memory_store.Store(Path(temp)), self.budgets()))
+            for path, data in outputs.items():
+                atomic_write(Path(temp) / path, data)
+            store = memory_store.Store(Path(temp))
+            if memory_store.export(store) != original:
+                raise ArchiveError("Migration is not lossless: the export differs from the original. Nothing was written.")
+            problems = memory_store.check(store, self.budgets())
+            if problems:
+                raise ArchiveError(f"Migrated memory fails checks; nothing was written: {problems[:10]}")
+        for path, data in outputs.items():
+            atomic_write(self.repo.path(path), data)
+        atomic_write(self.repo.path(MEMORY), STUB.encode("utf-8"))
+        registry = load(self.repo.path(REGISTRY), {"schema_version": 1, "archived": {}, "high_water": 0})
+        registry.update(memory_format=2, legacy_memory_sha256=legacy_sha)
+        write_json(self.repo.path(REGISTRY), registry)
+        message = ("[Spec Kit Archive] Migrate project memory to format 2\n\n"
+                   f"Legacy-Memory-SHA256: {legacy_sha}\nEntries: {len(store.entries)}\n"
+                   "Proof: archive.py memory export reproduces the legacy document byte for byte.")
+        commit = self.repo.commit(scopes, message, self.repo.expected_tree(scopes))
+        return {"commit": commit, "entries": len(store.entries), "domains": len(store.domains),
+                "files": len(outputs), "legacy_memory_sha256": legacy_sha,
+                "memory_root": memory_store.memory_root(self.repo.root)}
+
+    def next_step(self, run: dict | None, review_status: str | None = None) -> dict:
+        """The command to run next for ``run`` and why, from its phase and review.json; nothing new is stored."""
+        if not run:
+            return {"command": None, "reason": "No archive run is active."}
+        phase, rid = run.get("phase"), run.get("run_id")
+        command = lambda verb: f"{HELPER} {verb} --run {rid}"
+        if phase == "checkpoint":
+            return {"command": command("finalize"), "reason": "Recover the recorded checkpoint, then author the candidate."}
+        if phase == "synthesis":
+            if review_status == "passed":
+                return {"command": command("finalize"), "reason": "The review binds this exact result; publish it."}
+            if review_status is not None:
+                return {"command": command("validate"),
+                        "reason": "Resolve data.review.problems with the independent reviewer, then validate again."}
+            if (self.run_path(rid) / "review.json").exists():
+                return {"command": command("validate"), "reason": "review.json exists; check that it binds this exact result."}
+            return {"command": command("preflight"),
+                    "reason": "Until candidate guards pass; then the independent review writes review.json."}
+        if phase in ("publishing", "checking", "committing"):
+            return {"command": command("finalize"), "reason": f"Resume publication from phase {phase}."}
+        if phase == "rolling-back":
+            return {"command": command("rollback"), "reason": "Resume the interrupted rollback."}
+        return {"command": None, "reason": f"Run is {phase}; report its checkpoint and final commit."}
+
+    def status(self) -> dict:
+        run_id = self.active_id()
+        active = self.journal(run_id) if run_id else None
+        return {"policy_hash": self.policy_hash(), "pending": self.pending(), "active": active,
+                "next": self.next_step(active)}
+
+    def inspect(self, view, run_id=None, *, max_bytes=16384, cursor=None):
+        run = self.journal(run_id) if run_id else None
+        if view != 'status' and run is None:
+            raise ArchiveError('This inspection view requires --run.')
+        if view == 'status':
+            active = run_id or self.active_id()
+            current = run or (self.journal(active) if active else {})
+            records = [{'type': 'status', 'run_id': active, 'phase': current.get('phase'),
+                        'memory_format': current.get('memory_format', self.memory_format()),
+                        'verification': verification_report(current),
+                        'spec_count': len(current.get('specs', [])), 'unit_count': len(current.get('units', [])),
+                        'next': self.next_step(current or None)}]
+        elif view == 'inventory':
+            records = [{'type': 'unit', **u} for u in run.get('units', [])]
+        elif view == 'checks':
+            evidence = run.get('final_checks')
+            if evidence is None:
+                evidence = [c for spec in run.get('specs', [])
+                            for c in load(self.evidence_file(spec), {}).get('checks', [])]
+            records = [{'type': 'check', **c} for c in evidence]
+            if not records:
+                records = [{'type': 'check', 'name': name, 'status': 'unknown'} for name in run.get('checks', [])]
+        else:
+            candidate, _ = self.candidate(run)
+            coverage = candidate.get('coverage', {})
+            if run.get('memory_format') == 2:
+                coverage = memory_delta.expand_coverage(candidate, run['units'])
+            records = [{'type': 'coverage', 'unit': unit, **item} for unit, item in sorted(coverage.items())]
+        return bounded_json.page(records, view=view, max_bytes=max_bytes, cursor=cursor)
+
+
+def memory_cli_read(archive: Archive, args) -> str | None:
+    """Read-only memory verbs print Markdown (agents read it directly) or the JSON envelope."""
+    store = memory_store.Store(archive.repo.root)
+    if args.memory_verb == "query":
+        result = memory_query.query(store, archive.repo.root, budget=args.budget, cursor=args.cursor, ids=args.id,
+                                    routes=args.route, paths=args.path, error_codes=args.error_code,
+                                    domains=args.domain, text=args.text)
+        if args.format == "md":
+            return memory_query.to_markdown(result)
+        for item in result["entries"]:
+            item.pop("markdown")
+            item["text"] = store.entries[item["id"]]["text"]
+            item["expected_hash"] = memory_query.expected_hash(archive.repo.root, item["id"])
+        return json.dumps({"success": True, "data": result}, ensure_ascii=False) + "\n"
+    if args.memory_verb == "show":
+        return memory_query.show(store, archive.repo.root, args.id)
+    if args.memory_verb == "provenance":
+        if args.id not in store.entries and args.id not in store.retired:
+            raise ArchiveError(f"Unknown memory id: {args.id}")
+        records = [{"ledger": name, "record_hash": memory_store.record_hash(r), "record": r}
+                   for name, _, rs in store.ledgers for r in rs if r.get("entry") == args.id]
+        folded = store.provenance.get(args.id, {"sources": [], "evidence": []})
+        return json.dumps({"success": True, "data": {"id": args.id, "folded": folded, "records": records}},
+                          ensure_ascii=False) + "\n"
+    page = archive.repo.root / memory_store.CATALOGS / args.domain / f"{args.page:02d}.md"
+    if args.domain not in store.domains or not page.is_file():
+        raise ArchiveError(f"No catalog page {args.page} for domain {args.domain!r}; see specs/memory/INDEX.md.")
+    return page.read_text(encoding="utf-8")
+
+
+def main() -> int:
+    # JSON output is not ASCII-escaped; a legacy console codepage (cp1252) must not decide what survives.
+    for stream in (sys.stdout, sys.stderr):
+        stream.reconfigure(encoding="utf-8")
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--root", default=".")
+    sub = parser.add_subparsers(dest="verb", required=True)
+    sub.add_parser("status")
+    preflight = sub.add_parser('preflight', help='Deterministic guards before verification or candidate critique.')
+    preflight.add_argument('--spec', action='append', default=[])
+    preflight.add_argument('--check', action='append', default=[])
+    preflight.add_argument('--related', action='append', default=[])
+    preflight.add_argument('--run')
+    inspection = sub.add_parser('inspect', help='Bounded whole-record archive projections.')
+    inspection.add_argument('--run')
+    inspection.add_argument('--view', choices=('status', 'checks', 'inventory', 'coverage'), default='status')
+    inspection.add_argument('--max-bytes', type=int, default=16384)
+    inspection.add_argument('--cursor')
+    pending = sub.add_parser("pending")
+    pending.add_argument("--gate", action="store_true", help="Block new specification/commit workflows while recovery is required.")
+    sub.add_parser("policy")
+    enable = sub.add_parser("enable")
+    enable.add_argument("--approve-hash", required=True)
+    sub.add_parser("disable")
+    queue = sub.add_parser("queue")
+    queue.add_argument("--spec", required=True)
+    queue.add_argument("--check", action="append", default=[])
+    verify = sub.add_parser("verify")
+    verify.add_argument("--spec", required=True)
+    verify.add_argument("--check", action="append", required=True)
+    verify.add_argument("--related", action="append", default=[])
+    verify.add_argument("--complete", action="store_true", required=True,
+                        help="Explicitly declare that implementation and required QA/review/documentation are complete.")
+    prepare = sub.add_parser("prepare")
+    prepare.add_argument("--spec", action="append", default=[])
+    prepare.add_argument("--all-completed", action="store_true")
+    prepare.add_argument("--related", action="append", default=[])
+    prepare.add_argument("--check", action="append", default=[])
+    prepare.add_argument("--automatic", action="store_true")
+    prepare.add_argument("--retire-reason", default="")
+    prepare.add_argument("--skip-verification", metavar="REASON",
+                         help="Manually archive explicit specs without verification commands; record why checks are skipped.")
+    sub.add_parser("migrate")
+    memory_cli = sub.add_parser("memory")
+    memory_verbs = memory_cli.add_subparsers(dest="memory_verb", required=True)
+    memory_export = memory_verbs.add_parser("export")
+    memory_export.add_argument("--out", help="Write the legacy single document to this file instead of stdout.")
+    memory_verbs.add_parser("check")
+    memory_verbs.add_parser("index")
+    memory_verbs.add_parser("root")
+    memory_query_cli = memory_verbs.add_parser("query", help="Budgeted retrieval: whole entries, ranked, with a cursor.")
+    memory_query_cli.add_argument("--id", action="append", default=[])
+    memory_query_cli.add_argument("--route", action="append", default=[], help='e.g. "POST /api/v1/orders"')
+    memory_query_cli.add_argument("--path", action="append", default=[], help="Code file or directory prefix.")
+    memory_query_cli.add_argument("--error-code", action="append", default=[])
+    memory_query_cli.add_argument("--domain", action="append", default=[])
+    memory_query_cli.add_argument("--text", default="")
+    memory_query_cli.add_argument("--budget", type=int, default=8000)
+    memory_query_cli.add_argument("--cursor")
+    memory_query_cli.add_argument("--format", choices=("md", "json"), default="md")
+    memory_show = memory_verbs.add_parser("show")
+    memory_show.add_argument("--id", action="append", required=True)
+    memory_provenance = memory_verbs.add_parser("provenance")
+    memory_provenance.add_argument("--id", required=True)
+    memory_catalog = memory_verbs.add_parser("catalog")
+    memory_catalog.add_argument("--domain", required=True)
+    memory_catalog.add_argument("--page", type=int, default=1)
+    for verb in ("validate", "finalize", "abandon", "rollback", "packets", "fragment-check", "merge", "review-packets"):
+        command = sub.add_parser(verb)
+        command.add_argument("--run", required=True)
+        if verb == "packets":
+            command.add_argument("--by", choices=("domain", "spec"), default="domain")
+            command.add_argument("--max-units", type=int, default=2500)
+        elif verb == "fragment-check":
+            command.add_argument("--fragment", required=True)
+    args = parser.parse_args()
+    try:
+        archive = Archive(args.root)
+        read_only = args.verb in ("status", "pending", "policy", "fragment-check", 'inspect', 'preflight') or (
+            args.verb == "memory" and args.memory_verb != "index")
+        with nullcontext() if read_only else archive.repo.lock():
+            if args.verb == "memory" and args.memory_verb == "export":
+                data = memory_store.export(memory_store.Store(archive.repo.root))
+                if not args.out:
+                    sys.stdout.buffer.write(data)
+                    return 0
+                atomic_write(Path(args.out).resolve(), data)
+                result = {"out": args.out, "bytes": len(data)}
+            elif args.verb == "memory" and args.memory_verb in ("query", "show", "provenance", "catalog"):
+                text = memory_cli_read(archive, args)
+                if text is not None:
+                    sys.stdout.buffer.write(text.encode("utf-8"))
+                    return 0
+                result = None
+            elif args.verb == "memory" and args.memory_verb == "check":
+                result = archive.memory_check()
+            elif args.verb == "memory" and args.memory_verb == "index":
+                result = archive.memory_index()
+            elif args.verb == "memory":
+                result = {"memory_root": memory_store.memory_root(archive.repo.root)}
+            elif args.verb == "migrate":
+                result = archive.migrate()
+            elif args.verb == "status":
+                result = archive.status()
+            elif args.verb == "pending":
+                result = archive.pending()
+                if args.gate and (result.get("active_run") or result.get("writer") or result.get("guard_blockers")):
+                    print(json.dumps({"success": False, "error": "Archive recovery/busy writer/number guard blocks new specification and commit workflows.", "data": result}))
+                    return 1
+            elif args.verb == "policy":
+                result = {"policy": archive.policy, "policy_hash": archive.policy_hash()}
+            elif args.verb == "enable":
+                result = archive.enable(args.approve_hash)
+            elif args.verb == "disable":
+                (archive.repo.state / "approval.json").unlink(missing_ok=True)
+                result = {"enabled": False}
+            elif args.verb == "queue":
+                result = archive.queue(args.spec, args.check)
+            elif args.verb == 'preflight':
+                run = archive.journal(args.run) if args.run else None
+                result = archive.preflight(args.spec or (run or {}).get('specs', []),
+                                           args.check or (run or {}).get('checks', []), args.related,
+                                           run=run, skip_verification=(run or {}).get('skip_verification') is not None)
+            elif args.verb == 'inspect':
+                result = archive.inspect(args.view, args.run, max_bytes=args.max_bytes, cursor=args.cursor)
+                # This verb owns its complete envelope so the byte limit includes stdout's newline.
+                sys.stdout.buffer.write(bounded_json.encode(result) + b'\n')
+                return 0
+            elif args.verb == "verify":
+                result = archive.verify(args.spec, args.check, args.related)
+            elif args.verb == "prepare":
+                specs = args.spec
+                if args.skip_verification is not None and (args.automatic or args.all_completed):
+                    raise ArchiveError("--skip-verification requires explicit manual --spec selection.")
+                if args.all_completed:
+                    if specs or args.retire_reason:
+                        raise ArchiveError("--all-completed cannot combine with explicit selection or retirement.")
+                    specs = []
+                    skipped = []
+                    for directory in sorted((archive.repo.root / "specs").iterdir()):
+                        if directory.is_dir():
+                            name = "specs/" + directory.name
+                            try:
+                                archive.eligibility(archive.spec(name))
+                                specs.append(name)
+                            except ArchiveError as error:
+                                skipped.append({"spec": name, "reason": str(error)})
+                    if not specs:
+                        result = {"prepared": False, "skipped": skipped}
+                    else:
+                        result = archive.prepare(specs, args.related, args.check, automatic=args.automatic)
+                        result["skipped"] = skipped
+                else:
+                    result = archive.prepare(specs, args.related, args.check, automatic=args.automatic,
+                                             retire=args.retire_reason, skip_verification=args.skip_verification)
+            elif args.verb == "validate":
+                run = archive.journal(args.run)
+                archive.source_guard(run)
+                # Format 2 exposes mechanical bindings so critique can bind them.
+                # Publication still uses Archive.validate() to require that critique.
+                if run.get("memory_format") == 2:
+                    outputs, report = archive.materialize(run)
+                else:
+                    outputs, report = archive.validate(run)
+                result = {"valid": True, **(report or {}), "paths": sorted(outputs),
+                          "next": archive.next_step(run, (report or {"review": {"status": "passed"}})["review"]["status"])}
+            elif args.verb in ("packets", "fragment-check", "merge", "review-packets"):
+                run, run_dir = archive.journal(args.run), archive.run_path(args.run)
+                retired = set(load(archive.repo.path(REGISTRY), {}).get("retired_memory_ids", {}))
+                if args.verb == "packets":
+                    result = orchestration.packets(archive.repo, run, run_dir, by=args.by, max_units=args.max_units)
+                elif args.verb == "fragment-check":
+                    result = orchestration.fragment_check(archive.repo, run, run_dir, Path(args.fragment).resolve(), retired)
+                    if not result["valid"]:
+                        print(json.dumps({"success": False, "error": f"Fragment has {len(result['problems'])} problem(s).",
+                                          "data": result}, ensure_ascii=False))
+                        return 1
+                elif args.verb == "merge":
+                    result = orchestration.merge(archive.repo, run, run_dir, retired)
+                else:
+                    archive.source_guard(run)
+                    archive.materialize(run)
+                    result = orchestration.review_packets(archive.repo, run, run_dir,
+                                                          getattr(archive, "materialized", None), archive.candidate(run)[1])
+            elif args.verb == "abandon":
+                result = archive.abandon(args.run)
+            elif args.verb == "rollback":
+                result = archive.rollback(args.run)
+            else:
+                result = archive.finalize(args.run)
+        print(json.dumps({"success": True, "data": result}, ensure_ascii=False))
+        return 0
+    except (ArchiveError, OSError, ValueError, KeyError, TypeError) as error:
+        print(json.dumps({"success": False, "error": str(error)}, ensure_ascii=False))
+        return 1
+
+
+if __name__ == "__main__":
+    sys.stdout.reconfigure(encoding='utf-8')
+    sys.stderr.reconfigure(encoding='utf-8')
+    sys.exit(main())

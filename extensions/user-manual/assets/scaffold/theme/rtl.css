@@ -1,0 +1,38 @@
+html[lang="ar"] body {
+  direction: rtl;
+  text-align: right;
+}
+
+/* Amiri is the Arabic font of the PDF runners (fonts-hosny-amiri); code keeps its monospace font. */
+html[lang="ar"] body,
+html[lang="ar"] h1,
+html[lang="ar"] h2,
+html[lang="ar"] h3,
+html[lang="ar"] h4,
+html[lang="ar"] h5,
+html[lang="ar"] h6 {
+  font-family: "Amiri", "Noto Naskh Arabic", "Noto Sans Arabic", serif;
+}
+
+html[lang="ar"] pre,
+html[lang="ar"] code,
+html[lang="ar"] .highlight,
+html[lang="ar"] [dir="ltr"] {
+  direction: ltr;
+  text-align: left;
+}
+
+html[lang="ar"] table {
+  direction: rtl;
+}
+
+/* Admonition titles start on the right: the icon sits in the right padding (the PDF does not mirror it). */
+html[lang="ar"] .md-typeset .admonition > .admonition-title {
+  padding-left: 0.6rem;
+  padding-right: 2rem;
+}
+
+html[lang="ar"] .md-typeset .admonition > .admonition-title::before {
+  left: auto;
+  right: 0.6rem;
+}

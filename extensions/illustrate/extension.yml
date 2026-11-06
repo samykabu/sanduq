@@ -1,0 +1,67 @@
+schema_version: "1.0"
+
+extension:
+  id: illustrate
+  name: "Illustrate"
+  version: "2.7.3"
+  description: "Generate, import, and export forty-four technical, product, architecture, process, and quantitative illustration types with tracked project-level light/dark color and font themes."
+  author: "Samy K. Abushanab"
+  repository: "https://github.com/samykabu/sanduq"
+  category: "documentation"
+  license: MIT
+
+requires:
+  speckit_version: ">=0.2.0"
+  tools:
+    - name: git
+      required: false
+    - name: python
+      required: false   # the export and verify scripts
+      version: ">=3.11"
+
+provides:
+  commands:
+    - name: speckit.illustrate.generate
+      file: commands/speckit.illustrate.generate.md
+      description: 'Draws 44 diagram and chart types (architecture, sequence, ER, Gantt) as themed HTML with inline SVG. Use when asked to "draw a diagram".'
+    - name: speckit.illustrate.export
+      file: commands/speckit.illustrate.export.md
+      description: 'Exports an Illustrate diagram to SVG, transparent PNG, animated SVG or GIF; the HTML stays the source. Use when asked to "export the diagram".'
+    - name: speckit.illustrate.theme
+      file: commands/speckit.illustrate.theme.md
+      description: 'Initializes, selects, validates or creates the project Illustrate color and font theme. Use when asked to "set the diagram theme".'
+    - name: speckit.illustrate.import
+      file: commands/speckit.illustrate.import.md
+      description: 'Redraws a draw.io, Mermaid or Excalidraw file as a themed Illustrate diagram with a fidelity ledger. Use when asked to "import this .drawio".'
+
+tags:
+  - "diagram"
+  - "architecture"
+  - "process-flow"
+  - "technical-color"
+  - "flowchart"
+  - "sequence"
+  - "state-machine"
+  - "er"
+  - "timeline"
+  - "swimlane"
+  - "radar"
+  - "gantt"
+  - "data-platform"
+  - "export"
+  - "png"
+  - "pdf"
+  - "svg"
+  - "visualization"
+  - "documentation"
+  - "project-theme"
+  - "custom-fonts"
+  - "sankey"
+  - "waterfall"
+  - "heatmap"
+  - "deployment"
+  - "uml"
+  - "mermaid"
+  - "drawio"
+  - "excalidraw"
+  - "animation"

@@ -1,0 +1,6 @@
+{
+  "schema_version": 1,
+  "versions": {},
+  "status": "released",
+  "note": "Workflow 2.3.2, Assure 2.7.5 and User Manual 2.0.4: cross-feature freshness fix and configured manual builds (dev-tools 2.0.5). Tested with the affected suites, packaged install/upgrade/rollback smokes and an isolated consumer upgrade."
+}

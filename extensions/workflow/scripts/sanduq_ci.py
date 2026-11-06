@@ -1,0 +1,368 @@
+#!/usr/bin/env python3
+# SPDX-License-Identifier: MIT
+"""Project-selected continuous integration policy and workflow asset rendering.
+
+Sanduq ships CI workflow assets, but it does not decide where a consumer project
+runs them. The project records that decision once in `.specify/workflow.yml`
+under `ci:`, and every shipped asset is rendered from that decision instead of
+being copied with a hard-coded runner.
+
+The module carries no third-party dependency so that `workflow`, `assure` and
+`user-manual` can all vendor it.
+"""
+from __future__ import annotations
+
+import re
+
+PROVIDERS = ('github-actions', 'none')
+RUNNER_POLICIES = ('hosted-allowed', 'self-hosted-required')
+PYTHON_PROVISIONING = ('setup-action', 'preinstalled')
+SYSTEM_PACKAGES = ('sudo-apt', 'preinstalled')
+PLATFORMS = ('linux', 'windows', 'macos')
+GATE_MODES = ('disabled', 'advisory', 'required')
+GATE_SCOPES = ('managed-only', 'all-prs')
+GATE_RULES = ('receipts', 'decisions', 'tasks', 'task_links', 'documentation',
+              'portability', 'candidate_merge', 'live_answers')
+GATE_DEPENDENCIES = {'task_links': ('tasks',), 'portability': ('receipts',),
+                     'candidate_merge': ('receipts',), 'live_answers': ('decisions',)}
+
+# GitHub-hosted label families. A runner set is hosted when every label is one.
+HOSTED = re.compile(r'^(ubuntu|windows|macos)-([0-9.]+|latest)(-\w+)*$')
+
+DEFAULT = {
+    'provider': 'github-actions',
+    'policy': 'hosted-allowed',
+    'runners': {'linux': ['ubuntu-latest'], 'windows': ['windows-latest']},
+    'capabilities': {'system_packages': 'sudo-apt', 'python': 'setup-action', 'python_version': '3.13'},
+    'exceptions': [],
+}
+
+DEFAULT_GATE_RULES = {
+    'receipts': True, 'decisions': True, 'tasks': False, 'task_links': False,
+    'documentation': True, 'portability': True, 'candidate_merge': False,
+    'live_answers': True,
+}
+# Projects written before gate selection keep their installed gate behavior.
+LEGACY_GATE_RULES = {
+    'receipts': True, 'decisions': False, 'tasks': True, 'task_links': True,
+    'documentation': True, 'portability': True, 'candidate_merge': False,
+    'live_answers': False,
+}
+
+DATE = re.compile(r'^\d{4}-\d{2}-\d{2}$')
+VERSION = re.compile(r'^\d+\.\d+(\.\d+)?$')
+
+
+class CIPolicyError(ValueError):
+    """A project CI selection that cannot be rendered into a workflow."""
+
+
+def _require(condition, message):
+    if not condition:
+        raise CIPolicyError(message)
+
+
+def default_ci():
+    """A fresh copy of the shipped default: GitHub-hosted, no exception needed."""
+    return {'provider': DEFAULT['provider'], 'policy': DEFAULT['policy'],
+            'runners': {name: list(labels) for name, labels in DEFAULT['runners'].items()},
+            'capabilities': dict(DEFAULT['capabilities']), 'exceptions': [],
+            'gate': {'mode': 'advisory', 'scope': 'managed-only',
+                     'rules': dict(DEFAULT_GATE_RULES)}}
+
+
+def gate_config(ci):
+    """Return an explicit gate selection or the behavior of a pre-selection install."""
+    if 'gate' not in ci:
+        return {'mode': 'required', 'scope': 'all-prs', 'rules': dict(LEGACY_GATE_RULES)}
+    validate_gate(ci['gate'])
+    return ci['gate']
+
+
+def validate_gate(gate):
+    _require(isinstance(gate, dict), 'CI_GATE_INVALID: gate must be a mapping')
+    _require(gate.get('mode') in GATE_MODES, 'CI_GATE_MODE_INVALID: ' + repr(gate.get('mode')))
+    _require(gate.get('scope') in GATE_SCOPES, 'CI_GATE_SCOPE_INVALID: ' + repr(gate.get('scope')))
+    rules = gate.get('rules')
+    _require(isinstance(rules, dict) and set(rules) == set(GATE_RULES),
+             'CI_GATE_RULES_INVALID: expected ' + ', '.join(GATE_RULES))
+    _require(all(type(value) is bool for value in rules.values()), 'CI_GATE_RULE_VALUE_INVALID')
+    for rule, dependencies in GATE_DEPENDENCIES.items():
+        if rules[rule]:
+            _require(all(rules[dependency] for dependency in dependencies),
+                     'CI_GATE_RULE_DEPENDENCY: ' + rule + ' requires ' + ', '.join(dependencies))
+    if 'affected_command' in gate:
+        affected_command(gate)
+    if 'verification_check' in gate:
+        verification_check(gate)
+    if 'verify_command' in gate:
+        verify_command(gate)
+    return gate
+
+
+def affected_command(gate):
+    """The optional affected-lane hook as an argv list, or None (since 1.6.0).
+
+    The hook reads a JSON list of repository paths on stdin and prints
+    `{"paths": {"<path>": ["<lane>", ...]}}`; a path mapped to `[]` affects no
+    lane. It is given as an argv list or one command string (split like a POSIX
+    shell, without running one).
+    """
+    import shlex
+    value = (gate or {}).get('affected_command')
+    if value is None:
+        return None
+    if isinstance(value, str):
+        try:
+            value = shlex.split(value)
+        except ValueError as exc:
+            raise CIPolicyError('CI_AFFECTED_COMMAND_INVALID: ' + str(exc)) from exc
+    _require(isinstance(value, list) and value and all(isinstance(part, str) and part for part in value),
+             'CI_AFFECTED_COMMAND_INVALID: expected a command string or a non-empty argv list')
+    return list(value)
+
+
+def verify_command(gate):
+    """The optional local affected-lane runner (since 1.7.x) as an argv list, or None.
+
+    Read by `speckit-workflow-verify-affected` only; the gate itself never
+    calls it. It receives `{"lanes": [...], "results_path": "<path>"}` on
+    stdin and must exit 0 having written that project-relative results.json.
+    """
+    import shlex
+    value = (gate or {}).get('verify_command')
+    if value is None:
+        return None
+    if isinstance(value, str):
+        try:
+            value = shlex.split(value)
+        except ValueError as exc:
+            raise CIPolicyError('CI_VERIFY_COMMAND_INVALID: ' + str(exc)) from exc
+    _require(isinstance(value, list) and value and all(isinstance(part, str) and part for part in value),
+             'CI_VERIFY_COMMAND_INVALID: expected a command string or a non-empty argv list')
+    return list(value)
+
+
+def verification_check(gate):
+    """The CI check accepted as Verify evidence, normalised, or None (since 1.6.0).
+
+    Either the check (job) name, or `{name, workflow, artifact_prefix}`: the job
+    that must conclude success, the workflow run name it must belong to
+    (optional) and the plan artifact prefix (default `bootstrap-plan`).
+    """
+    value = (gate or {}).get('verification_check')
+    if value is None:
+        return None
+    if isinstance(value, str):
+        value = {'name': value}
+    _require(isinstance(value, dict) and set(value) <= {'name', 'workflow', 'artifact_prefix'},
+             'CI_VERIFICATION_CHECK_INVALID: expected a check name or {name, workflow, artifact_prefix}')
+    for key in ('name', 'workflow', 'artifact_prefix'):
+        _require(key not in value or (isinstance(value[key], str) and value[key].strip()),
+                 'CI_VERIFICATION_CHECK_INVALID: ' + key)
+    _require('name' in value, 'CI_VERIFICATION_CHECK_INVALID: name')
+    _require(re.fullmatch(r'[A-Za-z0-9._-]+', value.get('artifact_prefix', 'bootstrap-plan')),
+             'CI_VERIFICATION_CHECK_INVALID: artifact_prefix')
+    return {'name': value['name'], 'workflow': value.get('workflow'),
+            'artifact_prefix': value.get('artifact_prefix', 'bootstrap-plan')}
+
+
+def hosted(labels):
+    """True when every label in this runner set is a GitHub-hosted label."""
+    return bool(labels) and all(HOSTED.match(label) for label in labels)
+
+
+def validate_ci(ci):
+    """Validate the `ci:` policy section. Returns it unchanged, or raises."""
+    _require(isinstance(ci, dict), 'CI_POLICY_INVALID: ci must be a mapping')
+    _require(ci.get('provider') in PROVIDERS, 'CI_PROVIDER_UNSUPPORTED: ' + repr(ci.get('provider')))
+    _require(ci.get('policy') in RUNNER_POLICIES, 'CI_RUNNER_POLICY_INVALID: ' + repr(ci.get('policy')))
+    if 'gate' in ci:
+        validate_gate(ci['gate'])
+
+    runners = ci.get('runners')
+    _require(isinstance(runners, dict) and runners, 'CI_RUNNERS_REQUIRED')
+    for platform, labels in runners.items():
+        _require(platform in PLATFORMS, 'CI_RUNNER_PLATFORM_UNKNOWN: ' + str(platform))
+        _require(isinstance(labels, list) and labels
+                 and all(isinstance(label, str) and label.strip() for label in labels),
+                 'CI_RUNNER_LABELS_INVALID: ' + platform)
+    _require('linux' in runners, 'CI_RUNNER_LINUX_REQUIRED')
+
+    capabilities = ci.get('capabilities')
+    _require(isinstance(capabilities, dict), 'CI_CAPABILITIES_REQUIRED')
+    _require(capabilities.get('system_packages') in SYSTEM_PACKAGES,
+             'CI_SYSTEM_PACKAGES_INVALID: ' + repr(capabilities.get('system_packages')))
+    _require(capabilities.get('python') in PYTHON_PROVISIONING,
+             'CI_PYTHON_PROVISIONING_INVALID: ' + repr(capabilities.get('python')))
+    version = capabilities.get('python_version')
+    _require(isinstance(version, str) and VERSION.match(version), 'CI_PYTHON_VERSION_INVALID: ' + repr(version))
+
+    exceptions = ci.get('exceptions', [])
+    _require(isinstance(exceptions, list), 'CI_EXCEPTIONS_INVALID')
+    for entry in exceptions:
+        _require(isinstance(entry, dict), 'CI_EXCEPTION_INVALID')
+        for key in ('workflow', 'platform', 'reason', 'removed_by', 'decided'):
+            value = entry.get(key)
+            _require(isinstance(value, str) and value.strip(), 'CI_EXCEPTION_FIELD_REQUIRED: ' + key)
+        _require(entry['platform'] in PLATFORMS, 'CI_EXCEPTION_PLATFORM_UNKNOWN: ' + entry['platform'])
+        _require(DATE.match(entry['decided']), 'CI_EXCEPTION_DECIDED_INVALID: ' + entry['decided'])
+    return ci
+
+
+def exception_errors(ci, workflows=()):
+    """Deviations from the project's own runner policy that lack a documented reason.
+
+    Under `self-hosted-required` a GitHub-hosted runner set is a deviation, and
+    every named workflow that runs on it needs its own dated exception entry
+    saying why the self-hosted runner cannot serve it and what would remove the
+    exception. Under `hosted-allowed` nothing is a deviation.
+    """
+    if ci.get('policy') != 'self-hosted-required':
+        return []
+    documented = {(entry['workflow'], entry['platform']) for entry in ci.get('exceptions', [])}
+    errors = []
+    for platform, labels in sorted(ci.get('runners', {}).items()):
+        if not hosted(labels):
+            continue
+        for workflow in sorted(workflows) or ['*']:
+            if (workflow, platform) not in documented and ('*', platform) not in documented:
+                errors.append('CI_HOSTED_RUNNER_UNDOCUMENTED: ' + workflow + ' runs ' + platform
+                              + ' on ' + ', '.join(labels)
+                              + '; record why the self-hosted runner cannot serve it under ci.exceptions')
+    return errors
+
+
+# --- Asset rendering -------------------------------------------------------
+#
+# A shipped asset stays a valid, lintable workflow file on disk. Tokens are
+# plain scalars -- `@` is a YAML reserved indicator and would break the parse --
+# and optional steps are wrapped in comment markers, so a template parses as
+# YAML both before and after rendering:
+#
+#     runs-on: __sanduq_runs_on_linux__
+#     # sanduq:if system_packages_apt
+#     - run: sudo apt-get install -y age
+#     # sanduq:endif
+#
+TOKEN = re.compile(r'__sanduq_([a-z0-9_]+)__')
+IF = re.compile(r'^(\s*)#\s*sanduq:if\s+(not\s+)?([a-z0-9_]+)\s*$')
+ENDIF = re.compile(r'^\s*#\s*sanduq:endif\s*$')
+
+
+def flags(ci):
+    """The named booleans a template may branch on; `self_hosted` guards PR jobs against fork code."""
+    capabilities = ci['capabilities']
+    return {'system_packages_apt': capabilities['system_packages'] == 'sudo-apt',
+            'python_setup_action': capabilities['python'] == 'setup-action',
+            'candidate_merge': gate_config(ci)['rules']['candidate_merge'],
+            'self_hosted': not hosted(ci['runners']['linux'])}
+
+
+def runs_on(labels):
+    """YAML for a `runs-on:` value: a scalar for one label, a flow sequence otherwise."""
+    if len(labels) == 1:
+        return labels[0]
+    return '[' + ', '.join(labels) + ']'
+
+
+def tokens(ci):
+    values = {'python_version': ci['capabilities']['python_version']}
+    for platform, labels in ci.get('runners', {}).items():
+        values['runs_on_' + platform] = runs_on(labels)
+    return values
+
+
+def render(template, ci):
+    """Render a shipped workflow asset for this project's CI selection.
+
+    `template` and the return value are both bytes so that callers keep control
+    of the checkout line ending they write.
+    """
+    validate_ci(ci)
+    text = template.decode('utf-8-sig')
+    newline = '\r\n' if '\r\n' in text else '\n'
+    known = flags(ci)
+    values = tokens(ci)
+
+    kept, stack = [], []
+    for number, line in enumerate(text.replace('\r\n', '\n').split('\n'), start=1):
+        opened = IF.match(line)
+        if opened:
+            name = opened.group(3)
+            _require(name in known, 'CI_TEMPLATE_FLAG_UNKNOWN: ' + name + ' (line ' + str(number) + ')')
+            keep = known[name] != bool(opened.group(2))
+            stack.append(keep and all(stack))
+            continue
+        if ENDIF.match(line):
+            _require(stack, 'CI_TEMPLATE_UNBALANCED: endif without if (line ' + str(number) + ')')
+            stack.pop()
+            continue
+        if all(stack):
+            kept.append(line)
+    _require(not stack, 'CI_TEMPLATE_UNBALANCED: unclosed if')
+
+    def substitute(match):
+        _require(match.group(1) in values, 'CI_TEMPLATE_TOKEN_UNKNOWN: ' + match.group(1)
+                 + '; the project declares no runner for this platform')
+        return values[match.group(1)]
+
+    return newline.join(TOKEN.sub(substitute, line) for line in kept).encode('utf-8')
+
+
+def load_ci(root):
+    """This project's recorded CI selection, or the shipped default. `root` is a project root or an existing
+    policy file (`init_manual.py --ci-policy FILE`).
+
+    Assure and User Manual can be installed without the workflow extension, so a
+    missing or CI-less policy is normal and yields the default rather than an error.
+    """
+    from pathlib import Path
+    path = Path(root) if Path(root).is_file() else Path(root) / '.specify/workflow.yml'
+    if not path.is_file():
+        return default_ci()
+    try:
+        import yaml
+    except ImportError:  # the consumer has not installed the workflow toolchain
+        return default_ci()
+    policy = yaml.safe_load(path.read_text(encoding='utf-8-sig')) or {}
+    ci = policy.get('ci') if isinstance(policy, dict) else None
+    return validate_ci(ci) if ci else default_ci()
+
+
+def release_differences(installed, release):
+    """How an installed package differs from its released archive, extracted at `release` (SEC-03).
+
+    A first-install PR has no gate on its base branch, so the gate runs from the release the head names and
+    requires the head's copy to match it. Text compares with CRLF as LF, as `inventory_sha256` hashes it.
+    Consumer configuration and state an install adds are allowed; an extra Python file is not, because a
+    script imports from its own folder first.
+    """
+    from pathlib import Path
+
+    def files(folder):
+        folder = Path(folder)
+        return {p.relative_to(folder).as_posix(): p.read_bytes() for p in folder.rglob('*')
+                if p.is_file() and '__pycache__' not in p.parts}
+
+    released, present = files(release), files(installed)
+    normal = {path: content.replace(b'\r\n', b'\n') for path, content in present.items()}
+    differences = [path + (': changed' if path in present else ': missing') for path in sorted(released)
+                   if normal.get(path) != released[path].replace(b'\r\n', b'\n')]
+    return differences + [path + ': not in the release' for path in sorted(set(present) - set(released))
+                          if path.endswith('.py')]
+
+
+if __name__ == '__main__':
+    import argparse
+    import json
+    import sys
+    parser = argparse.ArgumentParser(description='Compare an installed Sanduq package with its released archive')
+    parser.add_argument('command', choices=('verify-release',))
+    parser.add_argument('--installed', required=True)
+    parser.add_argument('--release', required=True)
+    args = parser.parse_args()
+    found = release_differences(args.installed, args.release)
+    print(json.dumps({'ok': not found, **({'error': 'INSTALLED_PACKAGE_NOT_RELEASED: ' + args.installed + ' differs '
+                      'from the released package: ' + '; '.join(found[:20])} if found else {})}))
+    sys.exit(1 if found else 0)

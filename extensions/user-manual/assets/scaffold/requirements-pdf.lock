@@ -1,0 +1,2 @@
+-r requirements-mkdocs.lock
+mkdocs-to-pdf==0.10.1

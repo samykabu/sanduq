@@ -1,0 +1,519 @@
+import json
+import re
+import subprocess
+import sys
+import tempfile
+import unittest
+from pathlib import Path
+
+import yaml
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
+import sanduq_ci as ci
+import workflow as w
+import test_workflow as fixture
+
+EXTENSIONS = Path(__file__).resolve().parents[2]
+ASSETS = {
+    'workflow-gates.yml': EXTENSIONS / 'workflow/assets/github/workflow-gates.yml',
+    'documentation-gates.yml': EXTENSIONS / 'assure/assets/github/documentation-gates.yml',
+    'user-manual-preview.yml': EXTENSIONS / 'user-manual/assets/github/user-manual-preview.yml',
+    'user-manual-release.yml': EXTENSIONS / 'user-manual/assets/github/user-manual-release.yml',
+}
+
+
+def self_hosted():
+    selection = ci.default_ci()
+    selection['policy'] = 'self-hosted-required'
+    selection['runners'] = {'linux': ['self-hosted', 'homek8-general'], 'windows': ['self-hosted', 'windows']}
+    selection['capabilities'] = {'system_packages': 'preinstalled', 'python': 'preinstalled',
+                                 'python_version': '3.13'}
+    return selection
+
+
+class LoadCiTests(unittest.TestCase):
+    """Codex round 5, finding 11: `load_ci` takes a project root or a policy file (`init_manual.py --ci-policy`)."""
+
+    def test_a_policy_file_and_a_project_root_both_load_their_selection(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            self.assertEqual(ci.load_ci(root), ci.default_ci())  # no policy: the default, as before
+            policy = root / '.specify/workflow.yml'
+            policy.parent.mkdir()
+            policy.write_text(yaml.safe_dump({'schema_version': 1, 'ci': self_hosted()}), encoding='utf-8')
+            self.assertEqual(ci.load_ci(root), self_hosted())
+            self.assertEqual(ci.load_ci(policy), self_hosted())
+            self.assertEqual(ci.load_ci(str(policy)), self_hosted())
+            other = root / 'ci-only.yml'
+            other.write_text(yaml.safe_dump({'ci': self_hosted()}), encoding='utf-8')
+            self.assertEqual(ci.load_ci(other), self_hosted())
+
+
+class RenderTests(unittest.TestCase):
+    def test_every_shipped_asset_renders_to_valid_yaml_under_both_selections(self):
+        for name, path in ASSETS.items():
+            for label, selection in (('hosted', ci.default_ci()), ('self-hosted', self_hosted())):
+                with self.subTest(asset=name, selection=label):
+                    body = ci.render(path.read_bytes(), selection).decode()
+                    self.assertNotIn('__sanduq_', body, 'unsubstituted token')
+                    self.assertNotIn('sanduq:if', body, 'marker leaked into the rendered file')
+                    self.assertNotIn('sanduq:endif', body)
+                    self.assertTrue(yaml.safe_load(body).get('jobs'), name)
+
+    def test_declared_runner_labels_reach_every_job(self):
+        for name, path in ASSETS.items():
+            with self.subTest(asset=name):
+                body = ci.render(path.read_bytes(), self_hosted()).decode()
+                self.assertIn('runs-on: [self-hosted, homek8-general]', body)
+                self.assertNotIn('ubuntu-latest', body)
+
+    def test_a_single_label_renders_as_a_scalar_not_a_sequence(self):
+        selection = ci.default_ci()
+        selection['runners']['linux'] = ['homek8-general']
+        # The renderer preserves the template's own line ending, so this must not
+        # depend on how the checkout landed.
+        body = ci.render(ASSETS['workflow-gates.yml'].read_bytes(), selection).decode().replace('\r\n', '\n')
+        self.assertIn('runs-on: homek8-general\n', body)
+        document = yaml.safe_load(body)
+        self.assertEqual(list(document['jobs'].values())[0]['runs-on'], 'homek8-general')
+
+    def test_preinstalled_capabilities_remove_steps_a_self_hosted_runner_cannot_execute(self):
+        for name in ('user-manual-preview.yml', 'user-manual-release.yml'):
+            with self.subTest(asset=name):
+                body = ci.render(ASSETS[name].read_bytes(), self_hosted()).decode()
+                self.assertNotIn('sudo', body, 'an apt step survived a runner with no sudo')
+                self.assertNotIn('actions/setup-python', body)
+
+    def test_the_shipped_default_still_produces_github_hosted_workflows(self):
+        # Adopting this release must not change CI for a project that never
+        # records a selection of its own.
+        for name, path in ASSETS.items():
+            with self.subTest(asset=name):
+                body = ci.render(path.read_bytes(), ci.default_ci()).decode()
+                self.assertIn('runs-on: ubuntu-latest', body)
+        preview = ci.render(ASSETS['user-manual-preview.yml'].read_bytes(), ci.default_ci()).decode()
+        self.assertIn('sudo apt-get install -y age', preview)
+        self.assertIn('actions/setup-python', preview)
+        gates = ci.render(ASSETS['workflow-gates.yml'].read_bytes(), ci.default_ci()).decode()
+        self.assertIn('actions/setup-python', gates)
+        self.assertIn('ci_gate.py', gates)
+
+    def test_every_template_is_itself_valid_yaml_before_rendering(self):
+        # A token must be a plain scalar. '@' is a YAML reserved indicator, so a
+        # token spelled with it makes the shipped file unparseable for the lint
+        # job and for editor tooling, even though it renders correctly.
+        for name, path in ASSETS.items():
+            with self.subTest(asset=name):
+                document = yaml.safe_load(path.read_text(encoding='utf-8-sig'))
+                self.assertTrue(document.get('jobs'), name)
+
+    def test_multiple_labels_render_as_a_yaml_sequence_not_a_string(self):
+        for name, path in ASSETS.items():
+            with self.subTest(asset=name):
+                document = yaml.safe_load(ci.render(path.read_bytes(), self_hosted()).decode())
+                for job in document['jobs'].values():
+                    self.assertEqual(job['runs-on'], ['self-hosted', 'homek8-general'])
+
+    def test_line_endings_follow_the_template(self):
+        template = ASSETS['workflow-gates.yml'].read_bytes().replace(b'\r\n', b'\n')
+        self.assertNotIn(b'\r\n', ci.render(template, ci.default_ci()))
+        self.assertIn(b'\r\n', ci.render(template.replace(b'\n', b'\r\n'), ci.default_ci()))
+
+    def test_unknown_flag_or_token_is_refused_rather_than_silently_emitted(self):
+        cases = (
+            (b'# sanduq:if invented\nx\n# sanduq:endif\n', 'CI_TEMPLATE_FLAG_UNKNOWN'),
+            (b'runs-on: __sanduq_runs_on_solaris__\n', 'CI_TEMPLATE_TOKEN_UNKNOWN'),
+            (b'# sanduq:if python_setup_action\nx\n', 'CI_TEMPLATE_UNBALANCED'),
+            (b'# sanduq:endif\n', 'CI_TEMPLATE_UNBALANCED'),
+        )
+        for template, message in cases:
+            with self.subTest(message=message):
+                with self.assertRaisesRegex(ci.CIPolicyError, message):
+                    ci.render(template, ci.default_ci())
+
+    def test_a_platform_the_project_never_declared_fails_loudly(self):
+        selection = ci.default_ci()
+        selection['runners'].pop('windows')
+        with self.assertRaisesRegex(ci.CIPolicyError, 'CI_TEMPLATE_TOKEN_UNKNOWN'):
+            ci.render(b'runs-on: __sanduq_runs_on_windows__\n', selection)
+
+    def test_a_dropped_block_takes_its_nested_content_with_it(self):
+        template = (b'# sanduq:if system_packages_apt\n'
+                    b'outer\n'
+                    b'# sanduq:if python_setup_action\n'
+                    b'inner\n'
+                    b'# sanduq:endif\n'
+                    b'# sanduq:endif\n'
+                    b'always\n')
+        selection = ci.default_ci()
+        selection['capabilities']['system_packages'] = 'preinstalled'
+        self.assertEqual(ci.render(template, selection), b'always\n')
+        self.assertEqual(ci.render(template, ci.default_ci()), b'outer\ninner\nalways\n')
+
+
+class ValidationTests(unittest.TestCase):
+    def test_the_shipped_default_is_valid(self):
+        self.assertEqual(ci.validate_ci(ci.default_ci()), ci.default_ci())
+
+    def test_each_malformed_selection_is_named_precisely(self):
+        dated = {'workflow': 'w', 'platform': 'linux', 'reason': 'r', 'removed_by': 'x', 'decided': 'yesterday'}
+        cases = {
+            'CI_PROVIDER_UNSUPPORTED': lambda s: s.update(provider='jenkins'),
+            'CI_RUNNER_POLICY_INVALID': lambda s: s.update(policy='whatever'),
+            'CI_RUNNER_LINUX_REQUIRED': lambda s: s.update(runners={'windows': ['x']}),
+            'CI_RUNNER_LABELS_INVALID': lambda s: s['runners'].update(linux=[]),
+            'CI_RUNNER_PLATFORM_UNKNOWN': lambda s: s['runners'].update(solaris=['x']),
+            'CI_SYSTEM_PACKAGES_INVALID': lambda s: s['capabilities'].update(system_packages='yum'),
+            'CI_PYTHON_PROVISIONING_INVALID': lambda s: s['capabilities'].update(python='maybe'),
+            'CI_PYTHON_VERSION_INVALID': lambda s: s['capabilities'].update(python_version='three'),
+            'CI_EXCEPTION_FIELD_REQUIRED': lambda s: s.update(exceptions=[{'workflow': 'w'}]),
+            'CI_EXCEPTION_DECIDED_INVALID': lambda s: s.update(exceptions=[dated]),
+        }
+        for message, mutate in cases.items():
+            with self.subTest(message=message):
+                selection = ci.default_ci()
+                mutate(selection)
+                with self.assertRaisesRegex(ci.CIPolicyError, message):
+                    ci.validate_ci(selection)
+
+    def test_hosted_label_families_are_recognized(self):
+        for labels in (['ubuntu-latest'], ['windows-2022'], ['macos-14-xlarge']):
+            self.assertTrue(ci.hosted(labels), labels)
+        for labels in (['self-hosted', 'homek8-general'], ['homek8-general'], ['self-hosted', 'ubuntu-latest']):
+            self.assertFalse(ci.hosted(labels), labels)
+
+    def test_the_shipped_schema_matches_the_shipped_default(self):
+        schema = json.loads((EXTENSIONS / 'workflow/schemas/policy-v1.schema.json').read_text(encoding='utf-8'))
+        section = schema['properties']['ci']
+        selection = ci.default_ci()
+        # Gate is optional in the schema so pre-selection consumer policies stay valid.
+        self.assertEqual(sorted(section['required']), sorted(k for k in selection if k not in ('exceptions', 'gate')))
+        gate = section['properties']['gate']
+        self.assertEqual(sorted(gate['properties']['mode']['enum']), sorted(ci.GATE_MODES))
+        self.assertEqual(sorted(gate['properties']['scope']['enum']), sorted(ci.GATE_SCOPES))
+        self.assertEqual(sorted(gate['properties']['rules']['properties']), sorted(ci.GATE_RULES))
+        self.assertEqual(sorted(section['properties']['provider']['enum']), sorted(ci.PROVIDERS))
+        self.assertEqual(sorted(section['properties']['policy']['enum']), sorted(ci.RUNNER_POLICIES))
+        capabilities = section['properties']['capabilities']['properties']
+        self.assertEqual(sorted(capabilities['system_packages']['enum']), sorted(ci.SYSTEM_PACKAGES))
+        self.assertEqual(sorted(capabilities['python']['enum']), sorted(ci.PYTHON_PROVISIONING))
+        self.assertEqual(sorted(section['properties']['runners']['properties']), sorted(ci.PLATFORMS))
+
+    def test_gate_modes_rules_and_legacy_selection(self):
+        selection = ci.default_ci()
+        self.assertEqual(ci.gate_config(selection)['mode'], 'advisory')
+        self.assertEqual(ci.gate_config(selection)['scope'], 'managed-only')
+        legacy = dict(selection); legacy.pop('gate')
+        self.assertEqual(ci.gate_config(legacy)['mode'], 'required')
+        self.assertEqual(ci.gate_config(legacy)['scope'], 'all-prs')
+        for rule, dependency in (('live_answers', 'decisions'), ('candidate_merge', 'receipts'),
+                                 ('portability', 'receipts'), ('task_links', 'tasks')):
+            with self.subTest(rule=rule):
+                gate = ci.gate_config(selection).copy()
+                gate['rules'] = dict(gate['rules'], **{rule: True, dependency: False})
+                with self.assertRaisesRegex(ci.CIPolicyError, 'CI_GATE_RULE_DEPENDENCY'):
+                    ci.validate_gate(gate)
+
+
+class MergeCandidateTemplateTests(unittest.TestCase):
+    def test_selected_candidate_uses_pr_merge_ref(self):
+        source = ASSETS['workflow-gates.yml'].read_bytes()
+        selection = ci.default_ci()
+        head = ci.render(source, selection).decode()
+        self.assertIn('ref: ${{ github.event.pull_request.head.sha }}', head)
+        selection['gate']['rules']['candidate_merge'] = True
+        merged = ci.render(source, selection).decode()
+        self.assertNotIn('ref: ${{ github.event.pull_request.head.sha }}', merged)
+        # G5: the base ref is fetched explicitly instead of a blanket fetch-depth: 0
+        # (which clones every branch and tag in the remote), in both modes.
+        self.assertNotIn('fetch-depth: 0', merged)
+        self.assertNotIn('commits + 1', merged)  # GitHub expressions have no arithmetic: the file would not load
+        self.assertIn('--deepen="$COMMITS" origin "$(git rev-parse HEAD)"', merged)
+        self.assertIn('git fetch --no-tags --prune origin "+refs/heads/$BASE_REF:refs/remotes/origin/$BASE_REF"', merged)
+        self.assertIn('BASE_REF: ${{ github.event.pull_request.base.ref }}', merged)
+
+
+class GateJobHygieneTests(unittest.TestCase):
+    def test_the_gate_can_reread_ci_runs(self):
+        # 1.6.1: the gate re-reads every CI run a Verify receipt is accepted
+        # through, so the job needs actions: read and the token in the gate step.
+        document = yaml.safe_load(ci.render(ASSETS['workflow-gates.yml'].read_bytes(), ci.default_ci()).decode())
+        job = document['jobs']['workflow-evidence']
+        self.assertEqual(job['permissions'], {'contents': 'read', 'issues': 'read', 'actions': 'read'})
+        gate = next(step for step in job['steps'] if 'ci_gate.py' in (step.get('run') or ''))
+        self.assertEqual(gate['env']['GH_TOKEN'], '${{ github.token }}')
+
+    def test_the_gate_runs_the_base_branch_copy_against_the_head(self):
+        # SEC-03 / DEC-13 A: the PR cannot change the code, requirements or policy that grade it.
+        for name, job in (('workflow-gates.yml', 'workflow-evidence'), ('documentation-gates.yml', 'feature-documentation')):
+            with self.subTest(asset=name):
+                steps = yaml.safe_load(ci.render(ASSETS[name].read_bytes(), ci.default_ci()).decode())['jobs'][job]['steps']
+                base = next(step['with'] for step in steps if (step.get('with') or {}).get('path') == '.sanduq-base')
+                self.assertEqual((base['ref'], base['persist-credentials']),
+                                 ('${{ github.event.pull_request.base.sha }}', False))
+                for step in steps:
+                    self.assertNotRegex(step.get('run') or '', r'(?<![\w-])python \.specify/|-r \.specify/', step)
+        steps = yaml.safe_load(ci.render(ASSETS['workflow-gates.yml'].read_bytes(), ci.default_ci()).decode())
+        gate = steps['jobs']['workflow-evidence']['steps'][-1]['run']
+        self.assertIn('gate=.sanduq-base/.specify/extensions/workflow/scripts/ci_gate.py', gate)
+        self.assertIn('--trusted-root .sanduq-base', gate)
+
+    def test_a_first_install_must_match_its_release(self):
+        with tempfile.TemporaryDirectory() as folder:
+            release, installed = Path(folder) / 'release', Path(folder) / 'installed'
+            for tree, eol in ((release, b'\n'), (installed, b'\r\n')):
+                (tree / 'scripts').mkdir(parents=True)
+                (tree / 'scripts/ci_gate.py').write_bytes(b'gate()' + eol + b'done()' + eol)
+            (installed / 'config.json').write_bytes(b'{}')  # consumer configuration is not package content
+            self.assertEqual(ci.release_differences(installed, release), [])
+            (installed / 'scripts/ci_gate.py').write_bytes(b'print("passed")\n')
+            (installed / 'scripts/json.py').write_bytes(b'')
+            self.assertEqual(ci.release_differences(installed, release),
+                             ['scripts/ci_gate.py: changed', 'scripts/json.py: not in the release'])
+
+    def test_the_gate_never_ships_a_blanket_fetch_depth_zero(self):
+        # G5: fetch-depth: 0 clones every branch and tag in the remote just to
+        # compute one merge-base; a bounded PR-history fetch plus an explicit
+        # fetch of the base ref is enough for ci_gate.py's resolve_features().
+        body = ASSETS['workflow-gates.yml'].read_bytes().decode()
+        self.assertNotIn('fetch-depth: 0', body)
+
+    def test_the_base_ref_is_fetched_before_the_gate_runs(self):
+        body = ci.render(ASSETS['workflow-gates.yml'].read_bytes(), ci.default_ci()).decode()
+        document = yaml.safe_load(body)
+        steps = document['jobs']['workflow-evidence']['steps']
+        names = [step.get('uses') or step.get('name') or step.get('run') for step in steps]
+        fetch_index = next(i for i, step in enumerate(steps)
+                           if 'fetch' in (step.get('run') or '') and 'base.ref' in (step.get('env') or {}).get('BASE_REF', ''))
+        gate_index = next(i for i, step in enumerate(steps) if 'ci_gate.py' in (step.get('run') or ''))
+        checkout_index = next(i for i, name in enumerate(names) if name.startswith('actions/checkout@'))
+        self.assertLess(checkout_index, fetch_index, names)
+        self.assertLess(fetch_index, gate_index, names)
+
+    def test_no_expression_is_interpolated_into_a_gate_shell_command(self):
+        # Event data reaches run: only through env, never spliced into the script text.
+        for selection in (ci.default_ci(), self_hosted()):
+            document = yaml.safe_load(ci.render(ASSETS['workflow-gates.yml'].read_bytes(), selection).decode())
+            for step in document['jobs']['workflow-evidence']['steps']:
+                self.assertNotIn('${{', step.get('run') or '', step)
+
+
+# The PR-triggered assets that carry the fork guard, and the assets whose actions are pinned.
+FORK_GUARDED = ('workflow-gates.yml', 'documentation-gates.yml', 'user-manual-preview.yml')
+FORK_GUARD = 'github.event.pull_request.head.repo.full_name == github.repository'
+PINNED = ('workflow-gates.yml', 'documentation-gates.yml', 'user-manual-preview.yml', 'user-manual-release.yml')
+
+
+class ForkGuardTests(unittest.TestCase):
+    def test_a_self_hosted_runner_never_runs_a_fork_pull_request(self):
+        for name in FORK_GUARDED:
+            with self.subTest(asset=name):
+                document = yaml.safe_load(ci.render(ASSETS[name].read_bytes(), self_hosted()).decode())
+                for job in document['jobs'].values():
+                    self.assertEqual(job.get('if'), FORK_GUARD)
+
+    def test_github_hosted_jobs_carry_no_condition(self):
+        for name, path in ASSETS.items():
+            with self.subTest(asset=name):
+                document = yaml.safe_load(ci.render(path.read_bytes(), ci.default_ci()).decode())
+                for job in document['jobs'].values():
+                    self.assertNotIn('if', job)
+
+    def test_every_action_is_pinned_to_a_commit_with_its_version(self):
+        for name in PINNED:
+            with self.subTest(asset=name):
+                uses = re.findall(r'^\s*-?\s*uses:.*$', ASSETS[name].read_text(encoding='utf-8-sig'), re.M)
+                self.assertTrue(uses)
+                for line in uses:
+                    self.assertRegex(line, r'uses: [\w.-]+/[\w./-]+@[0-9a-f]{40} # v\d+\.\d+\.\d+$')
+
+
+class ExceptionTests(unittest.TestCase):
+    def test_hosted_allowed_never_demands_a_reason(self):
+        self.assertEqual(ci.exception_errors(ci.default_ci(), ['a.yml', 'b.yml']), [])
+
+    def test_self_hosted_required_names_each_undocumented_workflow_and_platform(self):
+        selection = ci.default_ci()
+        selection['policy'] = 'self-hosted-required'
+        errors = ci.exception_errors(selection, ['gates.yml'])
+        self.assertEqual(len(errors), 2)  # linux and windows are both hosted
+        self.assertTrue(all('CI_HOSTED_RUNNER_UNDOCUMENTED' in e and 'gates.yml' in e for e in errors))
+
+    def test_a_dated_exception_clears_exactly_its_own_workflow_and_platform(self):
+        selection = ci.default_ci()
+        selection['policy'] = 'self-hosted-required'
+        selection['runners'] = {'linux': ['self-hosted', 'homek8-general'], 'windows': ['windows-latest']}
+        selection['exceptions'] = [{'workflow': 'gates.yml', 'platform': 'windows',
+                                    'reason': 'no self-hosted Windows runner is registered',
+                                    'removed_by': 'register a Windows scale set', 'decided': '2026-09-22'}]
+        self.assertEqual(ci.exception_errors(selection, ['gates.yml']), [])
+        # A second workflow on the same hosted runner is a separate decision.
+        self.assertEqual(len(ci.exception_errors(selection, ['gates.yml', 'release.yml'])), 1)
+
+
+class PolicyIntegrationTests(unittest.TestCase):
+    configure = fixture.WorkflowTests.configure
+    setUp = fixture.WorkflowTests.setUp
+
+    def install_asset(self, name='workflow-gates.yml', extension='workflow'):
+        asset = self.root / '.specify/extensions' / extension / 'assets/github' / name
+        asset.parent.mkdir(parents=True, exist_ok=True)
+        asset.write_bytes(ASSETS[name].read_bytes())
+        return asset
+
+    def test_a_policy_written_before_ci_selection_existed_keeps_its_behaviour(self):
+        legacy = {k: v for k, v in w.default_policy(True, True).items() if k != 'ci'}
+        (self.root / '.specify/workflow.yml').write_text(yaml.safe_dump(legacy), encoding='utf-8')
+        self.assertEqual(ci.gate_config(w.load_policy(self.root)['ci'])['mode'], 'required')
+
+    def test_a_malformed_ci_selection_stops_the_workflow(self):
+        policy = w.default_policy(True, True)
+        policy['ci']['runners']['linux'] = []
+        (self.root / '.specify/workflow.yml').write_text(yaml.safe_dump(policy), encoding='utf-8')
+        with self.assertRaisesRegex(w.WorkflowError, 'CI_RUNNER_LABELS_INVALID'):
+            w.load_policy(self.root)
+
+    def test_doctor_reports_a_workflow_file_left_behind_by_a_changed_selection(self):
+        asset = self.install_asset()
+        target = self.root / '.github/workflows/sanduq-workflow-gates.yml'
+        target.parent.mkdir(parents=True, exist_ok=True)
+        policy = w.load_policy(self.root)
+        target.write_bytes(ci.render(asset.read_bytes(), policy['ci']))
+        self.assertEqual(w.ci_errors(self.root, policy), [])
+
+        policy['ci']['runners']['linux'] = ['self-hosted', 'homek8-general']
+        self.assertTrue(any('CI_WORKFLOW_STALE' in e for e in w.ci_errors(self.root, policy)))
+
+    def test_a_file_kept_by_preserve_ci_is_the_projects_own_business(self):
+        self.install_asset()
+        target = self.root / '.github/workflows/sanduq-workflow-gates.yml'
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(b'name: Local policy\njobs: {}\n')
+        policy = w.load_policy(self.root)
+        self.assertTrue(any('CI_WORKFLOW_STALE' in e for e in w.ci_errors(self.root, policy)))
+        w.write(self.root / '.specify/workflow/install-receipt.json',
+                {'preserved_ci': {'path': '.github/workflows/sanduq-workflow-gates.yml'}})
+        self.assertEqual(w.ci_errors(self.root, policy), [])
+
+    def test_a_preserved_file_recorded_in_the_tracked_lock_needs_no_receipt(self):
+        self.install_asset()
+        target = self.root / '.github/workflows/sanduq-workflow-gates.yml'
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(b'name: Local policy\njobs: {}\n')
+        policy = w.load_policy(self.root)
+        self.assertTrue(any('CI_WORKFLOW_STALE' in e for e in w.ci_errors(self.root, policy)))
+        self.assertEqual(w.ci_errors(self.root, policy, '.github/workflows/sanduq-workflow-gates.yml'), [])
+        w.write(self.root / '.specify/workflow/install-lock.json',
+                {'preserved_ci': {'path': '.github/workflows/sanduq-workflow-gates.yml'}})
+        self.assertFalse((self.root / '.specify/workflow/install-receipt.json').exists())
+        self.assertEqual(w.ci_errors(self.root, policy), [])
+
+    def test_a_lock_that_clears_preserved_ci_overrides_an_old_local_receipt(self):
+        self.install_asset()
+        target = self.root / '.github/workflows/sanduq-workflow-gates.yml'
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(b'name: Local policy\njobs: {}\n')
+        policy = w.load_policy(self.root)
+        w.write(self.root / '.specify/workflow/install-receipt.json',
+                {'preserved_ci': {'path': '.github/workflows/sanduq-workflow-gates.yml'}})
+        w.write(self.root / '.specify/workflow/install-lock.json', {'preserved_ci': None})
+        self.assertTrue(any('CI_WORKFLOW_STALE' in e for e in w.ci_errors(self.root, policy)))
+
+    def test_doctor_demands_a_reason_for_a_hosted_runner_the_project_forbade(self):
+        self.install_asset()
+        target = self.root / '.github/workflows/sanduq-workflow-gates.yml'
+        target.parent.mkdir(parents=True, exist_ok=True)
+        policy = w.load_policy(self.root)
+        policy['ci']['policy'] = 'self-hosted-required'
+        target.write_bytes(ci.render(self.install_asset().read_bytes(), policy['ci']))
+        errors = w.ci_errors(self.root, policy)
+        self.assertTrue(any('CI_HOSTED_RUNNER_UNDOCUMENTED' in e for e in errors), errors)
+        self.assertTrue(any('sanduq-workflow-gates.yml' in e for e in errors), errors)
+
+    def test_provider_none_manages_no_workflow_files_at_all(self):
+        policy = w.load_policy(self.root)
+        policy['ci']['provider'] = 'none'
+        policy['ci']['policy'] = 'self-hosted-required'
+        target = self.root / '.github/workflows/sanduq-workflow-gates.yml'
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(b'anything\n')
+        self.assertTrue(any('CI_PROVIDER_NONE_FILE_PRESENT' in error
+                            for error in w.ci_errors(self.root, policy)))
+        target.unlink()
+        self.assertEqual(w.ci_errors(self.root, policy), [])
+
+    def test_the_cli_records_a_selection_once_and_persists_it(self):
+        script = EXTENSIONS / 'workflow/scripts/workflow.py'
+        result = subprocess.run([sys.executable, str(script), '--root', str(self.root), 'ci',
+                                 '--policy', 'self-hosted-required',
+                                 '--linux', 'self-hosted,homek8-general',
+                                 '--system-packages', 'preinstalled', '--python', 'preinstalled'],
+                                capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        saved = json.loads(result.stdout)['ci']
+        self.assertEqual(saved['runners']['linux'], ['self-hosted', 'homek8-general'])
+        reloaded = w.load_policy(self.root)['ci']
+        self.assertEqual(reloaded['policy'], 'self-hosted-required')
+        self.assertEqual(reloaded['capabilities']['python'], 'preinstalled')
+        # F7: the hosted windows-latest default the command did not name is dropped, not left to fail install.
+        self.assertNotIn('windows', reloaded['runners'])
+        self.assertEqual(json.loads(result.stdout)['dropped_hosted_platforms'], ['windows'])
+        self.assertEqual(w.ci_errors(self.root, w.load_policy(self.root)), [])
+
+    def test_the_cli_refuses_a_selection_it_could_not_render(self):
+        script = EXTENSIONS / 'workflow/scripts/workflow.py'
+        result = subprocess.run([sys.executable, str(script), '--root', str(self.root), 'ci', '--linux', 'none'],
+                                capture_output=True, text=True)
+        self.assertEqual(result.returncode, 1)
+        self.assertIn('CI_RUNNER_LINUX_REQUIRED', result.stdout + result.stderr)
+        # The rejected selection must not have reached the policy file.
+        self.assertEqual(w.load_policy(self.root)['ci']['runners']['linux'], ['ubuntu-latest'])
+
+    def test_the_runtime_works_from_a_copied_scripts_directory(self):
+        # Project init (project_init.py) runs workflow.py out of
+        # .specify/extensions/workflow/scripts/, a plain copy of this directory
+        # with no package layout around it. A shared module reachable only from
+        # the source tree makes that invocation die on import, which no
+        # source-tree test would notice.
+        import shutil
+        import tempfile
+        copy = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, copy, True)
+        scripts = copy / '.specify/extensions/workflow/scripts'
+        shutil.copytree(EXTENSIONS / 'workflow/scripts', scripts,
+                        ignore=shutil.ignore_patterns('__pycache__'))
+        # Installed scripts include package.py's canonical shared-module injection.
+        for helper in ('check_inputs.py', 'evidence_snapshot.py', 'bounded_json.py', 'sanduq_remote.py', 'sanduq_gh.py',
+                       'sanduq_pr_lint.py', 'sanduq_fs.py'):
+            shutil.copyfile(EXTENSIONS / 'scripts/shared' / helper, scripts / helper)
+        subprocess.run(['git', 'init', '-q'], cwd=copy, check=True, capture_output=True)
+        (copy / '.specify/workflow.yml').write_text(
+            yaml.safe_dump(w.default_policy(False, False)), encoding='utf-8')
+        for action in (['project-defaults'], ['ci', '--show']):
+            with self.subTest(action=action[0]):
+                result = subprocess.run([sys.executable, str(scripts / 'workflow.py'), *action],
+                                        cwd=copy, capture_output=True, text=True)
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                self.assertTrue(json.loads(result.stdout))
+
+    def test_changing_ci_never_invalidates_completed_semantic_work(self):
+        before = w.default_policy(True, True)
+        after = w.default_policy(True, True)
+        after['ci']['runners']['linux'] = ['self-hosted']
+        self.assertEqual(w.policy_cutoff(before, after), len(w.BASE_STAGES))
+
+
+if __name__ == '__main__':
+    unittest.main()
+
+
+class TemplateExpressionTests(unittest.TestCase):
+    def test_no_template_expression_uses_arithmetic(self):
+        """GitHub expressions have no + - * / operators; one in a template makes the whole workflow file fail to load."""
+        import re
+        # previous/ keeps old renders byte for byte so upgrades can recognise them; it is never installed.
+        for path in sorted(p for p in EXTENSIONS.glob('*/assets/github/**/*.yml') if 'previous' not in p.parts):
+            for expression in re.findall(r'\$\{\{(.*?)\}\}', path.read_text(encoding='utf-8')):
+                with self.subTest(path=path.name, expression=expression):
+                    self.assertIsNone(re.search(r'\s[-+*/]\s', expression))

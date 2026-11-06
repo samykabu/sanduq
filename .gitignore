@@ -1,0 +1,15 @@
+# build artifacts
+*.zip
+dist/
+node_modules/
+__pycache__/
+*.py[cod]
+# editor / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+# Recorded CI plan artifacts used as test fixtures
+!extensions/workflow/tests/fixtures/ci-runs/*/artifact.zip
+.delegate/
+/artifacts/workflow-memory-lifecycle/

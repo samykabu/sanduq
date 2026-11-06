@@ -1,0 +1,41 @@
+# PR image-embedding rules
+
+Load this reference only when `speckit.pr.generate` is about to write or update a pull-request body
+that has at least one reviewer-facing diagram or screenshot. Skip it entirely for a PR with no
+visuals. Repositories are private, so every rule below assumes an authenticated, authorized reviewer.
+
+**Mandatory inline visuals, including private repositories.** Build an inventory of every
+reviewer-facing diagram and screenshot in `<Feature>-Explained.md`. Embed each in the PR body
+as an image with descriptive alt text, including Illustrate exports and screenshots.
+A file link, HTML-source link, or link to the explanation document does not satisfy this rule.
+
+- Use a renderable image export for each diagram; link editable HTML/JSON sources in addition.
+  Do not fabricate images when none is relevant, or silently omit an expected export that failed.
+- Keep relative image paths in `<Feature>-Explained.md` and commit the images, and every document the
+  explainer links to (such as `docs/<feature-slug>/CHANGELOG.md`), first. `pr_publish.py`
+  rewrites each relative path (Markdown or `<img src>`, outside code) to
+  `https://github.com/<owner>/<repo>/blob/<HEAD sha>/<encoded-path>?raw=true` after checking it is
+  committed at HEAD and readable through the contents API at that commit (relative Markdown links
+  get the same commit's `blob/<HEAD sha>/<path>` URL, anchor kept), before the lint, so the
+  lint hash covers the final body. It pushes a new branch first; otherwise push before running it.
+  An image or linked file it cannot verify stops it with the path named (exit 2 not committed or outside the repository, exit 3 not on
+  the remote): fix and rerun, never hand-edit the published body. Supported GitHub attachment URLs
+  stay as written. Do not claim unreachable commits guarantee permanent asset retention.
+- Do not use unauthenticated `raw.githubusercontent.com` links for private assets, add tokens to
+  URLs, upload private material to public hosts, or rely on base64/data URLs that GitHub sanitizes.
+- After PR creation/update, retrieve rendered HTML with the appropriate GitHub API media type
+  (for example `application/vnd.github.full+json` and `.body_html`) and reconcile its image
+  elements against the inventory. GitHub may proxy/rewrite URLs; do not require literal equality
+  to one hard-coded `<img src>` string. The script already checked each path through the contents API
+  at the pinned commit.
+- Verify at the highest tier the host offers and name it. **`api`** (both hosts): every inventory
+  image appears in the rendered `body_html` and every repository-backed path resolves through the
+  contents API at its pinned commit. **`browser`** (when a browser tool with repository access
+  exists): the `api` checks plus actual image loading in an authenticated browser, since `<img>`
+  elements alone are not proof of loading. Repair broken embeds and recheck. The receipt records
+  `images_verified: true` and `image_verification: api` or `browser`; if neither tier passes,
+  report PR creation separately from unverified image visibility and do not report the
+  generation task complete.
+- Preserve existing unrelated PR content and avoid duplicate image sections on retry. If upload,
+  export, permissions, or PR body limits prevent complete embedding, record the missing assets
+  and recovery action; do not silently replace them with links or discard visuals.

@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>[PROJECT NAME] Architecture</title>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Serif:ital,wght@0,400;1,400&family=Noto+Naskh+Arabic:wght@400;500;600&family=Noto+Sans+Arabic:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    /* ── Tokens ─────────────────────────────────────────────────── */
+    :root {
+      --color-paper:       #f6f8fc;
+      --color-paper-2:     #ffffff;
+      --color-ink:         #15233c;
+      --color-muted:       #4f6078;
+      --color-soft:        #6b7a90;
+      --color-rule:        rgba(21,35,60,0.12);
+      --color-rule-solid:  rgba(79,96,120,0.25);
+      --color-accent:      #2563eb;
+      --color-accent-tint: rgba(37,99,235,0.08);
+      --color-link:        #1d4ed8;
+      --font-sans:   'IBM Plex Sans', 'Noto Sans Arabic', system-ui, sans-serif;
+      --font-serif:  'IBM Plex Serif', 'Noto Naskh Arabic', 'Times New Roman', serif;
+      --font-mono:   'IBM Plex Mono', 'Noto Sans Arabic', ui-monospace, Menlo, monospace;
+    }
+
+    body {
+      font-family: var(--font-sans);
+      background: var(--color-paper);
+      min-height: 100vh;
+      padding: 3rem 2rem;
+      color: var(--color-ink);
+    }
+
+    .container { max-width: 1200px; margin: 0 auto; }
+
+    /* ── Header ─────────────────────────────────────────────────── */
+    .header { margin-bottom: 2.5rem; }
+
+    .header-eyebrow {
+      font-family: var(--font-mono);
+      font-size: 0.66rem;
+      font-weight: 500;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--color-muted);
+      margin-bottom: 0.75rem;
+    }
+
+    h1 {
+      font-family: var(--font-serif);
+      font-size: clamp(1.75rem, 3vw + 1rem, 2.5rem);
+      font-weight: 400;
+      letter-spacing: -0.02em;
+      line-height: 1.1;
+      color: var(--color-ink);
+      margin-bottom: 0.5rem;
+    }
+
+    .subtitle {
+      font-family: var(--font-sans);
+      font-size: 1rem;
+      line-height: 1.55;
+      color: var(--color-muted);
+      max-width: 52ch;
+    }
+
+    /* ── Diagram container ────────────────────────────────────────── */
+    /* Default: clean, borderless — diagram sits directly on the page paper.
+       For the framed/boxed variant, uncomment the background/border/padding below. */
+    .diagram-container {
+      background: transparent;
+      border: none;
+      padding: 0;
+      overflow-x: auto;
+      /* background: var(--color-paper-2); */
+      /* border: 1px solid var(--color-rule); */
+      /* border-radius: 8px; */
+      /* padding: 1.5rem; */
+    }
+
+    svg { width: 100%; min-width: 1000px; display: block; }
+
+    /* ── Info cards ───────────────────────────────────────────────── */
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 1rem;
+      margin-top: 1.5rem;
+    }
+
+    .card {
+      background: #ffffff;
+      border-radius: 6px;
+      border: 1px solid var(--color-rule);
+      padding: 1.25rem;
+    }
+
+    .card-header {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      margin-bottom: 0.875rem;
+      padding-bottom: 0.875rem;
+      border-bottom: 1px solid rgba(21,35,60,0.08);
+    }
+
+    .card-dot {
+      width: 7px; height: 7px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+    .card-dot.ink    { background: var(--color-ink); }
+    .card-dot.muted  { background: var(--color-muted); }
+    .card-dot.accent { background: var(--color-accent); }
+    .card-dot.link   { background: var(--color-link); }
+    .card-dot.soft   { background: var(--color-soft); }
+
+    .card h3 {
+      font-family: var(--font-sans);
+      font-size: 0.875rem;
+      font-weight: 600;
+      color: var(--color-ink);
+      letter-spacing: -0.005em;
+    }
+
+    .card ul {
+      list-style: none;
+      color: var(--color-muted);
+      font-size: 0.8125rem;
+      line-height: 1.55;
+    }
+
+    .card li {
+      margin-bottom: 0.3rem;
+      padding-left: 0.875rem;
+      position: relative;
+    }
+
+    .card li::before {
+      content: '—';
+      position: absolute;
+      left: 0;
+      color: rgba(21,35,60,0.25);
+      font-size: 0.75rem;
+    }
+
+    /* ── Footer ─────────────────────────────────────────────────── */
+    .footer {
+      margin-top: 2rem;
+      padding-top: 1.5rem;
+      border-top: 1px solid rgba(21,35,60,0.10);
+      font-family: var(--font-mono);
+      font-size: 0.72rem;
+      letter-spacing: 0.06em;
+      color: var(--color-soft);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+    }
+    /* Paper has no scrollbar, so the local scroller would clip instead of
+       scroll. Let the diagram scale down to the sheet. Must follow the svg rule. */
+    @media print {
+      .diagram-container { overflow-x: visible; }
+      svg { min-width: 0; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+
+    <!-- Header -->
+    <div class="header">
+      <p class="header-eyebrow">Architecture · [Date]</p>
+      <h1>[Project Name]</h1>
+      <p class="subtitle">[One-sentence description of what this diagram shows.]</p>
+    </div>
+
+    <!-- Main Diagram -->
+    <div class="diagram-container">
+      <svg viewBox="0 0 1000 760" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="[diagram-slug]-title [diagram-slug]-desc">
+        <title id="[diagram-slug]-title">[Diagram title]</title>
+        <desc id="[diagram-slug]-desc">[One sentence describing what the diagram shows]</desc>
+        <defs>
+
+          <!-- OPTIONAL: dot-pattern background. Uncomment the <pattern> below and the second <rect> in the bg section to enable. -->
+          <!--
+          <pattern id="dots" width="22" height="22" patternUnits="userSpaceOnUse">
+            <circle cx="1" cy="1" r="0.9" fill="rgba(21,35,60,0.10)"/>
+          </pattern>
+          -->
+
+          <!-- Arrow: muted (default — generic / internal connections) -->
+          <marker id="arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+            <polygon points="0 0, 8 3, 0 6" fill="#4f6078"/>
+          </marker>
+
+          <!-- Arrow: active accent — primary / highlighted flows -->
+          <marker id="arrow-accent" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+            <polygon points="0 0, 8 3, 0 6" fill="#2563eb"/>
+          </marker>
+
+          <!-- Arrow: link-blue (#1d4ed8 — HTTP/API / external calls) -->
+          <marker id="arrow-link" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+            <polygon points="0 0, 8 3, 0 6" fill="#1d4ed8"/>
+          </marker>
+
+        </defs>
+
+        <!-- Background: paper + dot grid -->
+        <rect width="100%" height="100%" fill="#f6f8fc"/>
+        <!-- <rect width="100%" height="100%" fill="url(#dots)" opacity="0.6"/> -->
+
+        <!-- =================================================================
+             DRAW ARROWS FIRST — they paint behind boxes (SVG document order).
+             ================================================================= -->
+
+        <!-- HTTP/API arrow (link-blue) with label -->
+        <line x1="132" y1="306" x2="197" y2="306" stroke="#1d4ed8" stroke-width="1.2" marker-end="url(#arrow-link)"/>
+        <text x="164" y="298" fill="#1d4ed8" font-size="8" font-family="'IBM Plex Mono', monospace" text-anchor="middle" letter-spacing="0.06em">HTTPS</text>
+
+        <!-- Generic internal arrow -->
+        <line x1="312" y1="306" x2="357" y2="306" stroke="#4f6078" stroke-width="1.2" marker-end="url(#arrow)"/>
+
+        <!-- Vertical arrow -->
+        <line x1="256" y1="332" x2="256" y2="378" stroke="#4f6078" stroke-width="1.2" marker-end="url(#arrow)"/>
+
+        <!-- Auth / security flow (dashed accent) -->
+        <path d="M 82 140 L 82 200 Q 82 218 100 218 L 202 218 Q 220 218 220 236 L 220 278"
+              fill="none" stroke="#2563eb" stroke-width="1.2" stroke-dasharray="5,4"
+              marker-end="url(#arrow-accent)"/>
+        <text x="150" y="212" fill="#2563eb" font-size="8" font-family="'IBM Plex Mono', monospace" text-anchor="middle" letter-spacing="0.06em">JWT</text>
+
+        <!-- Primary data flow (accent) -->
+        <line x1="620" y1="306" x2="697" y2="306" stroke="#2563eb" stroke-width="1.2" marker-end="url(#arrow-accent)"/>
+        <text x="658" y="298" fill="#2563eb" font-size="8" font-family="'IBM Plex Mono', monospace" text-anchor="middle" letter-spacing="0.06em">TLS</text>
+
+
+        <!-- =================================================================
+             COMPONENT BOXES
+             Pattern: opaque paper rect first (masks arrows), then styled rect.
+             Mono type labels use Geist Mono — mono is dominant in tool/data.
+             ================================================================= -->
+
+        <!-- ── External / User ──────────────────────────────────────── -->
+        <rect x="32" y="280" width="100" height="52" rx="6" fill="#f6f8fc"/>
+        <rect x="32" y="280" width="100" height="52" rx="6" fill="rgba(79,96,120,0.10)" stroke="#6b7a90" stroke-width="1"/>
+        <!-- Rectangular type tag (not rounded — brand rule) -->
+        <rect x="40" y="286" width="26" height="12" rx="2" fill="transparent" stroke="rgba(122,131,153,0.4)" stroke-width="0.8"/>
+        <text x="53" y="295" fill="#6b7a90" font-size="7" font-family="'IBM Plex Mono', monospace" text-anchor="middle" letter-spacing="0.08em">EXT</text>
+        <!-- Main label -->
+        <text x="82" y="310" fill="#15233c" font-size="12" font-weight="600" font-family="'IBM Plex Sans', sans-serif" text-anchor="middle">Users</text>
+        <text x="82" y="325" fill="#4f6078" font-size="9" font-family="'IBM Plex Mono', monospace" text-anchor="middle">Browser / Mobile</text>
+
+        <!-- ── Security / Auth ──────────────────────────────────────── -->
+        <rect x="32" y="80" width="100" height="56" rx="6" fill="#f6f8fc"/>
+        <rect x="32" y="80" width="100" height="56" rx="6" fill="rgba(37,99,235,0.06)" stroke="rgba(37,99,235,0.50)" stroke-width="1"/>
+        <rect x="40" y="86" width="28" height="12" rx="2" fill="transparent" stroke="rgba(37,99,235,0.40)" stroke-width="0.8"/>
+        <text x="54" y="95" fill="rgba(37,99,235,0.8)" font-size="7" font-family="'IBM Plex Mono', monospace" text-anchor="middle" letter-spacing="0.06em">AUTH</text>
+        <text x="82" y="112" fill="#15233c" font-size="12" font-weight="600" font-family="'IBM Plex Sans', sans-serif" text-anchor="middle">Auth Provider</text>
+        <text x="82" y="127" fill="#4f6078" font-size="9" font-family="'IBM Plex Mono', monospace" text-anchor="middle">OAuth 2.0</text>
+
+        <!-- ── Region boundary (dashed) ─────────────────────────────── -->
+        <rect x="160" y="40" width="820" height="624" rx="8" fill="transparent" stroke="rgba(21,35,60,0.18)" stroke-width="1" stroke-dasharray="6,4"/>
+        <text x="172" y="57" fill="#4f6078" font-size="8" font-weight="500" font-family="'IBM Plex Mono', monospace" letter-spacing="0.12em">AWS REGION · US-WEST-2</text>
+
+        <!-- ── Cloud / CDN (with faded watermark numeral — slide card pattern) -->
+        <rect x="200" y="280" width="112" height="52" rx="6" fill="#f6f8fc"/>
+        <rect x="200" y="280" width="112" height="52" rx="6" fill="rgba(21,35,60,0.03)" stroke="rgba(21,35,60,0.30)" stroke-width="1"/>
+        <!-- Faded mono watermark numeral (background) -->
+        <text x="296" y="325" fill="rgba(21,35,60,0.06)" font-size="40" font-weight="600" font-family="'IBM Plex Mono', monospace" text-anchor="end">01</text>
+        <rect x="208" y="286" width="24" height="12" rx="2" fill="transparent" stroke="rgba(21,35,60,0.22)" stroke-width="0.8"/>
+        <text x="220" y="295" fill="#6b7a90" font-size="7" font-family="'IBM Plex Mono', monospace" text-anchor="middle" letter-spacing="0.08em">CDN</text>
+        <text x="256" y="310" fill="#15233c" font-size="12" font-weight="600" font-family="'IBM Plex Sans', sans-serif" text-anchor="middle">CloudFront</text>
+        <text x="256" y="325" fill="#4f6078" font-size="9" font-family="'IBM Plex Mono', monospace" text-anchor="middle">AWS CDN</text>
+
+        <!-- ── Cloud / Storage ───────────────────────────────────────── -->
+        <rect x="200" y="380" width="112" height="100" rx="6" fill="#f6f8fc"/>
+        <rect x="200" y="380" width="112" height="100" rx="6" fill="rgba(21,35,60,0.03)" stroke="rgba(21,35,60,0.30)" stroke-width="1"/>
+        <text x="296" y="470" fill="rgba(21,35,60,0.06)" font-size="40" font-weight="600" font-family="'IBM Plex Mono', monospace" text-anchor="end">02</text>
+        <rect x="208" y="386" width="22" height="12" rx="2" fill="transparent" stroke="rgba(21,35,60,0.22)" stroke-width="0.8"/>
+        <text x="219" y="395" fill="#6b7a90" font-size="7" font-family="'IBM Plex Mono', monospace" text-anchor="middle" letter-spacing="0.08em">S3</text>
+        <text x="256" y="410" fill="#15233c" font-size="12" font-weight="600" font-family="'IBM Plex Sans', sans-serif" text-anchor="middle">S3 Buckets</text>
+        <text x="256" y="428" fill="#4f6078" font-size="8" font-family="'IBM Plex Mono', monospace" text-anchor="middle">bucket-assets</text>
+        <text x="256" y="442" fill="#4f6078" font-size="8" font-family="'IBM Plex Mono', monospace" text-anchor="middle">bucket-uploads</text>
+        <text x="256" y="468" fill="#2563eb" font-size="7" font-family="'IBM Plex Mono', monospace" text-anchor="middle" letter-spacing="0.08em">OAI PROTECTED</text>
+
+        <!-- ── Security group boundary ───────────────────────────────── -->
+        <rect x="348" y="264" width="120" height="80" rx="6" fill="transparent" stroke="rgba(37,99,235,0.45)" stroke-width="1" stroke-dasharray="4,4"/>
+        <text x="356" y="278" fill="rgba(37,99,235,0.7)" font-size="8" font-family="'IBM Plex Mono', monospace" letter-spacing="0.08em">SG · :443</text>
+
+        <!-- ── Load Balancer (inside security group) ──────────────────── -->
+        <rect x="360" y="284" width="100" height="52" rx="6" fill="#f6f8fc"/>
+        <rect x="360" y="284" width="100" height="52" rx="6" fill="rgba(21,35,60,0.03)" stroke="rgba(21,35,60,0.30)" stroke-width="1"/>
+        <rect x="368" y="290" width="22" height="12" rx="2" fill="transparent" stroke="rgba(21,35,60,0.22)" stroke-width="0.8"/>
+        <text x="379" y="299" fill="#6b7a90" font-size="7" font-family="'IBM Plex Mono', monospace" text-anchor="middle" letter-spacing="0.06em">LB</text>
+        <text x="410" y="313" fill="#15233c" font-size="12" font-weight="600" font-family="'IBM Plex Sans', sans-serif" text-anchor="middle">Load Balancer</text>
+        <text x="410" y="328" fill="#4f6078" font-size="9" font-family="'IBM Plex Mono', monospace" text-anchor="middle">HTTPS :443</text>
+
+        <!-- ── Backend / API ─────────────────────────────────────────── -->
+        <rect x="508" y="280" width="112" height="52" rx="6" fill="#f6f8fc"/>
+        <rect x="508" y="280" width="112" height="52" rx="6" fill="#ffffff" stroke="#15233c" stroke-width="1"/>
+        <rect x="516" y="286" width="26" height="12" rx="2" fill="transparent" stroke="rgba(21,35,60,0.40)" stroke-width="0.8"/>
+        <text x="529" y="295" fill="#15233c" font-size="7" font-family="'IBM Plex Mono', monospace" text-anchor="middle" letter-spacing="0.08em">API</text>
+        <text x="564" y="310" fill="#15233c" font-size="12" font-weight="600" font-family="'IBM Plex Sans', sans-serif" text-anchor="middle">API Server</text>
+        <text x="564" y="325" fill="#4f6078" font-size="9" font-family="'IBM Plex Mono', monospace" text-anchor="middle">FastAPI :8000</text>
+
+        <!-- ── Database ───────────────────────────────────────────────── -->
+        <rect x="700" y="280" width="120" height="52" rx="6" fill="#f6f8fc"/>
+        <rect x="700" y="280" width="120" height="52" rx="6" fill="rgba(21,35,60,0.05)" stroke="#4f6078" stroke-width="1"/>
+        <rect x="708" y="286" width="22" height="12" rx="2" fill="transparent" stroke="rgba(79,96,120,0.50)" stroke-width="0.8"/>
+        <text x="719" y="295" fill="#4f6078" font-size="7" font-family="'IBM Plex Mono', monospace" text-anchor="middle" letter-spacing="0.08em">DB</text>
+        <text x="760" y="310" fill="#15233c" font-size="12" font-weight="600" font-family="'IBM Plex Sans', sans-serif" text-anchor="middle">Database</text>
+        <text x="760" y="325" fill="#4f6078" font-size="9" font-family="'IBM Plex Mono', monospace" text-anchor="middle">PostgreSQL</text>
+
+        <!-- ── Frontend / UI ─────────────────────────────────────────── -->
+        <rect x="200" y="520" width="200" height="112" rx="6" fill="#f6f8fc"/>
+        <rect x="200" y="520" width="200" height="112" rx="6" fill="rgba(37,99,235,0.08)" stroke="#2563eb" stroke-width="1"/>
+        <rect x="208" y="526" width="22" height="12" rx="2" fill="transparent" stroke="rgba(37,99,235,0.50)" stroke-width="0.8"/>
+        <text x="219" y="535" fill="#2563eb" font-size="7" font-family="'IBM Plex Mono', monospace" text-anchor="middle" letter-spacing="0.08em">UI</text>
+        <text x="300" y="552" fill="#15233c" font-size="12" font-weight="600" font-family="'IBM Plex Sans', sans-serif" text-anchor="middle">Web App</text>
+        <text x="300" y="569" fill="#4f6078" font-size="9" font-family="'IBM Plex Mono', monospace" text-anchor="middle">React + TypeScript</text>
+        <text x="300" y="583" fill="#4f6078" font-size="9" font-family="'IBM Plex Mono', monospace" text-anchor="middle">Astro SSG</text>
+        <!-- Link-blue URL label -->
+        <text x="300" y="616" fill="#1d4ed8" font-size="8" font-family="'IBM Plex Mono', monospace" text-anchor="middle" letter-spacing="0.04em">app.example.com</text>
+
+
+        <!-- =================================================================
+             LEGEND — a horizontal strip below every boundary box.
+             Region boundary ends at y=664 → hairline at y=684, entries from y=712.
+             ================================================================= -->
+        <line x1="40" y1="684" x2="960" y2="684" stroke="rgba(21,35,60,0.12)" stroke-width="0.8"/>
+        <text x="40" y="700" fill="#15233c" font-size="9" font-weight="500" font-family="'IBM Plex Mono', monospace" letter-spacing="0.12em">LEGEND</text>
+
+        <rect x="40" y="712" width="14" height="10" rx="2" fill="rgba(37,99,235,0.08)" stroke="#2563eb" stroke-width="1"/>
+        <text x="60" y="721" fill="#4f6078" font-size="9" font-family="'IBM Plex Sans', sans-serif">Frontend / UI</text>
+        <rect x="192" y="712" width="14" height="10" rx="2" fill="#ffffff" stroke="#15233c" stroke-width="1"/>
+        <text x="212" y="721" fill="#4f6078" font-size="9" font-family="'IBM Plex Sans', sans-serif">Backend / API</text>
+        <rect x="344" y="712" width="14" height="10" rx="2" fill="rgba(21,35,60,0.03)" stroke="rgba(21,35,60,0.30)" stroke-width="1"/>
+        <text x="364" y="721" fill="#4f6078" font-size="9" font-family="'IBM Plex Sans', sans-serif">Cloud / Service</text>
+        <rect x="496" y="712" width="14" height="10" rx="2" fill="rgba(21,35,60,0.05)" stroke="#4f6078" stroke-width="1"/>
+        <text x="516" y="721" fill="#4f6078" font-size="9" font-family="'IBM Plex Sans', sans-serif">Database</text>
+        <rect x="648" y="712" width="14" height="10" rx="2" fill="rgba(79,96,120,0.10)" stroke="#6b7a90" stroke-width="1"/>
+        <text x="668" y="721" fill="#4f6078" font-size="9" font-family="'IBM Plex Sans', sans-serif">External / User</text>
+        <line x1="40" y1="741" x2="54" y2="741" stroke="#1d4ed8" stroke-width="1.2" marker-end="url(#arrow-link)"/>
+        <text x="60" y="745" fill="#4f6078" font-size="9" font-family="'IBM Plex Sans', sans-serif">HTTP / API call</text>
+        <line x1="192" y1="741" x2="206" y2="741" stroke="#2563eb" stroke-width="1.2" stroke-dasharray="4,3" marker-end="url(#arrow-accent)"/>
+        <text x="212" y="745" fill="#4f6078" font-size="9" font-family="'IBM Plex Sans', sans-serif">Auth flow</text>
+        <line x1="344" y1="741" x2="358" y2="741" stroke="#4f6078" stroke-width="1.2" marker-end="url(#arrow)"/>
+        <text x="364" y="745" fill="#4f6078" font-size="9" font-family="'IBM Plex Sans', sans-serif">Internal connection</text>
+        <rect x="496" y="736" width="14" height="10" rx="2" fill="transparent" stroke="rgba(37,99,235,0.45)" stroke-width="1" stroke-dasharray="3,3"/>
+        <text x="516" y="745" fill="#4f6078" font-size="9" font-family="'IBM Plex Sans', sans-serif">Security group</text>
+
+      </svg>
+    </div>
+
+    <!-- Info Cards -->
+    <div class="cards">
+      <div class="card">
+        <div class="card-header">
+          <span class="card-dot accent"></span>
+          <h3>Card Title 1</h3>
+        </div>
+        <ul>
+          <li>Item one</li>
+          <li>Item two</li>
+          <li>Item three</li>
+          <li>Item four</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <span class="card-dot ink"></span>
+          <h3>Card Title 2</h3>
+        </div>
+        <ul>
+          <li>Item one</li>
+          <li>Item two</li>
+          <li>Item three</li>
+          <li>Item four</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <span class="card-dot muted"></span>
+          <h3>Card Title 3</h3>
+        </div>
+        <ul>
+          <li>Item one</li>
+          <li>Item two</li>
+          <li>Item three</li>
+          <li>Item four</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <div class="footer">
+      <span>[Project Name] · Architecture Overview</span>
+      <span>[Date]</span>
+    </div>
+
+  </div>
+</body>
+</html>

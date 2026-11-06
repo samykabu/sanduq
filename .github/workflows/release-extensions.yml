@@ -1,0 +1,178 @@
+name: Release extensions
+
+on:
+  workflow_run:
+    workflows: [ci]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      ci_run_id:
+        description: The ci run whose release-trigger job dispatched this release (set by ci.yml).
+        required: false
+        default: ''
+
+permissions:
+  contents: write
+  actions: write # the CI gate dispatches ci.yml when the release commit has no Windows run
+
+concurrency:
+  group: release-extensions
+  cancel-in-progress: false
+
+jobs:
+  release:
+    # A completed push, scheduled or person-dispatched ci run starts the release through workflow_run. The
+    # full ci run the gate below dispatches cannot (GitHub starts no workflow_run from a GITHUB_TOKEN run), so
+    # its release-trigger job dispatches this workflow when it passes (ci.yml).
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       contains(fromJSON('["push", "workflow_dispatch", "schedule"]'), github.event.workflow_run.event) &&
+       github.event.workflow_run.head_branch == 'main' &&
+       github.event.workflow_run.head_repository.full_name == github.repository)
+    runs-on: homek8-general
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: main
+          fetch-depth: 0
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.13'
+          cache: pip
+          cache-dependency-path: extensions/workflow/requirements.txt
+      # `implementation-in-progress` is a normal, long-lived state: reviewed work sits
+      # staged in pending-releases.json until a maintainer marks it ready. Treat it as
+      # nothing-to-do, not as a broken release.
+      - name: Check whether a reviewed release is marked ready
+        id: gate
+        run: |
+          status=$(python -c "import json;print(json.load(open('extensions/pending-releases.json')).get('status',''))")
+          if [ "$status" = "ready" ] || [ "$status" = "released" ]; then
+            echo 'ready=true' >> "$GITHUB_OUTPUT"
+            echo "Pending status \`$status\`: continuing with the release." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo 'ready=false' >> "$GITHUB_OUTPUT"
+            echo "Pending status \`$status\`: nothing is marked ready, so no release runs. This is not a failure." >> "$GITHUB_STEP_SUMMARY"
+          fi
+      # Push runs skip the slow Windows suites (ci_matrix.py WINDOWS_SLOW_SUITES), so the commit must also have
+      # a successful scheduled or dispatched ci run whose Windows workflow and memory jobs passed. Anything
+      # still missing or running is a notice, not a failure: the run that completes triggers this again
+      # (through workflow_run, or through ci.yml's release-trigger job for the run dispatched here).
+      # Dry run from a checkout: HEAD_SHA=<sha> DRY_RUN=1 GH_REPO=samykabu/sanduq python <this script>
+      - name: Require successful CI for the current main commit
+        id: ci
+        if: steps.gate.outputs.ready == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          TRIGGER_SHA: ${{ github.event.workflow_run.head_sha }}
+          CI_RUN_ID: ${{ inputs.ci_run_id }}
+        run: |
+          python - <<'PY'
+          import json, os, subprocess, sys
+          repo, dry = os.environ['GH_REPO'], os.environ.get('DRY_RUN') == '1'
+          head = os.environ.get('HEAD_SHA') or subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip()
+          trigger = os.environ.get('TRIGGER_SHA', '')
+          ci_run = os.environ.get('CI_RUN_ID', '')
+          WINDOWS = ('regression (windows-latest, workflow', 'regression (windows-latest, memory')
+
+          def api(path):
+              return json.loads(subprocess.check_output(['gh', 'api', path], text=True))
+
+          def finish(release, why, level='notice'):
+              print(f'::{level}::{why}')
+              for name, text in (('GITHUB_OUTPUT', f'release={str(release).lower()}'), ('GITHUB_STEP_SUMMARY', why)):
+                  if os.environ.get(name):
+                      with open(os.environ[name], 'a', encoding='utf-8') as fh:
+                          fh.write(text + '\n')
+              sys.exit(1 if level == 'error' else 0)
+
+          if trigger and trigger != head:
+              finish(False, f'Triggered by ci for {trigger[:8]}, but main is at {head[:8]}; the ci run for {head[:8]} triggers the release.')
+          runs = api(f'repos/{repo}/actions/workflows/ci.yml/runs?head_sha={head}&per_page=100')['workflow_runs']
+          push = [r for r in runs if r['event'] == 'push' and r['head_branch'] == 'main']
+          if not any(r['status'] == 'completed' and r['conclusion'] == 'success' for r in push):
+              if any(r['status'] != 'completed' for r in push) or not push:
+                  finish(False, f'No completed push ci run for {head[:8]} yet; its completion triggers the release. Nothing released.')
+              finish(False, f'The push ci run for {head[:8]} failed; nothing released.', 'error')
+
+          def jobs_of(run):
+              return api(f'repos/{repo}/actions/runs/{run["id"]}/jobs?per_page=100')['jobs']
+
+          def windows_passed(run):
+              jobs = jobs_of(run)
+              return all(any(j['name'].startswith(p) and j['conclusion'] == 'success' for j in jobs) for p in WINDOWS)
+
+          def triggering_run_passed(run):
+              # The ci run that dispatched this release is still in progress: its release-trigger job is the last
+              # one and runs only when every other job succeeded, so that run counts once all its other jobs did.
+              jobs = [j for j in jobs_of(run) if j['name'] != 'release-trigger']
+              return (all(j['status'] == 'completed' and j['conclusion'] in ('success', 'skipped') for j in jobs)
+                      and windows_passed(run))
+
+          full = [r for r in runs if r['event'] in ('schedule', 'workflow_dispatch')]
+          done = [r for r in full if r['status'] == 'completed' and r['conclusion'] == 'success']
+          good = next((r for r in done if windows_passed(r)), None) or next(
+              (r for r in full if ci_run and str(r['id']) == ci_run and r['status'] != 'completed' and triggering_run_passed(r)), None)
+          if good:
+              finish(True, f'ci run {good["id"]} ({good["event"]}) passed the Windows legs on {head[:8]}: releasing.')
+          if any(r['status'] != 'completed' for r in full):
+              finish(False, f'A full ci run for {head[:8]} is still running; its completion triggers the release. Nothing released.')
+          if dry:
+              finish(False, f'DRY RUN: no ci run with Windows legs on {head[:8]}; would dispatch ci.yml on main. Nothing released.')
+          subprocess.run(['gh', 'api', '-X', 'POST', f'repos/{repo}/actions/workflows/ci.yml/dispatches', '-f', 'ref=main'], check=True)
+          finish(False, f'No successful ci run with Windows legs (schedule or workflow_dispatch) on {head[:8]}: dispatched ci.yml on main; '
+                        'its release-trigger job starts the release when it passes. Nothing released.')
+          PY
+      - if: steps.ci.outputs.release == 'true'
+        run: python -m pip install -r extensions/workflow/requirements.txt
+      - name: Prepare reviewed versions and deterministic assets
+        if: steps.ci.outputs.release == 'true'
+        run: python extensions/scripts/release.py prepare
+      - name: Publish immutable assets and verify downloaded bytes
+        if: steps.ci.outputs.release == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python extensions/scripts/release.py publish --apply
+      - name: Promote catalogs only after verifying every asset
+        if: steps.ci.outputs.release == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python extensions/scripts/release.py promote
+      # main only accepts pull requests that pass lint, so promotion goes through one that merges itself.
+      # VENDOR_PR_TOKEN opens it: a pull request opened with GITHUB_TOKEN would not start CI. The checkout
+      # keeps no credentials; the token reaches git only through the push URL.
+      - name: Open the released catalog pull request
+        if: steps.ci.outputs.release == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.VENDOR_PR_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          BRANCH: release/catalog-${{ github.run_id }}
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email 'github-actions[bot]@users.noreply.github.com'
+          # promote also clears the root CHANGELOG's "(pending release)" headings for what it released.
+          git add catalog.json extensions/catalog.json extensions/pending-releases.json CHANGELOG.md
+          if git diff --cached --quiet; then exit 0; fi
+          if [ -z "$GH_TOKEN" ]; then
+            echo "::error::VENDOR_PR_TOKEN is missing or empty: the assets are published, but the catalog pull request cannot be opened. Add the secret and re-run this workflow."
+            exit 1
+          fi
+          git switch -c "$BRANCH"
+          git commit -m 'chore(extensions): publish verified release catalog'
+          git push "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "$BRANCH"
+          gh pr create --base main --head "$BRANCH" --title 'chore(extensions): publish verified release catalog' --body "Catalog promotion from release run $GITHUB_RUN_ID. The release assets are already published and verified; this merges by itself once the required checks pass."
+          gh pr merge "$BRANCH" --auto --squash
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always() && steps.ci.outputs.release == 'true'
+        with:
+          name: extension-release-evidence
+          retention-days: 7
+          path: |
+            dist/release-plan.json
+            dist/release-verification.json
+            dist/*.zip
+          if-no-files-found: ignore

@@ -1,0 +1,41 @@
+{
+  "$comment": "DEFAULT config for the 'project' Spec Kit extension. Ships with NO board-specific ids. Run speckit.project.init (scripts/project_init.py, never prompts) in the consuming repo to discover the board, set optional or required lifecycle hooks, map phases to your Status columns, and write the real .specify/extensions/project/config.json; a rerun keeps parentIssue, subIssues and stateFile. 'phaseToStatus' holds the DEFAULT column names init tries to match on your board (exact -> fuzzy -> optional auto-create).",
+  "owner": "",
+  "ownerType": "user",
+  "hookMode": "optional",
+  "projectNumber": 0,
+  "projectId": "",
+  "projectUrl": "",
+  "statusFieldId": "",
+  "statusOptions": {},
+  "phaseToStatus": {
+    "open": "Backlog",
+    "analysis": "Analysis",
+    "engineer-review": "Engineer-Review",
+    "ready": "Ready",
+    "in-progress": "In progress",
+    "in-review": "In review",
+    "done": "Done"
+  },
+  "statusOrder": [
+    "Backlog",
+    "Analysis",
+    "Engineer-Review",
+    "Ready",
+    "In progress",
+    "In review",
+    "Done"
+  ],
+  "parentIssue": {
+    "labels": ["spec-feature"],
+    "titleTemplate": "[{slug}] {title}"
+  },
+  "subIssues": {
+    "enabled": true,
+    "titleTemplate": "{slug} {taskId}: {desc}",
+    "labels": ["spec-task"],
+    "warnAboveCount": 40,
+    "maxCount": 0
+  },
+  "stateFile": ".specify/project-sync-state.json"
+}

@@ -1,0 +1,67 @@
+name: vendor-update
+
+# On demand, as a step of each release train (docs/start/release-process.md): if samykabu/sanduq-skills
+# has a newer bundle release than vendor.lock.json, vendor it into the extensions, pin the marketplace
+# entry to that release, and open a pull request. The daily schedule was removed in the October 2026
+# train so vendor syncs are batched with the train instead of fanning out releases.
+# sanduq-skills is public, so reading it needs no token. VENDOR_PR_TOKEN (fine-grained, this repository
+# only: contents and pull requests) pushes the branch and opens the PR so CI runs on it; without it the
+# built-in token is used and CI has to be started by hand.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: vendor-update
+  cancel-in-progress: false
+
+jobs:
+  vendor:
+    runs-on: homek8-general
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          token: ${{ secrets.VENDOR_PR_TOKEN || github.token }}
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.13'
+      - name: Fetch sanduq-skills releases
+        run: git clone --quiet --filter=blob:none https://github.com/samykabu/sanduq-skills.git "$RUNNER_TEMP/skills"
+      - name: Vendor newer releases
+        id: update
+        run: |
+          changed=$(python3 extensions/scripts/vendor.py update --source "$RUNNER_TEMP/skills")
+          echo "$changed"
+          case "$changed" in
+            "every bundle is at its newest release") echo "tags=" >> "$GITHUB_OUTPUT" ;;
+            *) echo "tags=$changed" >> "$GITHUB_OUTPUT" ;;
+          esac
+      - name: Check the vendored tree and documentation
+        if: steps.update.outputs.tags != ''
+        run: |
+          python3 -m pip install --quiet pyyaml
+          python3 extensions/scripts/vendor.py check
+          python3 extensions/scripts/check_docs.py
+      - name: Open pull request
+        if: steps.update.outputs.tags != ''
+        env:
+          GH_TOKEN: ${{ secrets.VENDOR_PR_TOKEN || github.token }}
+          TAGS: ${{ steps.update.outputs.tags }}
+        run: |
+          branch="vendor/$(echo "$TAGS" | tr ' ' '+')"
+          # The checkout keeps no credentials; the token reaches git only through this URL.
+          remote="https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          if git ls-remote --exit-code --heads "$remote" "$branch" >/dev/null; then
+            echo "A pull request branch for $TAGS already exists."; exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch -c "$branch"
+          git add -A
+          git commit -m "chore(vendor): $TAGS from sanduq-skills"
+          git push "$remote" "$branch"
+          gh pr create --head "$branch" --title "Vendor $TAGS from sanduq-skills" --body "Vendors $TAGS from samykabu/sanduq-skills and pins the marketplace entries to those releases. Extensions that ship the vendored files need a patch release recorded in extensions/pending-releases.json before merging. If CI did not start, VENDOR_PR_TOKEN is missing or expired: re-run CI from the Actions tab."

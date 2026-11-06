@@ -1,0 +1,507 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Sanduq workflow project policy v1",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "processes",
+    "execution",
+    "providers",
+    "issue_sync",
+    "clarification",
+    "context",
+    "finalize",
+    "updates"
+  ],
+  "properties": {
+    "lean_execution": {
+      "type": "object", "additionalProperties": false, "required": ["enabled"],
+      "description": "Opt-in lean execution. Absent keeps legacy delegation/readiness. One coordinator owns lifecycle mechanics; corrections retain the same model and require a diagnosis after one correction.",
+      "properties": {
+        "enabled": {"type": "boolean", "default": false},
+        "preflight_manifest": {"type": "string", "minLength": 1, "description": "Opt-in aggregate execution_tools preflight; paths inside the manifest are relative to that manifest."},
+        "scope_analysis": {"type": "string", "minLength": 1, "description": "Explicit initial Scope analysis file. Absent produces a required placeholder; revalidation never receives initial flags."},
+        "timeout_min_seconds": {"type": "integer", "minimum": 1, "maximum": 28800, "default": 300},
+        "timeout_max_seconds": {"type": "integer", "minimum": 1, "maximum": 28800, "default": 7200},
+        "finalization_seconds": {"type": "integer", "minimum": 1, "maximum": 28799, "default": 120},
+        "verification_plan": {"type": "string", "minLength": 1, "description": "Repository-relative selected verification manifest. Runtime validates finalization < minimum <= maximum; exact check inputs and passing evidence are bound by Verify."}
+      }
+    },
+    "schema_version": {
+      "const": 1
+    },
+    "processes": {
+      "type": "object",
+      "required": [
+        "qa",
+        "user_manual"
+      ],
+      "properties": {
+        "qa": {
+          "type": "boolean"
+        },
+        "user_manual": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    },
+    "execution": {
+      "type": "object",
+      "required": [
+        "engine",
+        "checkpoints"
+      ],
+      "properties": {
+        "engine": {
+          "enum": [
+            "auto",
+            "speckit",
+            "superspec"
+          ]
+        },
+        "checkpoints": {
+          "enum": [
+            "required-only",
+            "every-phase"
+          ]
+        }
+      }
+    },
+    "providers": {
+      "type": "object",
+      "required": [
+        "clarification",
+        "tasks"
+      ],
+      "properties": {
+        "clarification": {
+          "enum": [
+            "prefer-superspec",
+            "core",
+            "superspec"
+          ]
+        },
+        "tasks": {
+          "enum": [
+            "prefer-superspec",
+            "core",
+            "superspec"
+          ]
+        }
+      }
+    },
+    "issue_sync": {
+      "type": "object", "additionalProperties": false, "required": ["taskstoissues", "parent_link"],
+      "properties": {
+        "taskstoissues": {"enum": ["required", "phase-lazy", "off"], "description": "phase-lazy maps each phase's tasks when the phase starts (task_issues.py --phase); Ready still requires every task mapped. off skips the Tasks-to-Issues stage and the Ready task-link check (no task sub-issues); switching it invalidates no receipt."},
+        "parent_link": {"const": "native-subissue"}
+      }
+    },
+    "profiles": {
+      "type": "object", "additionalProperties": false, "required": ["enabled"],
+      "description": "Optional effort tiers. Absent means disabled: every feature runs the full stage list. The Scope receipt's effort_score picks lite (<= lite.max_score), standard (<= standard.max_score) or full; the tier is frozen at the first Plan claim.",
+      "properties": {
+        "enabled": {"type": "boolean"},
+        "minimum_tier": {"enum": ["lite", "standard", "full"], "default": "lite", "description": "Floor for the tier selected by the verified effort score; does not change that score."},
+        "lite": {"type": "object", "additionalProperties": false, "required": ["max_score"], "properties": {"max_score": {"type": "integer", "minimum": 1, "default": 3}}},
+        "standard": {"type": "object", "additionalProperties": false, "required": ["max_score"], "properties": {"max_score": {"type": "integer", "minimum": 1, "default": 8}}}
+      }
+    },
+    "clarification": {
+      "type": "object",
+      "properties": {
+        "transport": {"type": "string"},
+        "resume_on_reinvoke": {"enum": ["reread-answers", "manual-status"]},
+        "max_questions_per_round": {"type": "integer", "minimum": 1, "description": "Optional cap on questions per clarification round; absent means no cap."},
+        "in_session_first_round": {"type": "boolean", "default": false, "description": "Allow the first clarification round to be answered in session (clarification.py publish --answers)."}
+      }
+    },
+    "artifacts": {
+      "type": "object", "additionalProperties": false,
+      "description": "Optional artifact budgets checked by workflow:lint; absent means no budgets.",
+      "properties": {
+        "budgets": {"type": "object", "additionalProperties": false, "properties": {
+          "spec_kb": {"type": "integer", "minimum": 1}, "plan_kb": {"type": "integer", "minimum": 1},
+          "research_kb": {"type": "integer", "minimum": 1}, "tasks_detail_lines": {"type": "integer", "minimum": 1}}},
+        "enforce": {"enum": ["lite-standard", "all", "warn"], "default": "lite-standard"}
+      }
+    },
+    "project_sync": {
+      "type": "object", "additionalProperties": false,
+      "description": "Board sync: `points` are the stages at which the dispatcher runs Project Sync (absent: all six); `mode` is full (every phase, default), minimal (only the Ready, In progress, In review and Done phases are written; parking phases are no-op writes) or off (no board; doctor skips the board checks). Switching the mode invalidates no receipt.",
+      "properties": {"points": {"type": "array", "uniqueItems": true, "items": {"enum": ["specify", "plan", "analyze", "taskstoissues", "execute", "pr"]}},
+                     "mode": {"enum": ["full", "minimal", "off"], "default": "full"}}
+    },
+    "scope": {
+      "type": "object",
+      "properties": {
+        "board_cache_seconds": {"type": "integer", "minimum": 0, "default": 300, "description": "Scope board cache TTL; 0 disables the cache."}
+      }
+    },
+    "decisions": {
+      "type": "object",
+      "description": "Stage-neutral GitHub issue decisions; omitted in older policies.",
+      "required": ["transport", "authorized_users", "project_field"],
+      "additionalProperties": false,
+      "properties": {
+        "transport": {"const": "github-issue"},
+        "authorized_users": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+        "project_field": {"type": "string", "minLength": 1},
+        "lifecycle_status": {"type": "boolean", "description": "Park a mapped Backlog or Feature Specification issue in the mapped Need Clarifications status while a decision waits (default true)."}
+      }
+    },
+    "context": {
+      "type": "object",
+      "required": [
+        "mode",
+        "max_fraction",
+        "checkpoint_fraction",
+        "reserve_fraction"
+      ],
+      "properties": {
+        "mode": {
+          "enum": [
+            "strict",
+            "measured-only",
+            "measured-with-estimated-fallback"
+          ]
+        },
+        "max_fraction": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 0.6
+        },
+        "checkpoint_fraction": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 0.6
+        },
+        "reserve_fraction": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 0.6
+        }
+      }
+    },
+    "finalize": {
+      "const": {
+        "create_pr": true,
+        "merge": false
+      }
+    },
+    "delegation": {
+      "type": "object",
+      "description": "Optional model-aware delegation; absent legacy policies default to disabled.",
+      "additionalProperties": false,
+      "required": ["enabled", "install_scope", "stronger_retry", "models", "routes", "overrides",
+                   "fixed_collection_commands"],
+      "properties": {
+        "enabled": {"type": "boolean"},
+        "install_scope": {"enum": ["project", "global"]},
+        "stronger_retry": {"enum": [0, 1]},
+        "models": {
+          "type": "object", "additionalProperties": false,
+          "required": ["codex", "claude"],
+          "properties": {
+            "codex": {"$ref": "#/$defs/model_tiers"},
+            "claude": {"$ref": "#/$defs/model_tiers"}
+          }
+        },
+        "routes": {
+          "type": "object", "additionalProperties": false,
+          "properties": {
+            "discovery": {"$ref": "#/$defs/delegation_route_not_light"},
+            "implementation": {"$ref": "#/$defs/delegation_route"},
+            "qa_author": {"$ref": "#/$defs/delegation_route"},
+            "qa_collect": {"$ref": "#/$defs/delegation_route"},
+            "documentation": {"$ref": "#/$defs/delegation_route"},
+            "review": {"$ref": "#/$defs/delegation_route"},
+            "coordination": {"$ref": "#/$defs/delegation_route"},
+            "qa": {"$ref": "#/$defs/delegation_route", "description": "Deprecated pre-1.7 route. workflow.py reads it in place as qa_author (adding a fresh qa_collect) and never writes it back; a schema consumer that validates a raw pre-migration project file needs it declared here."}
+          },
+          "allOf": [
+            {"required": ["discovery", "implementation", "documentation", "review", "coordination"]},
+            {"anyOf": [
+              {"required": ["qa_author", "qa_collect"]},
+              {"required": ["qa"]}
+            ]}
+          ]
+        },
+        "overrides": {
+          "type": "object", "patternProperties": {
+            "^specs/[^/]+/T[0-9]{3,}$": {"$ref": "#/$defs/delegation_route"}
+          }, "additionalProperties": false
+        },
+        "fixed_collection_commands": {
+          "type": "object",
+          "description": "Optional verify -> exact resolved-command string map (1.7+). Only \"verify\" may ever be named (never a discovery or other stage); its value routes it to the light-eligible qa_collect only while its resolved command still matches exactly, and never when the value itself is a workflow: pseudo-command or a speckit. skill invocation (those are never a genuinely fixed external script). Empty (the default) means verify is never inferred as qa_collect.",
+          "propertyNames": {"enum": ["verify"]},
+          "additionalProperties": {"type": "string", "minLength": 1, "not": {"pattern": "^(workflow:|speckit\\.)"}}
+        },
+        "native_allowed": {
+          "type": "object",
+          "description": "Optional work type -> boolean map. A work type mapped to false never routes to the native host first; an absent type (or an absent map) is native-first whenever the host can pin the tier's model.",
+          "propertyNames": {"enum": ["discovery", "implementation", "qa_author", "qa_collect", "documentation", "review", "coordination"]},
+          "additionalProperties": {"type": "boolean"}
+        }
+      }
+    },
+    "receipts": {
+      "type": "object",
+      "description": "Optional receipt contract; an absent section or key means its default.",
+      "additionalProperties": false,
+      "properties": {
+        "require_input_roles": {
+          "type": "boolean", "default": false,
+          "description": "Require a declared input role for every receipt input outside specs/<feature>/ and .specify/memory/."
+        }
+      }
+    },
+    "skills": {
+      "type": "object",
+      "description": "Optional doctor skill-inventory thresholds; an absent section or key means the shipped default (see workflow README, 'Skill inventory (doctor)').",
+      "additionalProperties": false,
+      "properties": {
+        "inventory_thresholds": {
+          "type": "object",
+          "description": "Per-host-session-load threshold overrides; every key is optional.",
+          "additionalProperties": false,
+          "minProperties": 1,
+          "properties": {
+            "skill_count": {"type": "integer", "minimum": 1},
+            "description_bytes": {"type": "integer", "minimum": 1}
+          }
+        }
+      }
+    },
+    "ci": {
+      "type": "object",
+      "description": "Where and how this project runs the CI workflow files Sanduq renders for it.",
+      "required": [
+        "provider",
+        "policy",
+        "runners",
+        "capabilities"
+      ],
+      "properties": {
+        "gate": {
+          "type": "object",
+          "description": "Project-selected Sanduq workflow evidence gate; absent on legacy installs.",
+          "required": ["mode", "scope", "rules"],
+          "additionalProperties": false,
+          "properties": {
+            "mode": {"enum": ["disabled", "advisory", "required"]},
+            "scope": {"enum": ["managed-only", "all-prs"]},
+            "rules": {
+              "type": "object",
+              "required": ["receipts", "decisions", "tasks", "task_links", "documentation", "portability", "candidate_merge", "live_answers"],
+              "additionalProperties": false,
+              "properties": {
+                "receipts": {"type": "boolean"},
+                "decisions": {"type": "boolean"},
+                "tasks": {"type": "boolean"},
+                "task_links": {"type": "boolean"},
+                "documentation": {"type": "boolean"},
+                "portability": {"type": "boolean"},
+                "candidate_merge": {"type": "boolean"},
+                "live_answers": {"type": "boolean"}
+              }
+            },
+            "affected_command": {
+              "description": "Optional affected-lane hook (1.6.0). Reads a JSON list of repository paths on stdin and prints {\"paths\": {\"<path>\": [\"<lane>\", ...]}}. Verify, Review and Ready receipts with a source_key stay current when every drifted source path maps to no lane and none is an explicit fingerprint; a failing hook fails closed. Without it the identity rule applies.",
+              "oneOf": [
+                {"type": "string", "minLength": 1},
+                {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}}
+              ]
+            },
+            "verification_check": {
+              "description": "Optional CI check accepted as Verify evidence through workflow.py revalidate --stage verify --check-run (1.6.0): the job name, or {name, workflow, artifact_prefix}.",
+              "oneOf": [
+                {"type": "string", "minLength": 1},
+                {"type": "object", "required": ["name"], "additionalProperties": false, "properties": {
+                  "name": {"type": "string", "minLength": 1},
+                  "workflow": {"type": "string", "minLength": 1},
+                  "artifact_prefix": {"type": "string", "pattern": "^[A-Za-z0-9._-]+$"}
+                }}
+              ]
+            },
+            "verify_command": {
+              "description": "Optional local affected-lane runner (1.7.x, B13) read only by speckit-workflow-verify-affected, never by the gate. Reads {\"lanes\": [...], \"results_path\": \"<path>\"} on stdin and must exit 0 having written that project-relative results.json.",
+              "oneOf": [
+                {"type": "string", "minLength": 1},
+                {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}}
+              ]
+            }
+          }
+        },
+        "provider": {
+          "enum": [
+            "github-actions",
+            "none"
+          ]
+        },
+        "policy": {
+          "enum": [
+            "hosted-allowed",
+            "self-hosted-required"
+          ],
+          "description": "Under self-hosted-required every GitHub-hosted runner set needs a matching exceptions entry."
+        },
+        "runners": {
+          "type": "object",
+          "required": [
+            "linux"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "linux": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "windows": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "macos": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        },
+        "capabilities": {
+          "type": "object",
+          "required": [
+            "system_packages",
+            "python",
+            "python_version"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "system_packages": {
+              "enum": [
+                "sudo-apt",
+                "preinstalled"
+              ]
+            },
+            "python": {
+              "enum": [
+                "setup-action",
+                "preinstalled"
+              ]
+            },
+            "python_version": {
+              "type": "string",
+              "pattern": "^\\d+\\.\\d+(\\.\\d+)?$"
+            }
+          }
+        },
+        "exceptions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "workflow",
+              "platform",
+              "reason",
+              "removed_by",
+              "decided"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "workflow": {
+                "type": "string",
+                "minLength": 1
+              },
+              "platform": {
+                "enum": [
+                  "linux",
+                  "windows",
+                  "macos"
+                ]
+              },
+              "reason": {
+                "type": "string",
+                "minLength": 1
+              },
+              "removed_by": {
+                "type": "string",
+                "minLength": 1
+              },
+              "decided": {
+                "type": "string",
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "model_tiers": {
+      "type": "object", "additionalProperties": false,
+      "required": ["high", "standard", "light", "documentation", "review"],
+      "properties": {
+        "high": {"type": "string", "minLength": 1},
+        "standard": {"type": "string", "minLength": 1},
+        "light": {"type": "string", "minLength": 1},
+        "documentation": {"type": "string", "minLength": 1},
+        "review": {"type": "string", "minLength": 1}
+      }
+    },
+    "delegation_candidate": {
+      "type": "object", "additionalProperties": false,
+      "required": ["harness"],
+      "properties": {
+        "harness": {"enum": ["selected", "codex", "claude"]},
+        "tier": {"enum": ["high", "standard", "light", "documentation", "review"]},
+        "model": {"type": ["string", "null"]}
+      },
+      "oneOf": [{"required": ["tier"], "not": {"required": ["model"]}},
+                 {"required": ["model"], "not": {"required": ["tier"]}}]
+    },
+    "delegation_route": {
+      "type": "object", "additionalProperties": false,
+      "required": ["preferred", "fallbacks"],
+      "properties": {
+        "preferred": {"$ref": "#/$defs/delegation_candidate"},
+        "fallbacks": {"type": "array", "maxItems": 5,
+                      "items": {"$ref": "#/$defs/delegation_candidate"}}
+      }
+    },
+    "delegation_candidate_not_light": {
+      "description": "Discovery (Scope, Specify, Clarify, Plan, Tasks) is never light-tier (B12).",
+      "type": "object", "additionalProperties": false,
+      "required": ["harness"],
+      "properties": {
+        "harness": {"enum": ["selected", "codex", "claude"]},
+        "tier": {"enum": ["high", "standard", "documentation", "review"]},
+        "model": {"type": ["string", "null"]}
+      },
+      "oneOf": [{"required": ["tier"], "not": {"required": ["model"]}},
+                 {"required": ["model"], "not": {"required": ["tier"]}}]
+    },
+    "delegation_route_not_light": {
+      "type": "object", "additionalProperties": false,
+      "required": ["preferred", "fallbacks"],
+      "properties": {
+        "preferred": {"$ref": "#/$defs/delegation_candidate_not_light"},
+        "fallbacks": {"type": "array", "maxItems": 5,
+                      "items": {"$ref": "#/$defs/delegation_candidate_not_light"}}
+      }
+    }
+  }
+}

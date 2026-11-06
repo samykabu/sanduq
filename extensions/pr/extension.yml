@@ -1,0 +1,62 @@
+schema_version: "1.0"
+
+extension:
+  id: pr
+  name: "Pull Request Workflow"
+  version: "4.7.6"
+  description: "Generate or update pull requests from Spec Kit artifacts, enforce installed QA and User Manual freshness policies, then process review feedback through an approval-gated fix and reply workflow."
+  author: "Samy K. Abushanab"
+  repository: "https://github.com/samykabu/sanduq"
+  category: "process"
+  license: MIT
+
+requires:
+  speckit_version: ">=0.2.0"
+  extensions:
+    - id: illustrate
+      version: ">=2.0.0,<3.0.0"
+      required: true
+    - id: assure
+      version: ">=2.0.0,<3.0.0"
+      required: false
+    - id: user-manual
+      version: ">=1.0.0,<3.0.0"
+      required: false
+  tools:
+    - name: git
+      required: false
+    - name: gh
+      required: false
+    - name: python
+      required: true
+      version: ">=3.11"
+
+provides:
+  commands:
+    - name: speckit.pr.generate
+      file: commands/speckit.pr.generate.md
+      description: "Generates the feature CHANGELOG and details doc, then creates or updates the pull request body; never merges. Use when asked to 'write the PR description'."
+    - name: speckit.pr.review-feedback
+      file: commands/speckit.pr.review-feedback.md
+      description: "Fixes or answers unresolved PR review comments after approval, then pushes and resolves threads. Use when asked to 'address review comments'."
+
+hooks:
+  after_implement:
+    command: speckit.pr.generate
+    optional: true
+    prompt: "Generate the feature CHANGELOG + feature-details doc, diagram assets if needed, and update the PR description?"
+    description: "Generates the feature CHANGELOG and details doc, then creates or updates the pull request body; never merges. Use when asked to 'write the PR description'."
+
+tags:
+  - "pr"
+  - "changelog"
+  - "documentation"
+  - "diagram"
+  - "sequence"
+  - "flowchart"
+  - "state-machine"
+  - "data-model"
+  - "review"
+  - "feedback"
+  - "code-review"
+  - "workflow"

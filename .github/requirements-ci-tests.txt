@@ -1,0 +1,3 @@
+# Test runner for the CI regression suites only; not part of any package.
+pytest==9.2.0
+pytest-xdist==3.8.0

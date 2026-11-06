@@ -1,0 +1,54 @@
+{
+  "name": "sanduq",
+  "owner": {
+    "name": "Samy K. Abushanab",
+    "url": "https://github.com/samykabu"
+  },
+  "plugins": [
+    {
+      "name": "illustration-tools",
+      "source": {
+        "source": "git-subdir",
+        "url": "https://github.com/samykabu/sanduq-skills.git",
+        "path": "skills/illustration-tools",
+        "ref": "illustration-tools-v3.7.1",
+        "sha": "150f808bcd44456a1f9f8378858cae1dc0cccd38"
+      },
+      "description": "Generate, import, and export forty-four kinds of technical, product, architecture, process, and data illustrations through one unified skill.",
+      "category": "documentation",
+      "policy": {
+        "installation": "AVAILABLE"
+      }
+    },
+    {
+      "name": "dev-tools",
+      "source": {
+        "source": "git-subdir",
+        "url": "https://github.com/samykabu/sanduq-skills.git",
+        "path": "skills/dev-tools",
+        "ref": "dev-tools-v2.0.5",
+        "sha": "150f808bcd44456a1f9f8378858cae1dc0cccd38"
+      },
+      "description": "Standalone tools for application manuals, API references, release documentation, screenshots, previews, bilingual publishing, and GitHub Wiki pages and assets",
+      "category": "documentation",
+      "policy": {
+        "installation": "AVAILABLE"
+      }
+    },
+    {
+      "name": "agent-tools",
+      "source": {
+        "source": "git-subdir",
+        "url": "https://github.com/samykabu/sanduq-skills.git",
+        "path": "skills/agent-tools",
+        "ref": "agent-tools-v1.9.2",
+        "sha": "150f808bcd44456a1f9f8378858cae1dc0cccd38"
+      },
+      "description": "delegate-task hands one task to another agent CLI and reports what it changed and the tokens it used. progress-report keeps a live progress report for a Markdown plan or a Spec Kit feature. planning-majlis plans software or a feature with a committee of expert roles run as subagents.",
+      "category": "development",
+      "policy": {
+        "installation": "AVAILABLE"
+      }
+    }
+  ]
+}

@@ -1,0 +1,13 @@
+:root {
+  --manual-primary: #315c78;
+  --manual-accent: #b85c38;
+}
+
+[data-md-color-scheme="default"] {
+  --md-primary-fg-color: var(--manual-primary);
+  --md-accent-fg-color: var(--manual-accent);
+}
+
+.md-typeset img {
+  border-radius: 0.4rem;
+}

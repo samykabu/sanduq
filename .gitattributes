@@ -1,0 +1,30 @@
+*.sh text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.json text eol=lf
+*.html text eol=lf
+*.css text eol=lf
+*.js text eol=lf
+*.svg text eol=lf
+*.py text eol=lf
+*.md text eol=lf
+*.ps1 text eol=lf
+# Packaged as working-tree bytes: LF everywhere so local builds equal CI builds (X20).
+*.txt text eol=lf
+LICENSE text eol=lf
+# Byte-pinned test fixtures: autocrlf must never rewrite them (their SHA-256 is asserted).
+extensions/workflow/tests/fixtures/source-key.fixtures.json -text
+extensions/workflow/tests/fixtures/ci-runs/** -text
+# Illustrate fixtures, baselines and generator: parsed byte-for-byte on every OS.
+extensions/illustrate/tests/fixtures/** text eol=lf
+extensions/illustrate/skill/scripts/*.txt text eol=lf
+extensions/illustrate/skill/scripts/*.cjs text eol=lf
+# Vendored from sanduq-skills (vendor.lock.json hashes exact bytes): never convert line endings.
+extensions/illustrate/skill/** -text
+extensions/workflow/assets/delegate-task/** -text
+extensions/user-manual/scripts/audit_manual.py -text
+extensions/user-manual/scripts/build_manual.py -text
+extensions/user-manual/assets/scaffold/** -text
+extensions/user-manual/assets/github/user-manual-*.yml -text
+extensions/user-manual/user-manual-config.template.yml -text
+extensions/user-manual/skills/*/references/** -text

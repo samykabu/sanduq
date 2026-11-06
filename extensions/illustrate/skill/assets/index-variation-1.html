@@ -1,0 +1,878 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Illustrate - Atlas gallery</title>
+    <style>
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+      }
+
+      :root {
+        color-scheme: light dark;
+        --canvas: #f4f6fb;
+        --panel: rgba(255, 255, 255, 0.88);
+        --surface: #ffffff;
+        --surface-soft: #eef1f7;
+        --ink: #151923;
+        --muted: #697184;
+        --line: rgba(21, 25, 35, 0.11);
+        --accent: #3f6df6;
+        --accent-soft: rgba(63, 109, 246, 0.12);
+        --shadow: 0 24px 64px rgba(29, 39, 68, 0.13);
+        --sans: "Segoe UI Variable", "Aptos", "Segoe UI", sans-serif;
+        --mono: "Cascadia Code", "SFMono-Regular", Consolas, monospace;
+      }
+
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --canvas: #10131a;
+          --panel: rgba(20, 24, 33, 0.9);
+          --surface: #181d27;
+          --surface-soft: #202631;
+          --ink: #f1f4fb;
+          --muted: #9ca6ba;
+          --line: rgba(239, 243, 251, 0.11);
+          --accent: #7d9cff;
+          --accent-soft: rgba(125, 156, 255, 0.16);
+          --shadow: 0 30px 72px rgba(0, 0, 0, 0.34);
+        }
+      }
+
+      html,
+      body {
+        width: 100%;
+        min-height: 100%;
+        margin: 0;
+      }
+
+      body {
+        height: 100dvh;
+        overflow: hidden;
+        display: grid;
+        grid-template-columns: minmax(284px, 324px) minmax(0, 1fr);
+        background:
+          radial-gradient(circle at 78% 12%, var(--accent-soft), transparent 30rem),
+          var(--canvas);
+        color: var(--ink);
+        font-family: var(--sans);
+      }
+
+      button,
+      input,
+      a {
+        font: inherit;
+      }
+
+      button,
+      a {
+        -webkit-tap-highlight-color: transparent;
+      }
+
+      button:focus-visible,
+      input:focus-visible,
+      a:focus-visible {
+        outline: 3px solid var(--accent-soft);
+        outline-offset: 2px;
+      }
+
+      .sidebar {
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+        border-right: 1px solid var(--line);
+        background: var(--panel);
+        backdrop-filter: blur(20px) saturate(135%);
+        -webkit-backdrop-filter: blur(20px) saturate(135%);
+      }
+
+      .brand {
+        padding: 1.35rem 1.25rem 1rem;
+      }
+
+      .brand-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1rem;
+      }
+
+      .brand h1 {
+        margin: 0;
+        font-size: 1.15rem;
+        line-height: 1.1;
+        letter-spacing: -0.035em;
+        font-weight: 720;
+      }
+
+      .brand p {
+        margin: 0.45rem 0 0;
+        color: var(--muted);
+        font-size: 0.78rem;
+        line-height: 1.45;
+      }
+
+      .asset-count {
+        flex: 0 0 auto;
+        padding: 0.28rem 0.5rem;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        color: var(--muted);
+        font-family: var(--mono);
+        font-size: 0.68rem;
+      }
+
+      .family-nav {
+        display: grid;
+        gap: 0.35rem;
+        padding: 0 0.8rem 0.9rem;
+      }
+
+      .family-button {
+        width: 100%;
+        display: grid;
+        grid-template-columns: 8px minmax(0, 1fr);
+        gap: 0.7rem;
+        align-items: center;
+        padding: 0.7rem 0.75rem;
+        border: 1px solid transparent;
+        border-radius: 10px;
+        background: transparent;
+        color: var(--muted);
+        text-align: left;
+        cursor: pointer;
+        transition:
+          color 180ms ease,
+          background 180ms ease,
+          border-color 180ms ease,
+          transform 180ms ease;
+      }
+
+      .family-button::before {
+        content: "";
+        width: 7px;
+        height: 7px;
+        border-radius: 2px;
+        background: currentColor;
+        opacity: 0.28;
+        transition:
+          opacity 180ms ease,
+          transform 180ms ease;
+      }
+
+      .family-button:hover {
+        color: var(--ink);
+        background: var(--surface-soft);
+      }
+
+      .family-button:active {
+        transform: scale(0.985);
+      }
+
+      .family-button.active {
+        color: var(--accent);
+        border-color: color-mix(in srgb, var(--accent) 28%, transparent);
+        background: var(--accent-soft);
+      }
+
+      .family-button.active::before {
+        opacity: 1;
+        transform: rotate(45deg);
+      }
+
+      .family-name {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        font-size: 0.82rem;
+        font-weight: 650;
+      }
+
+      .search-wrap {
+        padding: 0 0.8rem 0.75rem;
+      }
+
+      .search {
+        width: 100%;
+        height: 2.55rem;
+        padding: 0 0.8rem;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        background: var(--surface);
+        color: var(--ink);
+        font-size: 0.8rem;
+        transition:
+          border-color 180ms ease,
+          box-shadow 180ms ease;
+      }
+
+      .search::placeholder {
+        color: var(--muted);
+      }
+
+      .search:focus {
+        border-color: var(--accent);
+        box-shadow: 0 0 0 4px var(--accent-soft);
+        outline: none;
+      }
+
+      .item-nav {
+        min-height: 0;
+        overflow-y: auto;
+        padding: 0 0.8rem 1rem;
+        scrollbar-width: thin;
+        scrollbar-color: var(--line) transparent;
+      }
+
+      .item-button {
+        width: 100%;
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 0.8rem;
+        align-items: center;
+        padding: 0.68rem 0.75rem;
+        border: 0;
+        border-radius: 10px;
+        background: transparent;
+        color: var(--muted);
+        text-align: left;
+        cursor: pointer;
+        transition:
+          color 160ms ease,
+          background 160ms ease,
+          transform 160ms ease;
+      }
+
+      .item-button:hover {
+        color: var(--ink);
+        background: var(--surface-soft);
+        transform: translateX(3px);
+      }
+
+      .item-button.active {
+        color: var(--ink);
+        background: var(--surface);
+        box-shadow: inset 3px 0 0 var(--accent);
+      }
+
+      .item-label {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        font-size: 0.82rem;
+        font-weight: 590;
+      }
+
+      .item-kind {
+        color: var(--muted);
+        font-family: var(--mono);
+        font-size: 0.62rem;
+        opacity: 0.75;
+      }
+
+      .empty {
+        margin: 1rem 0.4rem;
+        color: var(--muted);
+        font-size: 0.78rem;
+        line-height: 1.5;
+      }
+
+      .variant-panel {
+        padding: 0.85rem 0.8rem 1rem;
+        border-top: 1px solid var(--line);
+      }
+
+      .variant-label {
+        display: block;
+        margin: 0 0.15rem 0.55rem;
+        color: var(--muted);
+        font-size: 0.7rem;
+        font-weight: 650;
+      }
+
+      .variant-list {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 0.4rem;
+      }
+
+      .variant-button {
+        min-width: 0;
+        padding: 0.58rem 0.45rem;
+        border: 1px solid var(--line);
+        border-radius: 9px;
+        background: transparent;
+        color: var(--muted);
+        font-size: 0.72rem;
+        cursor: pointer;
+        transition:
+          color 160ms ease,
+          background 160ms ease,
+          border-color 160ms ease,
+          transform 160ms ease;
+      }
+
+      .variant-button:hover {
+        color: var(--ink);
+        border-color: color-mix(in srgb, var(--ink) 25%, transparent);
+      }
+
+      .variant-button:active {
+        transform: scale(0.97);
+      }
+
+      .variant-button.active {
+        color: var(--accent);
+        border-color: color-mix(in srgb, var(--accent) 32%, transparent);
+        background: var(--accent-soft);
+      }
+
+      .workspace {
+        min-width: 0;
+        min-height: 0;
+        display: grid;
+        grid-template-rows: auto minmax(0, 1fr);
+        padding: 1rem;
+      }
+
+      .toolbar {
+        min-width: 0;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1rem;
+        padding: 0.2rem 0.2rem 0.85rem;
+      }
+
+      .selection {
+        min-width: 0;
+      }
+
+      .selection h2 {
+        overflow: hidden;
+        margin: 0;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        font-size: 1rem;
+        letter-spacing: -0.025em;
+      }
+
+      .selection p {
+        overflow: hidden;
+        margin: 0.3rem 0 0;
+        color: var(--muted);
+        font-family: var(--mono);
+        font-size: 0.67rem;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .open-source {
+        flex: 0 0 auto;
+        display: inline-flex;
+        align-items: center;
+        min-height: 2.45rem;
+        padding: 0 0.85rem;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        background: var(--surface);
+        color: var(--ink);
+        text-decoration: none;
+        font-size: 0.76rem;
+        font-weight: 650;
+        transition:
+          color 160ms ease,
+          border-color 160ms ease,
+          transform 160ms ease;
+      }
+
+      .open-source:hover {
+        color: var(--accent);
+        border-color: var(--accent);
+      }
+
+      .open-source:active {
+        transform: scale(0.97);
+      }
+
+      .preview-shell {
+        min-width: 0;
+        min-height: 0;
+        position: relative;
+        overflow: hidden;
+        border: 1px solid var(--line);
+        border-radius: 18px;
+        background: var(--surface);
+        box-shadow: var(--shadow);
+      }
+
+      .preview-shell::before {
+        content: "";
+        position: absolute;
+        inset: 0 0 auto;
+        z-index: 2;
+        height: 1px;
+        background: linear-gradient(90deg, transparent, var(--accent), transparent);
+        opacity: 0.48;
+        pointer-events: none;
+      }
+
+      iframe {
+        width: 100%;
+        height: 100%;
+        border: 0;
+        background: var(--surface);
+        opacity: 1;
+        transform: translateY(0);
+        transition:
+          opacity 220ms ease,
+          transform 220ms ease;
+      }
+
+      iframe.loading {
+        opacity: 0;
+        transform: translateY(8px);
+      }
+
+      .load-state {
+        position: absolute;
+        inset: 0;
+        display: grid;
+        place-items: center;
+        color: var(--muted);
+        font-family: var(--mono);
+        font-size: 0.72rem;
+        pointer-events: none;
+        opacity: 0;
+        transition: opacity 160ms ease;
+      }
+
+      .load-state.visible {
+        opacity: 1;
+      }
+
+      @media (max-width: 860px) {
+        body {
+          width: 100%;
+          max-width: 100vw;
+          height: auto;
+          min-height: 100dvh;
+          overflow: auto;
+          overflow-x: hidden;
+          grid-template-columns: 1fr;
+        }
+
+        .sidebar,
+        .workspace {
+          width: 100%;
+          max-width: 100vw;
+        }
+
+        .sidebar {
+          max-height: 52dvh;
+          border-right: 0;
+          border-bottom: 1px solid var(--line);
+        }
+
+        .family-nav {
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+        }
+
+        .family-button {
+          grid-template-columns: 1fr;
+          gap: 0.35rem;
+        }
+
+        .family-button::before {
+          display: none;
+        }
+
+        .family-name {
+          text-align: center;
+          white-space: normal;
+        }
+
+        .item-nav {
+          display: flex;
+          gap: 0.4rem;
+          overflow-x: auto;
+          overflow-y: hidden;
+          padding-bottom: 0.8rem;
+        }
+
+        .item-button {
+          flex: 0 0 auto;
+          width: auto;
+          min-width: 9rem;
+        }
+
+        .variant-panel {
+          padding-bottom: 0.8rem;
+        }
+
+        .variant-list {
+          grid-template-columns: repeat(4, minmax(0, 1fr));
+        }
+
+        .workspace {
+          min-height: 70dvh;
+          padding: 0.75rem;
+        }
+      }
+
+      @media (max-width: 560px) {
+        .family-nav {
+          grid-template-columns: 1fr;
+        }
+
+        .variant-list {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+
+        .toolbar {
+          display: grid;
+          grid-template-columns: minmax(0, 1fr);
+          align-items: flex-start;
+          gap: 0.55rem;
+        }
+
+        .open-source {
+          width: auto;
+          justify-self: start;
+          padding-inline: 0.65rem;
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        *,
+        *::before,
+        *::after {
+          scroll-behavior: auto !important;
+          transition-duration: 0.01ms !important;
+          animation-duration: 0.01ms !important;
+          animation-iteration-count: 1 !important;
+        }
+      }
+
+      @media (prefers-reduced-transparency: reduce) {
+        .sidebar {
+          background: var(--surface);
+          backdrop-filter: none;
+          -webkit-backdrop-filter: none;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <aside class="sidebar">
+      <header class="brand">
+        <div class="brand-row">
+          <h1>Illustrate</h1>
+          <span class="asset-count" id="asset-count">29 assets</span>
+        </div>
+        <p>Browse every diagram family without losing the canvas.</p>
+      </header>
+
+      <nav class="family-nav" id="family-nav" aria-label="Illustration family"></nav>
+
+      <div class="search-wrap">
+        <input
+          class="search"
+          id="search"
+          type="search"
+          placeholder="Filter diagrams, press /"
+          autocomplete="off"
+          aria-label="Filter diagram types"
+        />
+      </div>
+
+      <nav class="item-nav" id="item-nav" aria-label="Diagram type"></nav>
+
+      <footer class="variant-panel">
+        <span class="variant-label">Presentation</span>
+        <div class="variant-list" id="variant-list"></div>
+      </footer>
+    </aside>
+
+    <main class="workspace">
+      <header class="toolbar">
+        <div class="selection">
+          <h2 id="selection-title">Architecture</h2>
+          <p id="selection-path">example-architecture.html</p>
+        </div>
+        <a
+          class="open-source"
+          id="open-source"
+          href="example-architecture.html"
+          target="_blank"
+          rel="noopener"
+          >Open source</a
+        >
+      </header>
+
+      <section class="preview-shell" aria-label="Diagram preview">
+        <div class="load-state" id="load-state">Loading preview</div>
+        <iframe
+          id="preview"
+          src="example-architecture.html"
+          title="Architecture preview"
+        ></iframe>
+      </section>
+    </main>
+
+    <script>
+      const families = {
+        editorial: {
+          label: "Editorial",
+          kind: "Core",
+          base: "",
+          prefix: "example-",
+          defaultItem: "architecture",
+          defaultVariant: "",
+          variants: [
+            ["", "Light"],
+            ["-dark", "Dark"],
+            ["-full", "Full"],
+            ["-hand", "Hand"],
+          ],
+          items: [
+            ["architecture", "Architecture"],
+            ["flowchart", "Flowchart"],
+            ["sequence", "Sequence"],
+            ["state", "State machine"],
+            ["er", "ER model"],
+            ["timeline", "Timeline"],
+            ["swimlane", "Swimlane"],
+            ["quadrant", "Quadrant"],
+            ["nested", "Nested"],
+            ["tree", "Tree"],
+            ["org-chart", "Org chart"],
+            ["layers", "Layers"],
+            ["venn", "Venn"],
+            ["pyramid", "Pyramid"],
+            ["radar", "Radar"],
+            ["loop", "Loop"],
+            ["datalake", "Data lake"],
+            ["bar", "Bar chart"],
+            ["line", "Line chart"],
+            ["gantt", "Gantt"],
+            ["scatter", "Scatter"],
+            ["medallion", "Medallion"],
+            ["high-level", "High level"],
+            ["process", "Process"],
+            ["data-flow", "Data flow"],
+            ["dp-integration", "DP integration"],
+            ["high-level-vertical", "Parametric stack"],
+            ["dp-security-matrix", "DP security matrix"],
+            ["it-state", "IT current state"],
+          ],
+        },
+        architecture: {
+          label: "Technical architecture",
+          kind: "Color",
+          base: "technical-color/architecture/examples/",
+          prefix: "",
+          defaultItem: "aws-serverless",
+          defaultVariant: "-light",
+          variants: [
+            ["-light", "Light"],
+            ["", "Dark"],
+          ],
+          items: [
+            ["aws-serverless", "AWS serverless"],
+            ["microservices", "Microservices"],
+            ["web-app", "Web application"],
+          ],
+        },
+        process: {
+          label: "Technical process flow",
+          kind: "Color",
+          base: "technical-color/process-flow/examples/",
+          prefix: "",
+          defaultItem: "ai-governance-workflow",
+          defaultVariant: "-light",
+          variants: [
+            ["-light", "Light"],
+            ["", "Dark"],
+          ],
+          items: [
+            ["ai-governance-workflow", "AI governance"],
+            ["inventory-control", "Inventory control"],
+            ["it-change-management", "IT change management"],
+            ["sprint-report-flow", "Sprint report"],
+          ],
+        },
+      };
+
+      const state = {
+        family: "editorial",
+        search: "",
+        selections: Object.fromEntries(
+          Object.entries(families).map(([key, family]) => [
+            key,
+            {
+              item: family.defaultItem,
+              variant: family.defaultVariant,
+            },
+          ]),
+        ),
+      };
+
+      const familyNav = document.getElementById("family-nav");
+      const itemNav = document.getElementById("item-nav");
+      const variantList = document.getElementById("variant-list");
+      const search = document.getElementById("search");
+      const preview = document.getElementById("preview");
+      const loadState = document.getElementById("load-state");
+      const selectionTitle = document.getElementById("selection-title");
+      const selectionPath = document.getElementById("selection-path");
+      const openSource = document.getElementById("open-source");
+      const assetCount = document.getElementById("asset-count");
+
+      function selectedFamily() {
+        return families[state.family];
+      }
+
+      function selectedState() {
+        return state.selections[state.family];
+      }
+
+      function sourcePath() {
+        const family = selectedFamily();
+        const selection = selectedState();
+        return `${family.base}${family.prefix}${selection.item}${selection.variant}.html`;
+      }
+
+      function itemLabel(itemKey) {
+        return selectedFamily().items.find(([key]) => key === itemKey)?.[1] ?? itemKey;
+      }
+
+      function renderFamilies() {
+        familyNav.innerHTML = "";
+        Object.entries(families).forEach(([key, family]) => {
+          const button = document.createElement("button");
+          button.type = "button";
+          button.className = `family-button${key === state.family ? " active" : ""}`;
+          button.dataset.family = key;
+          button.setAttribute("aria-pressed", String(key === state.family));
+          button.innerHTML = `<span class="family-name">${family.label}</span>`;
+          button.addEventListener("click", () => {
+            state.family = key;
+            state.search = "";
+            search.value = "";
+            render();
+            loadPreview();
+          });
+          familyNav.appendChild(button);
+        });
+      }
+
+      function renderItems() {
+        const family = selectedFamily();
+        const selection = selectedState();
+        const query = state.search.trim().toLowerCase();
+        const items = family.items.filter(([, label]) =>
+          label.toLowerCase().includes(query),
+        );
+
+        itemNav.innerHTML = "";
+        if (!items.length) {
+          itemNav.innerHTML = '<p class="empty">No diagrams match this filter.</p>';
+          return;
+        }
+
+        items.forEach(([key, label]) => {
+          const button = document.createElement("button");
+          button.type = "button";
+          button.className = `item-button${key === selection.item ? " active" : ""}`;
+          button.setAttribute("aria-pressed", String(key === selection.item));
+          button.innerHTML = `<span class="item-label">${label}</span><span class="item-kind">${family.kind}</span>`;
+          button.addEventListener("click", () => {
+            selection.item = key;
+            renderItems();
+            renderSelection();
+            loadPreview();
+          });
+          itemNav.appendChild(button);
+        });
+      }
+
+      function renderVariants() {
+        const family = selectedFamily();
+        const selection = selectedState();
+        variantList.innerHTML = "";
+        family.variants.forEach(([key, label]) => {
+          const button = document.createElement("button");
+          button.type = "button";
+          button.className = `variant-button${key === selection.variant ? " active" : ""}`;
+          button.textContent = label;
+          button.setAttribute("aria-pressed", String(key === selection.variant));
+          button.addEventListener("click", () => {
+            selection.variant = key;
+            renderVariants();
+            renderSelection();
+            loadPreview();
+          });
+          variantList.appendChild(button);
+        });
+      }
+
+      function renderSelection() {
+        const path = sourcePath();
+        const label = itemLabel(selectedState().item);
+        selectionTitle.textContent = `${label} - ${selectedFamily().label}`;
+        selectionPath.textContent = path;
+        openSource.href = path;
+        preview.title = `${label} preview`;
+      }
+
+      function loadPreview() {
+        preview.classList.add("loading");
+        loadState.classList.add("visible");
+        window.setTimeout(() => {
+          preview.src = sourcePath();
+        }, 90);
+      }
+
+      function render() {
+        const total = Object.values(families).reduce(
+          (sum, family) => sum + family.items.length,
+          0,
+        );
+        assetCount.textContent = `${total} assets`;
+        renderFamilies();
+        renderItems();
+        renderVariants();
+        renderSelection();
+      }
+
+      preview.addEventListener("load", () => {
+        preview.classList.remove("loading");
+        loadState.classList.remove("visible");
+      });
+
+      search.addEventListener("input", () => {
+        state.search = search.value;
+        renderItems();
+      });
+
+      document.addEventListener("keydown", (event) => {
+        if (event.key === "/" && document.activeElement !== search) {
+          event.preventDefault();
+          search.focus();
+        }
+        if (event.key === "Escape" && document.activeElement === search) {
+          search.value = "";
+          state.search = "";
+          renderItems();
+          search.blur();
+        }
+      });
+
+      render();
+    </script>
+  </body>
+</html>
