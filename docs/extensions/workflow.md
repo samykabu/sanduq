@@ -28,7 +28,7 @@ Follow the [managed-workflow scenario](../scenarios/managed-workflow.md).
 
 ## How it runs
 
-![Workflow sequence: you run workflow.scope on an issue (a Scope panel lists workflow.scope-run, workflow.scope-plan and the five workflow.scope-* hooks); the dispatcher then runs Scope, Specify and Clarify (pausing for questions), Plan and Tasks, Analysis and Implement, Verify and Review with recorded check evidence, and the selected QA and manual documents; you run workflow.finalize to hand off the PR, which is blocked if evidence is stale.](../diagrams/extension-workflow.animated.svg)
+![Workflow sequence: you run workflow.scope on an issue (a Scope panel lists workflow.scope-run, workflow.scope-plan and the five workflow.scope-* hooks); the dispatcher then runs Scope, Specify and Clarify (pausing for questions), Plan and Tasks, Analysis and Implement, Verify and Review with recorded check evidence, and the selected QA and manual documents; you run workflow.finalize to hand off the PR, which is blocked if evidence is stale.](https://raw.githubusercontent.com/samykabu/sanduq/main/docs/diagrams/extension-workflow.animated.svg)
 
 You use four entry points: Scope, Clarify, Continue and Finalize. The dispatcher owns every stage
 between them. With [profiles](../workflow/stages.md#profiles-and-tiers) enabled, small features run

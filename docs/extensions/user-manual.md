@@ -50,7 +50,7 @@ The [theme gallery](../user-manual-examples.md) shows real builds.
 
 ## How it runs
 
-![User Manual sequence: user-manual.init interviews you and proposes a module map you approve; user-manual.analyze runs before implementation; user-manual.update writes and audits pages after implementation; after a verified application release, user-manual.release builds the outputs for each audience and language.](../diagrams/extension-user-manual.animated.svg)
+![User Manual sequence: user-manual.init interviews you and proposes a module map you approve; user-manual.analyze runs before implementation; user-manual.update writes and audits pages after implementation; after a verified application release, user-manual.release builds the outputs for each audience and language.](https://raw.githubusercontent.com/samykabu/sanduq/main/docs/diagrams/extension-user-manual.animated.svg)
 
 Analysis runs before implementation. It writes its tasks between `<!-- user-manual-tasks:start -->`
 and `<!-- user-manual-tasks:end -->` in `tasks.md` and replaces that block on a rerun. Update writes
