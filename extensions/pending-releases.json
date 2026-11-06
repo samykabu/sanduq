@@ -1,6 +1,9 @@
 {
   "schema_version": 1,
-  "versions": {},
-  "status": "released",
-  "note": "Workflow 2.3.2, Assure 2.7.5 and User Manual 2.0.4: cross-feature freshness fix and configured manual builds (dev-tools 2.0.5). Tested with the affected suites, packaged install/upgrade/rollback smokes and an isolated consumer upgrade."
+  "versions": {
+    "assure": "2.8.0",
+    "workflow": "2.3.4"
+  },
+  "status": "implementation-in-progress",
+  "note": "Assure 2.8.0 (structured readiness contract 2, explicit needs-reanalysis migration) and Workflow 2.3.4 (selects Assure 2.8.0; retains the bound-Specify fix from unpublished local candidate 2.3.3, source commit 2a94ea0). Unpublished local candidate. Independent review findings are closed against the corrected source and package. Local qualification passed 76 Assure tests, 7 affected Workflow checks, documentation/release checks and disposable install/current/legacy/policy-freshness checks; earlier upgrade/rollback smokes remain applicable to unchanged installer bytes. Official release, exact-main CI, real-host QuickStart and active-consumer upgrade have not run."
 }

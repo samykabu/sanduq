@@ -1,14 +1,19 @@
 #!/usr/bin/env python3
 """Record or verify content and output freshness; noncurrent status exits 1."""
+import json
 import os
 import sys
 from pathlib import Path
 try:
-    from sanduq_freshness import cli, record_or_status
+    from sanduq_freshness import cli, record_or_status as shared_record_or_status
 except ModuleNotFoundError:
     # Source checkout only; release archives bundle the canonical helper.
     sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'scripts/shared'))
-    from sanduq_freshness import cli, record_or_status
+    from sanduq_freshness import cli, record_or_status as shared_record_or_status
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import assure_readiness
+
+CONTRACT = 2  # 1 = analyses recorded before the structured readiness record; they carry no assureContract
 
 
 KEY = 'require_document_before_pr'
@@ -39,6 +44,37 @@ def gate_on(config):
         print(f'{config}: cannot be parsed; treating the documentation gate as on', file=sys.stderr)
         return True
     return False
+
+
+def record_or_status(root, feature, kind, state_path, action, outputs, base=None):
+    """Shared freshness plus the analysis contract: analyze records only after the readiness checks pass, and a
+    state recorded under contract 1 is reported needs-reanalysis without being rewritten."""
+    if kind != 'analyze':
+        return shared_record_or_status(root, feature, kind, state_path, action, outputs, base)
+    root, feature = Path(root).resolve(), Path(feature)
+    if action == 'record':
+        errors, warnings, _ = assure_readiness.check(root, feature)
+        if errors:
+            return {'current': False, 'reason': 'readiness-invalid', 'errors': errors, 'warnings': warnings}
+        rel = lambda p: Path(p).resolve().relative_to(root).as_posix() if Path(p).is_absolute() else Path(p).as_posix()
+        record = (feature if feature.is_absolute() else root / feature) / assure_readiness.RECORD
+        outputs = sorted({*map(rel, outputs), rel(record.parent.parent / 'tasks.md'), rel(record),
+                          *assure_readiness.proof_paths(root, feature)})
+    result = shared_record_or_status(root, feature, kind, state_path, action, outputs, base)
+    path = Path(state_path) if Path(state_path).is_absolute() else root / state_path
+    if action == 'record':
+        state = json.loads(path.read_text(encoding='utf-8'))
+        state.update(assureContract=CONTRACT, readiness=rel(record))
+        path.write_text(json.dumps(state, indent=2) + '\n', encoding='utf-8')
+        return {**result, 'contract': CONTRACT, 'warnings': warnings}
+    if not path.is_file() or result.get('reason') in ('missing', 'legacy-state-regenerate'):
+        return result
+    saved = json.loads(path.read_text(encoding='utf-8-sig'))
+    if 'assureContract' not in saved:
+        return {**result, 'current': False, 'reason': 'needs-reanalysis', 'contract': 1, 'legacy_current': result['current']}
+    if not saved.get('readiness'):
+        return {**result, 'current': False, 'reason': 'needs-reanalysis', 'contract': saved['assureContract']}
+    return {**result, 'contract': saved['assureContract']}
 
 
 def main():

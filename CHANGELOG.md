@@ -4,6 +4,11 @@ All notable changes to sanduq extensions/plugins are recorded here.
 Format: [Keep a Changelog](https://keepachangelog.com/). Extensions are versioned
 independently via `<extension>-vX.Y.Z` tags.
 
+## 2026-11-06 — Workflow 2.3.4, Assure 2.8.0 (pending release)
+
+- Assure Analyze builds QA from structured assertions (`qa/assertions.json`, readiness contract 2) and adds tasks only for missing proof. Earlier analyze states report `needs-reanalysis` until rerun.
+- Workflow 2.3.4 selects Assure 2.8.0 and keeps the bound-Specify revalidation fix (an existing binding stays in `revalidate` mode). Source candidates only: not published.
+
 ## 2026-11-05 — Workflow 2.3.2, Assure 2.7.5, User Manual 2.0.4
 
 - Fixes a consumer-reported blocker: one feature's committed workflow, evidence and progress records no

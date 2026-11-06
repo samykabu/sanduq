@@ -3,7 +3,7 @@ schema_version: "1.0"
 extension:
   id: assure
   name: "Assure"
-  version: "2.7.5"
+  version: "2.8.0"
   description: "Make QA part of the Spec Kit lifecycle: initialize project policy, require feature test-readiness analysis before implementation, and generate a current QA test manual before pull-request creation."
   author: "Samy K. Abushanab"
   repository: "https://github.com/samykabu/sanduq"
@@ -30,7 +30,7 @@ provides:
       description: 'Sets whether QA analysis and the QA manual are lifecycle gates or manual steps. Use when setting up Assure or asked to "make QA mandatory".'
     - name: speckit.assure.analyze
       file: commands/speckit.assure.analyze.md
-      description: 'Adds missing E2E, screenshot, API sample, diagram and accessibility tasks to tasks.md. Use when asked to "check QA readiness" before implementation.'
+      description: 'Maps each acceptance assertion to its owning test and adds tasks only for missing proof. Use when asked to "check QA readiness" before implementation.'
     - name: speckit.assure.document
       file: commands/speckit.assure.document.md
       description: 'Generates or refreshes the development-only QA test manual from real evidence. Use when asked to "write the QA manual" after the tests pass.'

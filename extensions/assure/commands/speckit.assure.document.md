@@ -59,9 +59,10 @@ Never invent behavior, screens, endpoints, examples, test counts, or coverage.
 
 - Confirm implementation tasks relevant to the feature are complete, or clearly mark the manual as a
   draft when completion evidence is missing.
-- Check for E2E, screenshot-capture, API contract/integration, and manual smoke-test tasks in
-  `tasks.md` or the workspace. If important coverage is missing, report it and suggest running
-  `speckit.assure.analyze`. Continue only if enough evidence exists to generate an honest draft.
+- Read `<feature-path>/qa/assertions.json` when it exists. It says which assertions need a manual
+  step, which need a visual, and which proof already exists. If it is missing, or an assertion that
+  needs evidence has no test or task, report it and suggest running `speckit.assure.analyze`. Continue
+  only if enough evidence exists to generate an honest draft.
 
 ### 3. Scan the workspace and refresh project memory
 
@@ -122,25 +123,31 @@ Manual content, in order:
 4. One plain-English section per user story or use case: a real-life user scenario, preconditions,
    numbered tester steps, expected result after meaningful actions, and
    validation/error/empty/loading/permission states when applicable.
-5. Screenshots for every form, screen, page, dialog, menu entry, and important state. Each image is
-   a `<figure>` with non-empty `alt` text and a one-line `<figcaption>` naming the scenario and
-   expected result.
+5. Screenshots only where an assertion names a visual, a reference or a manual step that a tester
+   cannot follow without one. Reuse a capture an existing test already produces before adding one.
+   Do not add a screenshot for every screen or state, and do not restore capture work that Analyze
+   left out. Each image is a `<figure>` with non-empty `alt` text and a one-line `<figcaption>`
+   naming the scenario and expected result.
 6. Request/response samples for headless API endpoints, backend-only flows, or scenarios not
    available from mobile: method, path, intended caller, redacted headers, request body, response
    status, response body, and field explanations.
 
 ### 6. Generate diagrams, screenshots, and API samples
 
-Do not hand-take screenshots or diagram exports.
+Do not hand-take screenshots or diagram exports. Foreground, VM and native-host runs are not part of
+this step unless an assertion with a `real` boundary needs one.
 
 - Diagrams: after step 5.3's checks pass, export PNG with
   `.specify/extensions/illustrate/skill/scripts/export_diagram.py` as Illustrate §12 describes. If
   PNG export cannot run, keep the HTML source, mark the PNG as pending in the manual, and report the follow-up.
   Do not embed a broken image.
-- Web UI: add or run a Playwright capture spec that mocks all backend endpoints the feature UI
-  depends on with deterministic data. Capture full-page PNGs into the feature assets directory.
-- Mobile UI: use the project's existing mobile E2E runner (`Detox`, `Maestro`, `Appium`, Expo test
-  tooling) when available. If mobile is intentionally unavailable, document that explicitly.
+- Web UI, for the screenshots step 5 calls for: reuse the captures existing tests produce. Where none
+  exist, add or run a Playwright capture spec that mocks the backend endpoints the feature UI
+  depends on with deterministic data, and label that evidence as fixture. Capture only the states
+  step 5 named, in the contexts the project's QA policy sets.
+- Mobile UI: only when the spec, plan or scan names a mobile surface. Use the project's existing
+  mobile E2E runner (`Detox`, `Maestro`, `Appium`, Expo test tooling) when available. Otherwise state
+  once that mobile is not a declared surface.
 - API-only flows: derive examples from contracts first. If contracts are missing or stale, infer from
   integration tests/dev stubs and mark examples as `(inferred)` with the source path. If running
   server behavior differs from the contract, mark `(mismatch)` and include the actual response with a
