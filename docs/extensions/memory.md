@@ -88,7 +88,7 @@ them keeps automatic archiving approved. If you add Memory after Workflow, run `
 
 ## How it runs
 
-![Memory sequence: memory.init configures policy; memory.impact runs as a required hook before Analyze; memory.prepare queues finished work after implementation; after the merge, the next session or memory.run checks eligibility and evidence, migrates knowledge with an independent review, and commits a recoverable checkpoint before the final archive.](../diagrams/extension-memory.animated.svg)
+![Memory sequence: memory.init configures policy; memory.impact runs as a required hook before Analyze; memory.prepare queues finished work after implementation; after the merge, the next session or memory.run checks eligibility and evidence, migrates knowledge with an independent review, and commits a recoverable checkpoint before the final archive.](https://raw.githubusercontent.com/samykabu/sanduq/main/docs/diagrams/extension-memory.animated.svg)
 
 Impact reads current knowledge before Analyze. Prepare queues finished work. After the merge, the
 next local session checks the approved policy and the real checks, then reconciles knowledge,

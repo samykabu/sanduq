@@ -39,7 +39,7 @@ For a dry run, call the sync script directly:
 
 ## How it runs
 
-![Project sequence: project.init discovers and approves the board mapping and sync policy (required, optional or manual); when a Spec Kit phase completes, project.sync reconciles the actual board columns and records the result, and a skipped sync does not count as complete.](../diagrams/extension-project.animated.svg)
+![Project sequence: project.init discovers and approves the board mapping and sync policy (required, optional or manual); when a Spec Kit phase completes, project.sync reconciles the actual board columns and records the result, and a skipped sync does not count as complete.](https://raw.githubusercontent.com/samykabu/sanduq/main/docs/diagrams/extension-project.animated.svg)
 
 Required sync runs automatically at each phase. Optional hooks ask first. In the managed Workflow,
 Workflow requires automatic sync and its own adapter creates and closes task sub-issues. Each

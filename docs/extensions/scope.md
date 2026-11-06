@@ -46,7 +46,7 @@ and an unchecked recommendation. Answer `C1Q1: A` or tick a box, then run `/spec
 
 ## How it runs
 
-![Workflow sequence with Scope inside it: you run workflow.scope on an issue and the dispatcher runs Scope, Specify and Clarify; the Scope panel lists the host commands workflow.scope-run and workflow.scope-plan and the Spec Kit hooks workflow.scope-guard, scope-bind, scope-after-specify, scope-plan-guard and scope-reconcile.](../diagrams/extension-workflow.animated.svg)
+![Workflow sequence with Scope inside it: you run workflow.scope on an issue and the dispatcher runs Scope, Specify and Clarify; the Scope panel lists the host commands workflow.scope-run and workflow.scope-plan and the Spec Kit hooks workflow.scope-guard, scope-bind, scope-after-specify, scope-plan-guard and scope-reconcile.](https://raw.githubusercontent.com/samykabu/sanduq/main/docs/diagrams/extension-workflow.animated.svg)
 
 The [hook lifecycle](../reference/hooks.md) shows where each hook runs.
 
