@@ -13,3 +13,4 @@ Thumbs.db
 !extensions/workflow/tests/fixtures/ci-runs/*/artifact.zip
 .delegate/
 /artifacts/workflow-memory-lifecycle/
+!extensions/scripts/fixtures/pr-4.0.2.zip
