@@ -3,6 +3,15 @@
 Read the published version in the [catalog](../../catalog.json) before you upgrade. Release notes
 are in the root [CHANGELOG](../../CHANGELOG.md) and in each package's `CHANGELOG.md`.
 
+## Workflow 2.3.4 and Assure 2.8.0 (source candidate, not published)
+
+Not a release yet; read the [catalog](../../catalog.json) for what is published. Once released, the
+upgrade is the same public route as above: finish or release any active claim, run Workflow's
+`upgrade.py` at a quiescent owner boundary, then `workflow.py doctor --project`. An analyze state
+recorded before Assure 2.8.0 reports `needs-reanalysis` and is kept as recorded. Rerun
+`/speckit-assure-analyze`, which writes the assertion record, then record it. Do not edit digests, claims
+or state by hand, and do not downgrade an installed Workflow that already carries the bound-Specify fix.
+
 ## Workflow 2.3.2, Assure 2.7.5 and User Manual 2.0.4
 
 | Before | After |

@@ -1,12 +1,12 @@
 ---
-description: 'Adds missing E2E, screenshot, API sample, diagram and accessibility tasks to tasks.md. Use when asked to "check QA readiness" before implementation.'
+description: 'Maps each acceptance assertion to its owning test and adds tasks only for missing proof. Use when asked to "check QA readiness" before implementation.'
 ---
 
 # Analyze QA Coverage
 
-Review the active Spec Kit feature before implementation and make sure `tasks.md` contains the E2E,
-UI screenshot-capture, API sample, frontend, and documentation-readiness work needed for the later
-QA manual.
+Review the active Spec Kit feature before implementation. Record which assertion each requirement
+needs, which test layer owns it, and what proof already exists. Add a task to `tasks.md` only where
+the proof is missing or too thin.
 
 ## User Input
 
@@ -30,7 +30,7 @@ last recorded analysis:
 python .specify/extensions/assure/scripts/assure_state.py status --kind analyze --feature <feature-path> --summary
 ```
 
-On `ok`, nothing changed since the last recorded analysis (the `after_tasks` and `before_implement`
+On `ok`, nothing changed since the last recorded analysis under the current contract (the `after_tasks` and `before_implement`
 hooks both run this command): unless `--report-only` was supplied or the user asked for a fresh
 analysis, report "analysis current" with that line and stop. On `error`, or when the feature is not
 resolved yet, continue.
@@ -38,9 +38,9 @@ resolved yet, continue.
 ### 0. Load the QA contract
 
 Read the rules in `.specify/extensions/assure/skills/assure/SKILL.md` and its
-`references/analysis.md` (task block format, report shape). In lifecycle-integrated mode this
-command is a gate: do not report success while critical acceptance scenarios lack concrete test or
-evidence tasks.
+`references/analysis.md` (assertion record, task block format, report shape). In
+lifecycle-integrated mode this command is a gate: do not report success while a critical assertion
+lacks existing proof or a concrete task.
 
 ### 0a. Ensure the Illustrate dependency
 
@@ -69,44 +69,72 @@ Read the printed inventory (one line per detected project) instead of walking th
 
 Map the feature to projects from the inventory plus the plan, task file paths, contracts, routes, menu
 names, UI screens, mobile flows, backend endpoints, changed files, and tests. Use the frontend rows to
-decide where E2E, screenshot capture, QA assets, and manual index tasks go. When a feature affects a
+decide where the tests for `extend` and `add` rows go. When a feature affects a
 planned frontend path that is not implemented yet, add tasks against the planned path and report the
 project as `planned/spec-only`.
 
-### 3. Build the documentation coverage matrix
+### 3. Build the assertion record
 
-For each user story and scenario in `spec.md`, determine whether the later QA manual will need:
+Write `<feature-path>/qa/assertions.json` (shape in `references/analysis.md`). Do not build a matrix
+from screens, states or dimensions. For each acceptance assertion in the spec's requirements, success
+criteria and acceptance scenarios, record:
 
-- Web E2E test for the main user journey.
-- Mobile E2E test for the main user journey.
-- Screenshot-capture test for each screen, form, dialog, menu entry, validation state, permission
-  state, empty state, error state, loading state, and expected result.
-- An Illustrate generation/export task for every visual the feature evidence warrants. Only if step 0a
-  confirmed `illustrate` is ready and the scenario warrants a visual: read
-  `.specify/extensions/illustrate/skill/references/type-index.md`, choose the type, and name it in
-  the task; the stage that draws follows Illustrate's full procedure. Do not add a visual merely to
-  fill a checklist.
-- API contract or integration test that proves request and response bodies for API-only scenarios.
-- Fixture or mock data task for deterministic screenshots and stable examples.
-- Accessibility smoke test for generated manual pages and UI screenshots.
-- Index/navigation update for the relevant project QA documentation.
+- the requirement it comes from, quoted as it appears in `spec.md`;
+- the risk (`critical`, `major` or `minor`) and the observable result;
+- the owning layer. One layer owns each assertion; add a second row only for a separate claim, such as
+  a real IPC path behind a unit-tested rule;
+- the boundary: `real` when the requirement names a real boundary (keyring, OS shell, live server,
+  restart, connected client), otherwise `any`; and the evidence class of the proof (`real`, `fixture`
+  or `emulated`). Fixture or emulated evidence never closes a `real` boundary;
+- the existing proof: search the workspace for a test that already checks it and cite its path and
+  test name. Cite only what you opened;
+- the disposition: `reuse`, `extend`, `add` or `not-applicable`.
 
-Treat these as missing coverage when tasks are absent or too vague:
+Then apply these rules:
 
-- A UI user story has no named E2E task.
-- A new route, menu item, form, or validation flow has no screenshot-capture task.
-- A visual the feature evidence warrants has no named Illustrate HTML + PNG export task.
-- A backend/API-only scenario has no request/response sample validation task.
-- A mobile-accessible scenario has only a web E2E task.
-- A scenario is intentionally not available on mobile but no task records that limitation in the
-  manual.
-- A test task says only "add tests" without path, runner, scenario, or expected result.
+- Add a task only for `extend` and `add`. A `reuse` row adds no task. `not-applicable` needs a reason
+  and a quotation from the spec or the consumer policy that supports it.
+- Count, runtime or budget never removes a critical assertion. Report the conflict instead.
+- Screenshot work only where a requirement or reference asks for that visual, or a named manual
+  needs the figure. Reuse an existing capture when it fits.
+- Mobile work only for a mobile surface the spec, plan or scan names. Otherwise record the limitation
+  once in the manual, not as a task.
+- No default foreground, VM or native-host task. Add one only when an assertion's boundary is `real`
+  and needs it.
+- Read the consumer's QA policy when it exists (the constitution, QA policy document or file the spec, plan or
+  `assure-config.yml` points to). Apply its dimensions and named exceptions as written;
+  never multiply assertions by language, size, zoom, theme or motion on your own.
+- Keep real connected journeys, native, security, accessibility and recovery assertions whenever a
+  requirement demands them, and keep the useful manual checks.
+- An API-only scenario needs a request/response sample task unless existing proof covers it. A
+  test task still names path, runner, scenario and expected result.
+- Add an Illustrate task only if step 0a confirmed `illustrate` is ready and a visual helps
+  verification: read `.specify/extensions/illustrate/skill/references/type-index.md`, choose the type,
+  and name it in the task.
 
 ### 4. Patch `tasks.md`
 
-Unless `--report-only` was supplied, add the missing tasks following the task block rules and wording
-examples in `references/analysis.md`. Ground every task in the spec, plan, contracts, or project
-structure; do not invent screens, endpoints, or request/response bodies.
+Unless `--report-only` was supplied, add the tasks for `extend` and `add` rows following the task block
+rules in `references/analysis.md`. Each task names the assertion id it covers. Ground every task in the
+spec, plan, contracts, or project structure; do not invent screens, endpoints, or request/response
+bodies. Put each task's `T###` in its row's `tasks` list.
+
+Run the mechanical checks, including under `--report-only`:
+
+```text
+python .specify/extensions/assure/scripts/assure_readiness.py check --feature <feature-path>
+```
+
+Fix every `error` line and rerun. The checks cover the record's shape, requirement references, proof
+paths and literal test names, task links, duplicates, `not-applicable` support, and evidence class
+against a real boundary. A proof must be a test file: feature records, other features' records,
+`.specify`, and document or JSON files are refused. They do not show that a test exercises the assertion.
+That judgment stays with you, and the human reviewer.
+
+Every `requirement-unreferenced` warning needs a disposition before you record: give the requirement a
+row, or a `not-applicable` row with its cited basis. The scanner only warns because it cannot tell a
+testable requirement from a statement of fact. A critical requirement without a row is a critical gap and
+blocks recording. Do not invent a test name to silence a noncritical one.
 
 ### 5. Record freshness and report
 
@@ -114,21 +142,26 @@ After all edits and validation succeed, record the analysis against the final fe
 tree state:
 
 ```text
-python .specify/extensions/assure/scripts/assure_state.py record --kind analyze --feature <feature-path> --output <feature-path>/tasks.md
+python .specify/extensions/assure/scripts/assure_state.py record --kind analyze --feature <feature-path>
 ```
 
-Do not record successful evidence in `--report-only` mode or while critical gaps remain unresolved.
+Record adds `tasks.md`, `qa/assertions.json` and every cited proof file as outputs, and it runs the
+same checks first. It refuses without a valid assertion record; there is no way around that. Do not
+record in `--report-only` mode or while critical gaps remain unresolved. An analysis recorded before
+this contract shows `needs-reanalysis`; it is kept as recorded, never upgraded in place, so rerun the
+analysis to move it to the new contract.
 Write any freshness log or status report to `.specify/extensions/assure/state/<feature-name>/reports/`
 (`<feature-name>` is the feature folder's name), which freshness never reads. A file added to the
 feature folder after `record` is a new input and makes the analysis stale.
 
-Report the contract's shape plus: missing coverage found; tasks added with their IDs (or, under
-`--report-only`, the tasks that should be added); any unresolved ambiguity, especially parent feature
-routing or mobile availability. Do not claim tests exist unless they are present in `tasks.md` or the
-workspace.
+Report the contract's shape plus: assertions by disposition (reuse, extend, add, not-applicable) with
+the proof cited for each reuse; tasks added with their IDs (or, under `--report-only`, the tasks that
+should be added); the `requirement-unreferenced` warnings; any unresolved ambiguity, especially parent
+feature routing or mobile availability. Do not claim tests exist unless they are present in
+`tasks.md` or the workspace, and do not call a file proof of an assertion you did not read.
 
 ## Quality Bar
 
-After this command runs, a developer should be able to implement the feature and its E2E/API
-coverage in one pass. The later `assure` documentation step should not discover that a screen,
-mobile state, validation path, or API sample was never tested or captured.
+After this command runs, a developer can implement the feature and see which existing tests already
+cover each requirement and which tasks are genuinely new. Document should not discover a screen,
+state or API sample that no assertion asked for, or one that an assertion needed and nobody planned.

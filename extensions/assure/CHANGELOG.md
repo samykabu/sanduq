@@ -1,5 +1,19 @@
 # Changelog
 
+## [2.8.0] - 2026-11-06
+
+- Analyze now builds QA from assertions, not from a list of screens. Each assertion records its requirement, risk, owning layer, boundary, evidence class, existing proof and disposition in `<feature>/qa/assertions.json`. Tasks are added only for `extend` and `add` rows. Screenshots need a named visual, reference or manual step; mobile needs a declared mobile surface; no foreground, VM or native task is a default. Policy dimensions and named exceptions come from the consumer's own QA policy.
+- New `assure_readiness.py check` runs before `assure_state.py record --kind analyze`, which refuses without a valid record. It fails on missing fields, unknown requirement references, missing or out-of-root proof files, test names not found in the proof file, duplicate assertions, `extend` or `add` without a task that exists, unsupported `not-applicable`, budget or runtime waivers, and fixture or emulated evidence against a real boundary. It does not decide whether a test covers an assertion.
+- `record` adds `tasks.md`, `qa/assertions.json` and each proof file to the outputs, so an edit to any of them stales the analysis, and the state carries `assureContract: 2`.
+- Proof identity is a whole quoted test name or whole identifier in code; comments, substrings and partial names do not count. The keyword screen on `not-applicable` reasons now catches test-economy wording such as "minimise tests" or a runtime budget (and, for a critical assertion, the same wording in the cited basis), and no longer flags the bare words runtime or cost. Neither check shows that a test covers the assertion.
+- A task inside the User Manual block cannot satisfy `extend` or `add`, and a `qa-prepare` task must cite an `extend` or `add` row.
+- Proof cannot be a feature record (this or a sibling feature), a file under `.specify`, or a document or JSON file; a `not-applicable` basis file is tracked for freshness. The economy screen no longer flags product wording such as reduced-motion, a budget export or a cut-over. Every unreferenced requirement needs a disposition before recording.
+- Document reads the record, adds screenshots only where an assertion needs one, reuses existing captures, and no longer restores the blanket capture work.
+
+### Migration
+
+- An analyze state recorded earlier has no contract and is kept untouched. `status` reports it as `needs-reanalysis` with `contract: 1` and `legacy_current` (whether it still matches under its own rules). A CI step that requires a current analyze state fails on it until Analyze is rerun and recorded under the new contract. Document states are unchanged.
+
 ## [2.7.5] - 2026-11-05
 
 - Keep generated workflow, evidence and progress directories under every feature out of implicit QA freshness inputs. Sibling requirements, tasks, contracts and product source still count; explicitly declared outputs still have integrity checks. This prevents two completed features from invalidating each other when their delivery records change.

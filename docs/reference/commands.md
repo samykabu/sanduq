@@ -87,7 +87,7 @@ before Plan, `/speckit-workflow-scope-reconcile` after Implement. To refresh par
 | Command | When and example |
 | --- | --- |
 | `/speckit-assure-init` | Once: `Configure required QA analysis and tester documentation for the booking application.` |
-| `/speckit-assure-analyze` | Before implementation: `--feature specs/412-refund-approval Add missing duplicate settlement, rejection, permission, and accessibility coverage.` |
+| `/speckit-assure-analyze` | Before implementation: `--feature specs/412-refund-approval Map the duplicate settlement, rejection and permission requirements to existing tests and add tasks only for the gaps.` |
 | `/speckit-assure-document` | After checks: `--feature specs/412-refund-approval Document runnable refund scenarios and the actual test evidence.` |
 
 ## User Manual

@@ -31,11 +31,12 @@ the managed Workflow, select QA through `/speckit-workflow-init` instead.
 ## Example
 
 ```text
-/speckit-assure-analyze --feature specs/412-refund-approval Add missing duplicate settlement, rejection, permission and accessibility coverage.
+/speckit-assure-analyze --feature specs/412-refund-approval Map the duplicate settlement, rejection and permission requirements to the tests that already cover them and add tasks only for the gaps.
 /speckit-assure-document --feature specs/412-refund-approval Document runnable refund scenarios and the actual test evidence.
 ```
 
-You get the missing tasks, tester steps, synthetic test data, expected results, and screenshots where
+Analyze gives you an assertion record (`qa/assertions.json`) and tasks only for the assertions that lack
+proof. Document then gives you tester steps, synthetic test data, expected results, and screenshots where
 there is evidence. Freshness records are kept under `.specify/extensions/assure/state/`.
 
 ## How it runs
@@ -61,7 +62,23 @@ check checks out the PR head, not GitHub's merge commit, and runs `assure_state.
 which skips the check when `lifecycle.require_document_before_pr` is false. Init replaces an
 unedited earlier `documentation-gates.yml`; for an edited one it prints the `ref:` line to add.
 
+## Readiness record and upgrade
+
+Analyze records each assertion with its requirement, risk, owning test layer, boundary, evidence class,
+existing proof and disposition. `assure_readiness.py check` validates the record before `assure_state.py
+record --kind analyze` will write anything. It adds no mobile, foreground, VM, native, screenshot or
+language/size/zoom matrix work on its own; project policy supplies those.
+
+An analysis recorded by an earlier Assure shows `needs-reanalysis` with `contract: 1`. Assure keeps it as
+recorded and does not upgrade it silently. Rerun `/speckit-assure-analyze` to write the record and move to
+the new contract. In a managed project, adopt the new Assure through Workflow's public upgrade, not by
+copying files. A CI step that requires a current analyze state fails until that rerun.
+
 ## Limits
+
+- The readiness check proves the record is well formed and its citations exist. It cannot prove a test
+  covers an assertion, and it does not show that tests pass or that a project runs; that is runtime
+  acceptance, checked separately.
 
 - Assure writes test documentation. It does not prove that tests passed.
 - A walkthrough goes stale when the implementation changes. Run Document again.

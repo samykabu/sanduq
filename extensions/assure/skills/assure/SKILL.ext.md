@@ -23,3 +23,10 @@ manual; that belongs to the `user-manual` extension.
 6. Reuse the installed Illustrate skill only when a diagram materially improves verification.
 7. Use `.specify/extensions/assure/scripts/assure_state.py` to determine freshness; do not treat a
    file's existence as proof that it is current.
+8. Generate QA from the assertion record, not from a list of screens. A task exists only for an
+   assertion whose existing proof is missing or too thin. A file that exists is not proof until you
+   have read the test and it checks the assertion.
+9. Fixture or emulated evidence never closes a requirement that names a real boundary. Count,
+   runtime or budget never waives a critical assertion.
+10. `.specify/extensions/assure/scripts/assure_readiness.py` checks the record mechanically. It cannot
+    judge whether a test covers an assertion; that judgment stays with you and the reviewer.

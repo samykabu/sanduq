@@ -1,8 +1,10 @@
 # QA documentation contract
 
-Generate tester-facing instructions for the implemented feature. Include prerequisites, deterministic
-test data, role and permission context, numbered actions, expected results, important alternate
-states, UI screenshots, API examples when applicable, and links to useful diagrams.
+Generate tester-facing instructions for the implemented feature, following `qa/assertions.json`. Include
+prerequisites, deterministic test data, role and permission context, numbered actions, expected results,
+and the alternate states an assertion names. Add a UI screenshot only where an assertion, a reference or a
+manual step needs one, and reuse an existing capture first. Add API examples when applicable and links to
+useful diagrams.
 
 Validate every image, link, request, response, and expected result with
 `.specify/extensions/assure/scripts/audit_qa.py`. Mark unavailable evidence as a follow-up; never

@@ -1312,8 +1312,8 @@ class Run:
             existing = (self.feature / 'spec.md').is_file() and f"{source.get('repo')}#{source.get('issue')}" == state['issue']
             state['active']['mode'] = 'revalidate' if existing and stage in ('scope', 'specify', 'clarify', 'plan', 'tasks') else 'initial'
             scope_mode = state['active']['mode']
-            if stage == 'specify' and self.rendered_spec():
-                # Scope rendered spec.md from the approved analysis: Specify only binds, no model pass.
+            if stage == 'specify' and not existing and self.rendered_spec():
+                # A new rendered spec only needs binding; an existing binding keeps its revalidation authority.
                 state['active']['mode'] = 'bind-only'
             if coordinator_owned:
                 state['active']['execution_owner'] = 'coordinator'

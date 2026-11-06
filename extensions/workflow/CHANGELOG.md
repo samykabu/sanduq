@@ -1,5 +1,10 @@
 # Changelog
 
+## [2.3.4] - 2026-11-06
+
+- Select Assure 2.8.0 in the supported dependency installer. Assure 2.8.0 adds a structured readiness record to Analyze; an analyze state recorded by an earlier Assure reports `needs-reanalysis` until Analyze is rerun and recorded. Rerun it through the public commands after upgrading; never edit state or digests by hand.
+- A Specify claim for an already-bound rendered specification keeps `revalidate` mode, so the printed Scope bind can recheck an in-progress feature without regressing its board status. Fresh rendered specifications keep the existing bind-only path; Scope freshness, identity and unresolved-decision guards remain required. This carries forward a correction first prepared as an unpublished local 2.3.3 candidate, which was never released; 2.3.4 is the next version after the published 2.3.2.
+
 ## [2.3.2] - 2026-11-05
 
 - Select Assure 2.7.5 and User Manual 2.0.4 in the supported dependency installer, fixing cross-feature documentation freshness cycles. Workflow stage contracts and receipt schemas are unchanged. Preview and apply checkpoint migration after upgrading; then rebind affected providers and amend their unchanged evidence through the public commands.

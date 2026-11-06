@@ -1,0 +1,56 @@
+{
+  "schema": "assure-readiness/1",
+  "assertions": [
+    {
+      "id": "A-001",
+      "requirement": "FR-001",
+      "risk": "critical",
+      "observable": "An overlapping period is rejected and the affected days are named",
+      "layer": "unit",
+      "boundary": "any",
+      "evidence": "real",
+      "disposition": "add",
+      "proof": [],
+      "tasks": ["T004"]
+    },
+    {
+      "id": "A-002",
+      "requirement": "FR-002",
+      "risk": "major",
+      "observable": "Capacity outside 1 to 8 is rejected",
+      "layer": "unit",
+      "boundary": "any",
+      "evidence": "real",
+      "disposition": "reuse",
+      "proof": [{"path": "tests/unit/period_rules.spec.ts", "name": "rejects capacity 0 and 9"}],
+      "tasks": [],
+      "context": "none"
+    },
+    {
+      "id": "A-003",
+      "requirement": "FR-003",
+      "risk": "critical",
+      "observable": "Sign-out clears the keyring entry and the server rejects the revoked session",
+      "layer": "native",
+      "boundary": "real",
+      "evidence": "real",
+      "disposition": "extend",
+      "proof": [{"path": "tests/native/sign_out.native.ts", "name": "sign-out calls the revoke endpoint"}],
+      "tasks": ["T005"]
+    },
+    {
+      "id": "A-004",
+      "requirement": "FR-004",
+      "risk": "minor",
+      "observable": "The scheduling journey on a mobile client",
+      "layer": "e2e",
+      "boundary": "any",
+      "evidence": "real",
+      "disposition": "not-applicable",
+      "proof": [],
+      "tasks": [],
+      "reason": "The feature ships on the web client only",
+      "basis": {"source": "specs/001-period-rules/spec.md", "cite": "Mobile access is out of scope for this feature"}
+    }
+  ]
+}
