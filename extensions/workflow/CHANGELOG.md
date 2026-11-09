@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [2.4.0] - 2026-11-09
 
 - `execution.analyze: skip` drops the Analyze stage; `run` is the default and any other value is refused with `ANALYZE_POLICY_INVALID`.
 - The PR receipt is `pr_url` and actual evidence. `images_verified` is no longer in the receipt template, the PR `require`, or the schema's PR `required` list; an existing receipt that still carries it stays valid.
