@@ -1,5 +1,11 @@
 # Changelog
 
+## [2.4.0] - 2026-11-09
+
+- `execution.analyze: skip` drops the Analyze stage; `run` is the default and any other value is refused with `ANALYZE_POLICY_INVALID`.
+- The PR receipt is `pr_url` and actual evidence. `images_verified` is no longer in the receipt template, the PR `require`, or the schema's PR `required` list; an existing receipt that still carries it stays valid.
+- Execution references: one worker per phase lane, and no task issue sync when `issue_sync.taskstoissues` is `off`.
+
 ## [2.3.2] - 2026-11-05
 
 - Select Assure 2.7.5 and User Manual 2.0.4 in the supported dependency installer, fixing cross-feature documentation freshness cycles. Workflow stage contracts and receipt schemas are unchanged. Preview and apply checkpoint migration after upgrading; then rebind affected providers and amend their unchanged evidence through the public commands.

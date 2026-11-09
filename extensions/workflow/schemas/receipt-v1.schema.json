@@ -104,7 +104,7 @@
     {"if": {"properties": {"stage": {"const": "clarify"}}}, "then": {"required": ["unresolved", "answers_applied"]}},
     {"if": {"properties": {"stage": {"const": "taskstoissues"}}}, "then": {"required": ["parent_issue", "native_links_verified"]}},
     {"if": {"properties": {"stage": {"enum": ["verify", "review", "ready"]}}}, "then": {"required": ["blocking_findings"], "anyOf": [{"required": ["source_inventory"]}, {"required": ["source_fingerprints"]}]}},
-    {"if": {"properties": {"stage": {"const": "pr"}}}, "then": {"required": ["pr_url", "images_verified"]}}
+    {"if": {"properties": {"stage": {"const": "pr"}}}, "then": {"required": ["pr_url"]}}
   ],
   "$defs": {
     "hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},

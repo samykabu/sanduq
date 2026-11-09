@@ -87,7 +87,7 @@ POLICY_KEYS = {
            'context', 'finalize', 'updates', 'delegation', 'receipts', 'ci', 'skills', 'progress', 'illustrate',
            'scope', 'profiles', 'artifacts', 'project_sync', 'lean_execution'),
     'processes': ('qa', 'user_manual'),
-    'execution': ('engine', 'checkpoints'),
+    'execution': ('engine', 'checkpoints', 'analyze'),
     'providers': ('clarification', 'tasks'),
     'issue_sync': ('taskstoissues', 'parent_link'),
     'clarification': ('transport', 'resume_on_reinvoke', 'max_questions_per_round', 'in_session_first_round'),
@@ -147,6 +147,7 @@ def validate_policy(policy, root=None):
         require(type(policy.get('processes', {}).get(key)) is bool, 'POLICY_SELECTION_REQUIRED: ' + key)
     require(policy.get('execution', {}).get('engine') in ('auto', 'speckit', 'superspec'), 'EXECUTOR_UNSUPPORTED')
     require(policy.get('execution', {}).get('checkpoints') in ('required-only', 'every-phase'), 'CHECKPOINT_POLICY_INVALID')
+    require(policy.get('execution', {}).get('analyze', 'run') in ('run', 'skip'), 'ANALYZE_POLICY_INVALID')
     for key in ('clarification', 'tasks'):
         require(policy.get('providers', {}).get(key) in ('prefer-superspec', 'core', 'superspec'), 'PROVIDER_POLICY_INVALID: ' + key)
     context = policy.get('context', {})
@@ -416,11 +417,12 @@ def load_policy(root):
 
 def stages(policy, tier=None, skipped=None):
     """The selected stage order; a lite or standard tier merges Tasks into Plan, lite also drops QA/manual stages,
-    and `issue_sync.taskstoissues: off` drops Tasks-to-Issues. `skipped`: the feature's recorded skips, which keep
+    `issue_sync.taskstoissues: off` drops Tasks-to-Issues, and `execution.analyze: skip` drops Analyze. `skipped`: the feature's recorded skips, which keep
     a Tasks-to-Issues skip that outlived a switch back on (`Run.reconcile_skipped`)."""
     selected = [s for s in BASE_STAGES if not (s.startswith('qa_') and not policy['processes']['qa'])
                 and not (s.startswith('manual_') and not policy['processes']['user_manual'])
-                and not (s == 'taskstoissues' and (policy.get('issue_sync') or {}).get('taskstoissues') == 'off')]
+                and not (s == 'taskstoissues' and (policy.get('issue_sync') or {}).get('taskstoissues') == 'off')
+                and not (s == 'analyze' and (policy.get('execution') or {}).get('analyze') == 'skip')]
     if tier in ('lite', 'standard'):
         selected = [s for s in selected if s != 'tasks' and not (tier == 'lite' and s in LITE_SKIPPED)]
     return [s for s in selected if s not in (skipped or {})]

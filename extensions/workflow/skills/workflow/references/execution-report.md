@@ -14,7 +14,8 @@ Use `pending`, `running`, `done` or `blocked` for task status. Mark task checkbo
 done only after reviewing their implementation and required checks. Preserve
 failed attempts alongside subsequent successful evidence.
 
-Sync native task issues once per phase, not once per task: the dispatcher owns
+Skip task issue sync when `issue_sync.taskstoissues` is `off`. Otherwise,
+sync native task issues once per phase, not once per task: the dispatcher owns
 this call and runs `task_issues.py --sync-states --feature ... --parent ...
 --apply --summary` once the phase's tasks are committed and its selected
 documentation tasks are done (`sync_states()` already walks every task in
