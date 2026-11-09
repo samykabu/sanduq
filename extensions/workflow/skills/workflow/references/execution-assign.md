@@ -47,7 +47,9 @@ rule holds either way.
 Who runs a task, natively or through the driver, follows the
 [routing rule](delegation.md#routing-rule); without delegation, use the user's selected model.
 
-Fill available worker slots with ready, independent tasks. Reconsider the queue
+Give each phase lane one worker: a lane's tasks share one short brief, and its timeout
+covers the whole lane. Split a lane only when its tasks cannot run in one context.
+Fill available worker slots with ready, independent lanes. Reconsider the queue
 when a worker finishes or a dependency clears. Task order and a parallel marker
 are inputs to scheduling; inspect actual dependencies before running tasks
 together. Never run competing writers against the same file, migration sequence,

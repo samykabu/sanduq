@@ -1741,8 +1741,7 @@ class Run:
         if stage in SOURCE_STAGES:
             template['blocking_findings'] = '<count>'
         if stage == 'pr':
-            template.update(pr_url='https://github.com/' + state['issue'].split('#')[0] + '/pull/<number>',
-                            images_verified='<true|false>')
+            template.update(pr_url='https://github.com/' + state['issue'].split('#')[0] + '/pull/<number>')
         return template
 
     def _check_stage_rules(self, state, stage, receipt, token=None, session_id=None):
@@ -1894,7 +1893,7 @@ class Run:
             require(receipt.get('blocking_findings') == 0, 'BLOCKING_FINDINGS_REMAIN')
         folded_ready = self.folded_ready_checks(state) if stage == 'verify' else None
         if stage == 'pr':
-            require(receipt.get('images_verified') is True and receipt.get('pr_url', '').startswith('https://github.com/' + state['issue'].split('#')[0] + '/pull/'), 'PR_EVIDENCE_INCOMPLETE')
+            require(receipt.get('pr_url', '').startswith('https://github.com/' + state['issue'].split('#')[0] + '/pull/'), 'PR_EVIDENCE_INCOMPLETE')
             if lean:
                 binding = pr_lint_binding(self.root, self.relative, state, receipt)
                 receipt['inputs'] = list(dict.fromkeys(receipt['inputs'] + [binding['scope']]))

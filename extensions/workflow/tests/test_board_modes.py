@@ -53,6 +53,16 @@ class BoardModeTests(Base):
         with self.assertRaisesRegex(w.WorkflowError, 'PROJECT_SYNC_POLICY_INVALID: mode'):
             w.validate_policy(policy)
 
+    def test_execution_analyze_skip_drops_the_stage_and_refuses_other_values(self):
+        policy = copy.deepcopy(self.policy)
+        self.assertIn('analyze', w.stages(policy))
+        policy['execution']['analyze'] = 'skip'
+        w.validate_policy(policy)
+        self.assertNotIn('analyze', w.stages(policy))
+        policy['execution']['analyze'] = 'sometimes'
+        with self.assertRaisesRegex(w.WorkflowError, 'ANALYZE_POLICY_INVALID'):
+            w.validate_policy(policy)
+
     def test_switching_the_mode_reaches_no_stage(self):
         base = w.validate_policy(copy.deepcopy(self.policy))
         for mutate in (lambda p: p.update(project_sync={'mode': 'minimal'}),

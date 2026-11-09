@@ -117,7 +117,7 @@ Title: "Sanduq completed stage receipt v1". Required keys: `stage`, `outcome` (a
 or `pr`.
 
 Stage-specific fields include `unresolved`, `answers_applied`, `blocking_findings`,
-`native_links_verified`, `parent_issue`, `images_verified`, `pr_url`, `effort_score` (Scope; one of
+`native_links_verified`, `parent_issue`, `pr_url`, `effort_score` (Scope; one of
 1, 2, 3, 5, 8, 13, 21, required when profiles are enabled), `lint` (`{ok, findings}`, Analyze
 recorded as `workflow:lint`, or Plan on the lite tier, where the runtime writes it) and `lazy`
 (Tasks-to-Issues under `phase-lazy`).
