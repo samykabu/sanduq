@@ -3,7 +3,7 @@
 ## [2.4.0] - 2026-11-09
 
 - `execution.analyze: skip` drops the Analyze stage; `run` is the default and any other value is refused with `ANALYZE_POLICY_INVALID`.
-- The PR receipt is `pr_url` and actual evidence. `images_verified` is no longer in the receipt template, the PR `require`, or the schema's PR `required` list; an existing receipt that still carries it stays valid.
+- `finalize.image_check: skip` drops `images_verified` from the PR receipt, leaving `pr_url` and actual evidence; `run` is the default, so the image check stays on and any other value is refused with `FINALIZE_POLICY_INVALID`.
 - Execution references: one worker per phase lane, and no task issue sync when `issue_sync.taskstoissues` is `off`.
 
 ## [2.3.2] - 2026-11-05

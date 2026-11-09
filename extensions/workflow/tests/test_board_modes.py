@@ -63,6 +63,17 @@ class BoardModeTests(Base):
         with self.assertRaisesRegex(w.WorkflowError, 'ANALYZE_POLICY_INVALID'):
             w.validate_policy(policy)
 
+    def test_finalize_image_check_is_on_by_default_and_refuses_other_values(self):
+        policy = copy.deepcopy(self.policy)
+        self.assertTrue(w.pr_images_required(policy))
+        policy['finalize']['image_check'] = 'skip'
+        w.validate_policy(policy)
+        self.assertFalse(w.pr_images_required(policy))
+        self.assertEqual(w.policy_cutoff(self.policy, policy), len(w.BASE_STAGES))  # future receipts only
+        policy['finalize']['image_check'] = 'sometimes'
+        with self.assertRaisesRegex(w.WorkflowError, 'FINALIZE_POLICY_INVALID'):
+            w.validate_policy(policy)
+
     def test_switching_the_mode_reaches_no_stage(self):
         base = w.validate_policy(copy.deepcopy(self.policy))
         for mutate in (lambda p: p.update(project_sync={'mode': 'minimal'}),

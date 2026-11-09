@@ -93,7 +93,7 @@ POLICY_KEYS = {
     'clarification': ('transport', 'resume_on_reinvoke', 'max_questions_per_round', 'in_session_first_round'),
     'decisions': ('transport', 'authorized_users', 'project_field', 'lifecycle_status', 'self_waivers'),
     'context': ('mode', 'max_fraction', 'checkpoint_fraction', 'reserve_fraction'),
-    'finalize': ('create_pr', 'merge'),
+    'finalize': ('create_pr', 'merge', 'image_check'),
     'updates': ('policy',),
     'skills': ('inventory_thresholds',),
     'progress': ('hook_wiring', 'post_tool_matcher'),
@@ -159,7 +159,9 @@ def validate_policy(policy, root=None):
     require(set(issue_sync) == {'taskstoissues', 'parent_link'} and issue_sync['taskstoissues'] in TASK_ISSUE_MODES
             and issue_sync['parent_link'] == 'native-subissue', 'TASK_ISSUES_REQUIRED')
     validate_front_half_policy(policy)
-    require(policy.get('finalize') == {'create_pr': True, 'merge': False}, 'FINALIZE_POLICY_INVALID')
+    finalize = policy.get('finalize') or {}
+    require({k: v for k, v in finalize.items() if k != 'image_check'} == {'create_pr': True, 'merge': False}
+            and finalize.get('image_check', 'run') in ('run', 'skip'), 'FINALIZE_POLICY_INVALID')
     require(policy.get('clarification', {}).get('resume_on_reinvoke') in ('reread-answers', 'manual-status'), 'CLARIFICATION_POLICY_INVALID')
     # Older consumer policies remain valid and opt out until the project selects delegation.
     if 'delegation' not in policy:
@@ -374,6 +376,11 @@ def task_issue_mode(policy):
     return policy['issue_sync']['taskstoissues']
 
 
+def pr_images_required(policy):
+    """The PR receipt must confirm its images, unless the project sets `finalize.image_check: skip`."""
+    return (policy.get('finalize') or {}).get('image_check', 'run') != 'skip'
+
+
 def side_effects(policy, feature, stage, root=None):
     """The concrete side-effect globs for a stage; phase-lazy issue sync lets Execute extend the mapping. With
     `root`, the Project Sync state is the configured file."""
@@ -434,7 +441,8 @@ def stages(policy, tier=None, skipped=None):
 # its checkpoint at Scope start (REQ-21), so a later edit only affects features started after it.
 OPERATIONAL_SUBKEYS = {'scope': ('board_cache_seconds',),
                        'clarification': ('max_questions_per_round', 'in_session_first_round', 'transport'),
-                       'issue_sync': ('taskstoissues',)}
+                       'issue_sync': ('taskstoissues',),
+                       'finalize': ('image_check',)}
 
 
 def policy_cutoff(previous, current):

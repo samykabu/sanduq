@@ -75,7 +75,7 @@ from wf_fingerprints import (sync_state_label, sync_entry, sync_projection, sync
                              store_source_inventory, source_fingerprints_of, DECISION_RECORDS_PREFIX, DECISION_LEDGER,
                              decision_projection, recorded_decision_ids)
 from wf_policy import (default_policy, select_gate, validate_policy, _positive, validate_front_half_policy, tier,
-                       state_tier, feature_tier, skipped_stages, project_sync, task_issue_mode, side_effects,
+                       state_tier, feature_tier, skipped_stages, project_sync, task_issue_mode, pr_images_required, side_effects,
                        matches_side_effect, load_policy, stages, OPERATIONAL_SUBKEYS, policy_cutoff, POLICY_KEYS,
                        unknown_policy_key, parse_policy, PolicyLoader, project_sync_mode, sync_phases,
                        sync_phase_written, board_mode_line)
@@ -1742,6 +1742,8 @@ class Run:
             template['blocking_findings'] = '<count>'
         if stage == 'pr':
             template.update(pr_url='https://github.com/' + state['issue'].split('#')[0] + '/pull/<number>')
+            if pr_images_required(self.policy):
+                template['images_verified'] = '<true|false>'
         return template
 
     def _check_stage_rules(self, state, stage, receipt, token=None, session_id=None):
@@ -1893,7 +1895,8 @@ class Run:
             require(receipt.get('blocking_findings') == 0, 'BLOCKING_FINDINGS_REMAIN')
         folded_ready = self.folded_ready_checks(state) if stage == 'verify' else None
         if stage == 'pr':
-            require(receipt.get('pr_url', '').startswith('https://github.com/' + state['issue'].split('#')[0] + '/pull/'), 'PR_EVIDENCE_INCOMPLETE')
+            require((receipt.get('images_verified') is True or not pr_images_required(self.policy))
+                    and receipt.get('pr_url', '').startswith('https://github.com/' + state['issue'].split('#')[0] + '/pull/'), 'PR_EVIDENCE_INCOMPLETE')
             if lean:
                 binding = pr_lint_binding(self.root, self.relative, state, receipt)
                 receipt['inputs'] = list(dict.fromkeys(receipt['inputs'] + [binding['scope']]))
