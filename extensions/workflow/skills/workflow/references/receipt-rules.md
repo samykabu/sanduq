@@ -9,7 +9,7 @@ Start from the claim's `receipt_template` (the fields the runtime checks for thi
 `summary`, `inputs` (other paths relied on; the runtime adds required artifacts and the decision
 ledger), `evidence` (existing proof files) and every `<...>` value. Every gating field
 (`outcome`, `blocking_findings`, `unresolved`, `answers_applied`, `native_links_verified`,
-`effort_score`, `pr_url`) is a placeholder that you set from what the stage
+`images_verified`, `effort_score`, `pr_url`) is a placeholder that you set from what the stage
 actually produced; the template never pre-fills a passing value, and `complete` refuses a
 placeholder left in place with `RECEIPT_PLACEHOLDER` naming the field. Do not include checkpoint
 files in input manifests. A generated report or checklist is not test

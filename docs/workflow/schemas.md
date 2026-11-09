@@ -31,8 +31,9 @@ describe their shape.
 | `processes.qa`, `processes.user_manual` | Booleans for the independently selected QA Assure and User Manual processes. |
 | `execution.engine` | `auto`, `speckit` or `superspec`. |
 | `execution.checkpoints` | `required-only` or `every-phase`. |
+| `execution.analyze` | Optional. `run` (default) or `skip`, which drops the Analyze stage. |
 | `providers.clarification`, `providers.tasks` | `prefer-superspec`, `core` or `superspec`. |
-| `issue_sync` | `taskstoissues` is `required` (every task mapped at Tasks-to-Issues) or `phase-lazy` (each phase mapped when it starts; Ready still needs every task mapped); `parent_link` is fixed to `native-subissue`. |
+| `issue_sync` | `taskstoissues` is `required` (the default: every task mapped at Tasks-to-Issues), `phase-lazy` (each phase mapped when it starts; Ready still needs every task mapped) or `off` (drops Tasks-to-Issues); `parent_link` is fixed to `native-subissue`. |
 | `profiles` | Optional. `enabled`, `minimum_tier` (`lite`, `standard` or `full`, default `lite`), `lite.max_score` (default 3), `standard.max_score` (default 8). The floor preserves the verified effort score. Absent profiles means every feature runs the full stage list. |
 | `clarification.transport` | `github-comments` (default) or `local`. Copied to each feature's checkpoint (`clarification_transport`) at Scope start, so a later change applies to features started after it and invalidates nothing. With `local`, Clarify questions and decisions are asked in the conversation and recorded in `specs/<feature>/clarifications.md`; nothing is posted to GitHub. |
 | `clarification.max_questions_per_round`, `clarification.in_session_first_round` | Optional question cap per round (absent: no cap) and in-session first round (default false). |
@@ -41,7 +42,7 @@ describe their shape.
 | `scope.board_cache_seconds` | Optional Scope board cache TTL in seconds (default 300, 0 disables). |
 | `decisions` | Optional. Stage-neutral GitHub issue decisions: `transport` (`github-issue`), `authorized_users`, `project_field`, optional `lifecycle_status` (boolean, default true), and optional `self_waivers` (logins whose CI gate waiver is accepted on a PR they authored; a one-person setup, see delivery-policy.md). Omitted in older policies. |
 | `context` | `mode` (`strict`, `measured-only` or `measured-with-estimated-fallback`), `max_fraction`, `checkpoint_fraction`, `reserve_fraction`. See [Context](stages.md#context). |
-| `finalize` | Fixed: `{"create_pr": true, "merge": false}`. The dispatcher opens a PR and never merges. |
+| `finalize` | `create_pr` and `merge` are fixed to `true` and `false`: the dispatcher opens a PR and never merges. Optional `image_check` is `run` (default) or `skip`, which drops `images_verified` from the PR receipt. |
 | `delegation` | Optional. See below and [delegation](delegation.md). Absent legacy policies default to disabled. |
 | `receipts.require_input_roles` | Optional boolean. See [Receipt contract](state-files.md#receipt-contract-160). |
 | `skills.inventory_thresholds` | Optional `skill_count` and `description_bytes` overrides. See [Skill inventory](utilities.md#skill-inventory-doctor). |
@@ -117,7 +118,7 @@ Title: "Sanduq completed stage receipt v1". Required keys: `stage`, `outcome` (a
 or `pr`.
 
 Stage-specific fields include `unresolved`, `answers_applied`, `blocking_findings`,
-`native_links_verified`, `parent_issue`, `pr_url`, `effort_score` (Scope; one of
+`native_links_verified`, `parent_issue`, `images_verified`, `pr_url`, `effort_score` (Scope; one of
 1, 2, 3, 5, 8, 13, 21, required when profiles are enabled), `lint` (`{ok, findings}`, Analyze
 recorded as `workflow:lint`, or Plan on the lite tier, where the runtime writes it) and `lazy`
 (Tasks-to-Issues under `phase-lazy`).

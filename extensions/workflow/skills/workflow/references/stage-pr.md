@@ -16,7 +16,10 @@ for overlapping QA/manual facts. Keep the explainer proportional to the change a
 original proofs instead of copying their inventories. Required PR receipts and checks still apply.
 
 Run the PR extension, include every relevant visual inline, verify them, and reuse an existing
-PR. Receipt: `pr_url` and actual evidence; when no visuals
+PR. Receipt: `pr_url`, `images_verified: true`, `image_verification: api` (rendered `body_html`
+plus the contents API per pinned commit, both hosts) or `browser` (those checks plus loading in an
+authenticated browser, when the host has a browser tool), and actual evidence. With
+`finalize.image_check: skip` in the project policy, the receipt is `pr_url` and actual evidence. When no visuals
 apply, record that inventory result. In lean mode the coordinator owns PR mechanics,
 including reuse of unchanged evidence, with no model dispatch; claim tokens, publication
 evidence, human decisions and project checks stay enforced.

@@ -12,7 +12,7 @@ import workflow as w  # noqa: E402
 from test_front_half_runtime import Base  # noqa: E402
 
 FILLS = {'outcome': 'passed', 'effort_score': 13, 'unresolved': 0, 'answers_applied': True,
-         'native_links_verified': True, 'blocking_findings': 0,
+         'native_links_verified': True, 'blocking_findings': 0, 'images_verified': True,
          'lint': {'ok': True, 'findings': 0}, 'pr_url': 'https://github.com/acme/app/pull/11'}
 
 
@@ -61,8 +61,24 @@ class ReceiptPlaceholderTests(Base):
                 break
         self.assertEqual(refused, set(FILLS) - {'lint'})  # score 13 is the full tier: Analyze is a model stage
         self.assertTrue({'effort_score', 'unresolved', 'answers_applied', 'parent_issue', 'native_links_verified',
-                         'lazy', 'blocking_findings', 'pr_url'} <= required)
-        self.assertNotIn('images_verified', required)
+                         'lazy', 'blocking_findings', 'pr_url', 'images_verified'} <= required)
+
+    def test_image_check_skip_drops_images_verified_from_the_pr_receipt(self):
+        self.profiles()
+        self.policy['issue_sync'] = {'taskstoissues': 'phase-lazy', 'parent_link': 'native-subissue'}
+        self.policy['finalize']['image_check'] = 'skip'
+        self.configure()
+        run = self.run_object()
+        while True:
+            claim = self.claim_any(run)
+            stage, template = claim['stage'], claim['receipt_template']
+            fixture = self.receipt(stage)
+            run.complete(claim['token'], {**template, 'summary': fixture['summary'], 'evidence': fixture['evidence'],
+                                          'inputs': template['inputs'] + fixture['inputs'],
+                                          **{key: FILLS[key] for key in template if key in FILLS}})
+            if stage == 'pr':
+                self.assertNotIn('images_verified', template)
+                break
 
     def test_the_evidence_placeholder_is_refused_and_lite_plan_names_its_lint_file(self):
         """R2: no template shows `"evidence": []`, which EVIDENCE_REQUIRED refuses; lite Plan names the lint output."""

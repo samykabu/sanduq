@@ -53,6 +53,7 @@
         "checkpoints"
       ],
       "properties": {
+        "analyze": {"enum": ["run", "skip"], "default": "run", "description": "skip drops the Analyze stage."},
         "engine": {
           "enum": [
             "auto",
@@ -185,9 +186,11 @@
       }
     },
     "finalize": {
-      "const": {
-        "create_pr": true,
-        "merge": false
+      "type": "object", "additionalProperties": false, "required": ["create_pr", "merge"],
+      "properties": {
+        "create_pr": {"const": true},
+        "merge": {"const": false},
+        "image_check": {"enum": ["run", "skip"], "default": "run", "description": "skip drops images_verified from the PR receipt."}
       }
     },
     "delegation": {
