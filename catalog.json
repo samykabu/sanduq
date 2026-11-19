@@ -1,6 +1,6 @@
 {
   "schema_version": "1.0",
-  "updated_at": "2026-11-09T17:39:49.786000+00:00",
+  "updated_at": "2026-11-19T23:32:38.078519+00:00",
   "catalog_url": "https://raw.githubusercontent.com/samykabu/sanduq/main/catalog.json",
   "extensions": {
     "project": {
@@ -131,14 +131,14 @@
     "illustrate": {
       "name": "Illustrate",
       "id": "illustrate",
-      "version": "2.7.3",
-      "description": "Generate, import, and export forty-four technical, product, architecture, process, and quantitative illustration types with tracked project-level light/dark color and font themes.",
+      "version": "2.8.0",
+      "description": "Generate, import, and export 51 diagram and chart types with tracked project themes. The Process type includes a BPMN 2.0 variant with swimlanes and route animation.",
       "author": "Samy K. Abushanab",
       "repository": "https://github.com/samykabu/sanduq",
       "homepage": "https://github.com/samykabu/sanduq/tree/main/extensions/illustrate",
       "documentation": "https://github.com/samykabu/sanduq/blob/main/extensions/illustrate/README.md",
       "changelog": "https://github.com/samykabu/sanduq/blob/main/extensions/illustrate/CHANGELOG.md",
-      "download_url": "https://github.com/samykabu/sanduq/releases/download/illustrate-v2.7.3/illustrate.zip",
+      "download_url": "https://github.com/samykabu/sanduq/releases/download/illustrate-v2.8.0/illustrate.zip",
       "license": "MIT",
       "category": "documentation",
       "effect": "read-write",
@@ -164,6 +164,7 @@
         "diagram",
         "architecture",
         "process-flow",
+        "bpmn",
         "technical-color",
         "flowchart",
         "sequence",
@@ -194,9 +195,9 @@
       ],
       "verified": false,
       "created_at": "2026-07-18T15:47:12Z",
-      "updated_at": "2026-10-27T23:43:03.519276+00:00",
-      "sha256": "271d2b80037a191ed6e66d6835efb2bba743580ecc6dd1efc3106750182f7c7c",
-      "inventory_sha256": "622e76d172d7f28dcfe905f269493f70bee287fdae269642e542e3de695a7bde"
+      "updated_at": "2026-11-19T23:32:37.874417+00:00",
+      "sha256": "ff32b14b8fa4fe0075e623432b4c4c0e4223bea3de9e6996a6386f10afbfe692",
+      "inventory_sha256": "e2b5c27444de80305a043635de1c09b5896a4a0bb4f571f501ef834e0eae95b8"
     },
     "assure": {
       "name": "Assure",
@@ -325,7 +326,7 @@
     "workflow": {
       "name": "Sanduq Workflow",
       "id": "workflow",
-      "version": "2.4.0",
+      "version": "2.4.1",
       "description": "GitHub issue decisions and resumable Scope-to-PR orchestration with optional model-aware delegation, QA, User Manual, and workflow evidence CI.",
       "author": "Samy K. Abushanab",
       "license": "MIT",
@@ -333,7 +334,7 @@
       "homepage": "https://github.com/samykabu/sanduq/tree/main/extensions/workflow",
       "documentation": "https://github.com/samykabu/sanduq/blob/main/extensions/workflow/README.md",
       "changelog": "https://github.com/samykabu/sanduq/blob/main/extensions/workflow/CHANGELOG.md",
-      "download_url": "https://github.com/samykabu/sanduq/releases/download/workflow-v2.4.0/workflow.zip",
+      "download_url": "https://github.com/samykabu/sanduq/releases/download/workflow-v2.4.1/workflow.zip",
       "requires": {
         "speckit_version": ">=1.0.0,<2.0.0",
         "tools": [
@@ -367,9 +368,9 @@
       "category": "process",
       "effect": "read-write",
       "verified": false,
-      "sha256": "3623035f534e6f32a74f53c3586c33aec266a0ab71ae5a47e8f182c3682f18b0",
-      "updated_at": "2026-11-09T17:39:49.785875+00:00",
-      "inventory_sha256": "7d4bd24b1f9fd94daa17717585cf7763d2d5e8891818ec96b692d7b42fdbbfba"
+      "sha256": "eb446183941fca24f452c9fc3b46d6c92e7ebaac52469bd02f28a4a07c6955fb",
+      "updated_at": "2026-11-19T23:32:38.078389+00:00",
+      "inventory_sha256": "abbd151a7c0345fa790831afb0bfb76b51e37cdb3592129327a9d679aca033ca"
     },
     "scope": {
       "name": "Speckit Scope (retired)",
