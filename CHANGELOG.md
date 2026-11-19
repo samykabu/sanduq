@@ -4,7 +4,7 @@ All notable changes to sanduq extensions/plugins are recorded here.
 Format: [Keep a Changelog](https://keepachangelog.com/). Extensions are versioned
 independently via `<extension>-vX.Y.Z` tags.
 
-## 2026-11-20 — Illustrate 2.8.0, Workflow 2.4.1 (pending release)
+## 2026-11-20 — Illustrate 2.8.0, Workflow 2.4.1
 
 - Vendors illustration-tools 3.9.1 with 51 diagram types, four additional variants, PlantUML and Mermaid quadrant redraws, and fractional PNG export.
 - Adds BPMN 2.0 as an opt-in Process variant with role lanes and one-outcome playback in animated SVG and GIF.
