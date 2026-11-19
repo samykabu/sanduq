@@ -147,11 +147,9 @@ CSS_MOVES_MARK_RE = re.compile(
 # a browser builds - stripped before the raw signal is consulted so an old
 # draft in a comment cannot claim an unrelated file for this checker.
 HTML_COMMENT_RE = re.compile(r"<!--.*?-->", re.DOTALL)
-# Detection only - deliberately a text search over the raw text (HTML
-# comments removed), so a file that so much as mentions a layer binding in
-# live markup is held to the contract even when the parser finds no complete
-# layer - that is check_source's fail-closed case, not a skip.
-DECLARES_LAYER_RE = re.compile(r"\bdata-layer\s*=", re.IGNORECASE)
+# Raw path or legend text can claim this format even when the parser cannot
+# read the layer. Other types use data-layer on groups for their own layout.
+DECLARES_LAYER_RE = re.compile(r"<(?:path|text)\b[^<>]*?\bdata-layer\s*=", re.IGNORECASE)
 # Path grammar: absolute M/C/L/Z and numbers only. Relative commands, arcs,
 # shorthand curves and H/V would need a transform stack this checker refuses
 # to half-implement; a partial parse looks like coverage without being it.
@@ -239,7 +237,7 @@ def looks_like_streamgraph(path: Path, source: str) -> bool:
     the contract even if it declares nothing parseable - that combination is
     the fail-closed case, not a pass. HTML comments are not markup, so a
     commented-out draft of a layer cannot pull another example type into
-    scope; a mangled tag whose bytes still say `data-layer=` can, and then
+    scope; a mangled path or text tag whose bytes still say `data-layer=` can, and then
     the parser finding no complete layer is exactly what is reported.
     """
     if is_hand_variant(path, source):
