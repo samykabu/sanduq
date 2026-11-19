@@ -1,8 +1,9 @@
 {
   "schema_version": 1,
   "versions": {
-    "illustrate": "2.8.0"
+    "illustrate": "2.8.0",
+    "workflow": "2.4.1"
   },
   "status": "implementation-in-progress",
-  "note": "Workflow 2.4.0: project switches for the Analyze stage (execution.analyze), the PR image check (finalize.image_check) and Tasks-to-Issues (issue_sync.taskstoissues: off), all on by default. Tested in CI on Windows and Ubuntu (sanduq#4, sanduq#5)."
+  "note": "Illustrate 2.8.0 adds the BPMN Process variant, and Workflow 2.4.1 selects the new Illustrate version."
 }
