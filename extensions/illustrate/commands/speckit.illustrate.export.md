@@ -21,6 +21,9 @@ $ARGUMENTS
    - `--animated` for a self-playing `<name>.animated.svg` (README images), or `--gif` for the same as
      an animated GIF (`--theme light|dark`, `--fps`);
    - `--arrows=draw|flow|pulse|draw-flow|chevrons` for the arrow animation (default `draw`);
+   - `--bpmn-route <name>` with `--animated` or `--gif` to play a named BPMN route.
+     Use the name the user gives or the figure's default. If a branching BPMN diagram has
+     neither, ask which route to play;
    - `--scale` from 1 to 4 for PNG (fractional values accepted) or 1, 2, or 3 for GIF;
    - `--output=<path>` for an alternate output base.
 4. For an image export, run the bundled exporter once. Do not recreate its implementation in a temporary script and do

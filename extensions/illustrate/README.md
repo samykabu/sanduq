@@ -150,6 +150,8 @@ projects can choose automatic or manual handling in `.specify/extension-dependen
 /speckit-illustrate-export docs/refund-approval.html --svg-only
 /speckit-illustrate-export docs/refund-approval-animated.html --animated
 /speckit-illustrate-export docs/refund-approval.html --gif --arrows pulse
+/speckit-illustrate-generate draw a BPMN 2.0 expense approval process with Employee, Manager and Finance lanes
+/speckit-illustrate-export docs/expense-approval.html --animated --bpmn-route approved
 /speckit-illustrate-theme set cobalt dark
 /speckit-illustrate-import docs/legacy/order-flow.mmd --size doc-wide --detail balanced
 ```
@@ -157,6 +159,9 @@ projects can choose automatic or manual handling in `.specify/extension-dependen
 The command loads its version-matched skill package from
 `.specify/extensions/illustrate/skill/`; it does not depend on a separately installed global
 Claude or Codex skill.
+
+BPMN 2.0 is an opt-in Process variant. The static SVG and PNG show the whole process.
+Animated SVG and GIF follow one selected outcome with all sequence flows still visible.
 
 ## Migrate from Diagram Design
 

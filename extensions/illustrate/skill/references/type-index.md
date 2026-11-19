@@ -38,6 +38,7 @@ procedure is in [`../SKILL.md`](../SKILL.md).
 - **State machine**: states, transitions and guards. [type-state.md](type-state.md)
 - **Swimlane**: cross-functional process with handoffs. [type-swimlane.md](type-swimlane.md)
 - **Process**: multi-actor sequential process with data handoffs. [type-process.md](type-process.md)
+- **BPMN 2.0** (Process variant): role lanes and standard event, task, gateway and sequence-flow notation. [type-bpmn.md](type-bpmn.md)
 - **Steps**: a short linear method, with numbered stages and concise explanations. [type-steps.md](type-steps.md)
 - **Event modeling**: commands, events and read models along ordered stages. [type-event-modeling.md](type-event-modeling.md)
 - **SBGN Process Description**: an educational map of species and process glyphs connected by typed arcs. [type-sbgn.md](type-sbgn.md)

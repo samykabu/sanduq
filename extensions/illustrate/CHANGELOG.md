@@ -1,9 +1,10 @@
 # Changelog
 
-## [2.8.0] - 2026-11-19
+## [2.8.0] - 2026-11-20
 
-- Vendors illustration-tools 3.8.0. The new visual types are Service Blueprint, Steps, Unit Grid, Requirement Traceability, Event Modeling, Schedule Network and educational SBGN Process Description.
+- Vendors illustration-tools 3.9.0. The new visual types are Service Blueprint, Steps, Unit Grid, Requirement Traceability, Event Modeling, Schedule Network and educational SBGN Process Description.
 - Adds Architecture Containment, Box Plot and Arc Diagram variants, PlantUML sequence and class redraws, and Mermaid quadrant redraws.
+- Adds the opt-in BPMN 2.0 Process variant with role lanes, standard glyphs and route-specific animated SVG and GIF.
 - PNG export accepts fractional scales from 1 to 4. The release preserves the SVG, handwritten, animation, GIF, theme and technical-color workflows.
 
 ## [2.7.3] - 2026-10-28

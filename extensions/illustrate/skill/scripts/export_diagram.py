@@ -13,6 +13,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import animate_bpmn  # noqa: E402
 import animate_export  # noqa: E402
 import svg_standalone as safe  # noqa: E402
 
@@ -68,7 +69,8 @@ def parse_args() -> argparse.Namespace:
     )
     mode.add_argument("--gif", action="store_true", help="Export <name>.gif: the same animation as an animated GIF")
     parser.add_argument("--arrows", choices=animate_export.ARROW_STYLES, default="draw",
-                        help="Arrow animation for --animated/--gif (default: draw)")
+                        help="Arrow animation for non-BPMN --animated/--gif exports (default: draw)")
+    parser.add_argument("--bpmn-route", metavar="NAME", help="Play a named BPMN route in --animated/--gif")
     parser.add_argument("--theme", choices=("light", "dark"), default="light",
                         help="Colour scheme the GIF is rendered in (default: light)")
     parser.add_argument("--fps", type=int, default=15, help="GIF frames per second (default: 15)")
@@ -327,23 +329,40 @@ def motion_ms(html: str, name: str, default: int) -> int:
     return int(match.group(1)) if match else default
 
 
-def animated_svg(html: str, arrows: str = "draw", source: Path | None = None) -> str:
-    """The standalone SVG plus the figure's reveal as scoped CSS: no script, no remote fonts.
+def animated_svg(html: str, arrows: str = "draw", source: Path | None = None, *,
+                 bpmn_route: str | None = None) -> str:
+    """The standalone SVG with CSS motion, without script or remote fonts.
 
     GitHub and other Markdown hosts render an SVG image in a sandbox that runs CSS animation but
-    no script and no external fetches. Every step is revealed once, in data-step order, with the
+    no script and no external fetches. BPMN figures loop one start-to-end route with a static hold.
+    In other figures, every step is revealed once, in data-step order, with the
     figure's own --motion-hold/--motion-step clock, only under prefers-reduced-motion:
     no-preference. The end state, and the reduced-motion state, is the complete static figure.
     The reveal animates opacity only: a CSS transform would override the elements' own transform
     attributes (axonometric and rotated parts) and move them.
     Decorative overlays depend on the HTML page's CSS and are left out.
     """
-    return animated_figure(html, arrows, source)[0]
+    return animated_figure(html, arrows, source, bpmn_route=bpmn_route)[0]
 
 
-def animated_figure(html: str, arrows: str = "draw", source: Path | None = None) -> tuple[str, int]:
-    """(animated SVG text, intro length in ms): the step reveal plus the chosen arrow animation."""
+def _is_bpmn_svg(standalone: str) -> bool:
+    _, attrs = safe.root_attributes(standalone.partition("\n")[2])
+    return safe.decode_xml_references(attrs.get("data-diagram") or "") == "bpmn"
+
+
+def animated_figure(html: str, arrows: str = "draw", source: Path | None = None, *,
+                    bpmn_route: str | None = None) -> tuple[str, int]:
+    """Return the animated SVG and intro length (full loop duration for BPMN), in ms."""
     svg = standalone_svg(html, source, system_fonts=True)
+    if _is_bpmn_svg(svg):
+        try:
+            svg, css, duration = animate_bpmn.animate_route(svg, bpmn_route, MAX_TOTAL_MS)
+        except ValueError as exc:
+            raise ExportError(str(exc)) from exc
+        style = f'<style data-illustrate-animation="true">{css}</style>'
+        return insert_style(svg, style), duration
+    if bpmn_route is not None:
+        raise ExportError("--bpmn-route requires a BPMN diagram (data-diagram=\"bpmn\" on the SVG).")
     svg = DECORATIVE_RE.sub("", svg)
     if "data-motion-decorative" in svg:
         raise ExportError("A decorative motion overlay could not be removed; keep it on one element.")
@@ -514,23 +533,27 @@ def main() -> int:
     args = parse_args()
     outputs: list[Path] = []
     try:
+        if args.bpmn_route is not None and not (args.animated or args.gif):
+            raise ExportError("--bpmn-route requires --animated or --gif.")
         source = args.source.resolve()
         html = read_source(source)
         base = output_base(source, args.output)
         if args.animated:
             animated_path = base.with_name(base.name + ".animated.svg")
-            write_text(animated_path, animated_svg(html, args.arrows, source))
+            write_text(animated_path, animated_svg(html, args.arrows, source, bpmn_route=args.bpmn_route))
             outputs.append(animated_path)
         elif args.gif:
             if not 1 <= args.fps <= 30:
                 raise ExportError("--fps must be between 1 and 30.")
             if args.scale not in GIF_SCALES:
                 raise ExportError(f"--gif renders at --scale 1, 2 or 3 (got {args.scale:g}).")
-            figure, intro_ms = animated_figure(html, args.arrows, source)
-            total_ms, hold_ms = animate_export.timeline(args.arrows, intro_ms)
+            figure, intro_ms = animated_figure(html, args.arrows, source, bpmn_route=args.bpmn_route)
+            is_bpmn = _is_bpmn_svg(figure)
+            total_ms, hold_ms = (intro_ms, 0) if is_bpmn else animate_export.timeline(args.arrows, intro_ms)
             gif_path = base.with_suffix(".gif")
             try:
-                animate_export.render_gif(figure, gif_path, total_ms, hold_ms, args.fps, int(args.scale), args.theme)
+                animate_export.render_gif(figure, gif_path, total_ms, hold_ms, args.fps, int(args.scale), args.theme,
+                                          include_motion_colors=is_bpmn)
             except RuntimeError as exc:
                 raise ExportError(str(exc)) from exc
             outputs.append(gif_path)

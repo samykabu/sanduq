@@ -43,6 +43,7 @@ is 2, the SVG is still listed, and the error names what to fix.
 | `--scale` | PNG: any finite number from 1 to 4, fractions included (`1.25`); GIF: 1, 2 or 3. Default 2. |
 | `--system-fonts` | SVG without the Google Fonts `@import`; PNG captured with remote requests blocked. Text falls through the theme's font stacks to installed faces. |
 | `--svg-only` / `--png-only` | One format. |
+| `--bpmn-route <name>` | Named BPMN route for animated SVG or GIF. |
 | `--output <base>` | Output base; the extension is appended. | The procedure below is the behavioral contract
 and fallback reference; do not rewrite it into a temporary script when the bundled exporter is
 available.
@@ -84,6 +85,19 @@ tip-to-start for start-only heads, and from the middle out for two-headed arrows
   the frame rate, `--scale` the pixel density. A `draw` GIF holds its final frame for 2.5 seconds
   before repeating; looping styles loop seamlessly. A GIF cannot follow the reader's reduced-motion
   setting, so prefer the `.animated.svg` where SVG images are allowed.
+
+### BPMN route playback
+
+The [BPMN Process variant](type-bpmn.md) keeps all sequence flows solid and visible. One token
+moves through the selected route. The generic arrow-style setting applies to other diagram types.
+
+```bash
+python scripts/export_diagram.py assets/example-bpmn.html --animated --bpmn-route approved --output expense-approved
+python scripts/export_diagram.py assets/example-bpmn.html --gif --bpmn-route rejected --output expense-rejected
+```
+
+A single linear route can play automatically. For branches, supply a route name or use the
+default authored on the diagram. The static SVG and PNG include all outcomes.
 
 Embed either like any image, with alt text that describes the complete figure, and keep the HTML
 source beside it.

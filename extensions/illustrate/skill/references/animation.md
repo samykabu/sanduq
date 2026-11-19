@@ -123,7 +123,7 @@ PNG and SVG exports are static final-state artifacts unless the user explicitly 
 For a README or other Markdown page, `python scripts/export_diagram.py <file> --animated` writes
 `<name>.animated.svg` (the reveal and the arrows as CSS inside the SVG; no script, no remote fonts;
 reduced motion shows the complete figure), and `--gif` writes the same as an animated GIF. Choose
-the arrow motion with `--arrows`. See [export.md](export.md#animated-svg-and-gif-for-readmes).
+the arrow motion with `--arrows`. See [export.md](export.md#animated-svg-and-gif-for-readmes). For BPMN, [route playback](export.md#bpmn-route-playback) moves one token along a selected route.
 
 Run:
 

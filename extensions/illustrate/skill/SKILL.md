@@ -1,6 +1,6 @@
 ---
 name: illustrate
-description: "Draws 51 types of diagrams, charts, and technical illustrations as editable HTML and inline SVG using the project theme. Use for architecture, process maps, flowcharts, sequence, state, ER, UML, dependency graphs, Gantt, service blueprints, roadmaps, quantitative charts, and axonometric views. Redraws .drawio, Mermaid, .excalidraw, and PlantUML files. Supports handwritten output and SVG, PNG, PDF, animated SVG, and GIF export."
+description: "Draws 51 types of diagrams, charts, and technical illustrations as editable HTML and inline SVG using the project theme. Use for architecture, process maps and BPMN 2.0, flowcharts, sequence, state, ER, UML, dependency graphs, Gantt, service blueprints, roadmaps, quantitative charts, and axonometric views. Redraws .drawio, Mermaid, .excalidraw, and PlantUML files. Supports handwritten output and SVG, PNG, PDF, animated SVG, and GIF export."
 metadata:
   internal: true
   author: "Samy K. Abushanab"
@@ -52,6 +52,8 @@ URL, installed-skill and folder extraction: [onboarding.md](references/onboardin
 2. **Family.** Editorial for documentation, product, data and quantitative visuals;
    **technical-color architecture** for cloud, infrastructure, network, security and topology maps;
    **technical-color process flow** for numbered workflows, approvals, automation, onboarding and runbooks.
+   For explicit BPMN, BPMN 2.0 or BPM standard notation requests, use the editorial
+   [BPMN Process variant](references/type-bpmn.md).
 3. **Pattern, then type (§3).** If behavior, state, enforcement or risk is load-bearing, choose one
    pattern in [semantic-patterns.md](references/semantic-patterns.md); then pick the type in
    [type-index.md](references/type-index.md) and load its `references/type-*.md` (or the matching
@@ -145,7 +147,7 @@ Long form, markup and edge cases: [primitives-core.md](references/primitives-cor
 - Export is **manual**: never produce export files unprompted. When asked to export, save, rasterize
   or convert, run `python scripts/export_diagram.py <file>` (`--svg-only`, `--png-only`, `--scale` from 1 to 4 for PNG,
   `--output <base>`; `--animated` or `--gif` for README motion); it validates the source and reports
-  every file it writes. Read [export.md](references/export.md) only for a non-zero exit or animation
+  every file it writes. Use `--bpmn-route <name>` for a named BPMN motion route. Read [export.md](references/export.md) only for a non-zero exit or animation
   options. For `--registry`, follow the separate [sidecar procedure](references/export-registry.md).
 
 **Accessible SVG** ([contract](references/primitives-core.md#accessible-svg-contract), checked by `self_check.py`):

@@ -19,6 +19,10 @@ file with `node scripts/generate-hand-variants.cjs --in <file> --out <file>-hand
 `npm ci`). Without Node, deliver the minimal variant and say so. The committed `-hand` files are generated from
 every minimal example with Rough.js; do not edit them manually.
 
+For the [BPMN Process variant](type-bpmn.md), start with `example-bpmn-hand.html`.
+Keep its native event circles, task markers, gateway marker and sequence flows. Copy its
+handwritten outline treatment for tasks and pool or lane borders when adapting the example.
+
 **Terminal variant** (optional, replaces any of the above) — see [primitive-terminal.md](primitive-terminal.md).
 `template-terminal.html`, `example-<type>-terminal.html`. Charcoal-black CLI-window chrome, monospace
 type, one red-orange accent. Good for dev-tool / CLI-product posts and technical social cards; not
