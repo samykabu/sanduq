@@ -432,6 +432,21 @@ RELEASE_OVERFLOW_JS = (
 )
 STATIC_FRAME_JS = "[...document.querySelectorAll('[data-motion-root]')].every(r => r.dataset.frame === 'static')"
 
+PNG_CROP_JS = """async ([encoded, width, height]) => {
+    const bytes = Uint8Array.from(atob(encoded), char => char.charCodeAt(0));
+    const image = await createImageBitmap(new Blob([bytes], {type: 'image/png'}));
+    const canvas = new OffscreenCanvas(width, height);
+    canvas.getContext('2d').drawImage(image, 0, 0);
+    image.close();
+    const blob = await canvas.convertToBlob({type: 'image/png'});
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result.slice(reader.result.indexOf(',') + 1));
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+    });
+}"""
+
 
 def capture_exact_png(page, locator, scale: float, size: tuple[int, int]) -> bytes:
     png = locator.screenshot(omit_background=True)
@@ -449,14 +464,29 @@ def capture_exact_png(page, locator, scale: float, size: tuple[int, int]) -> byt
         session.send("Emulation.setDefaultBackgroundColorOverride", {
             "color": {"r": 0, "g": 0, "b": 0, "a": 0},
         })
+        # Some Chromium builds truncate fractional clip bounds before scaling.
+        # Round the clip outward to cover every requested device pixel.
         result = session.send("Page.captureScreenshot", {
             "format": "png",
             "captureBeyondViewport": True,
-            "clip": {**origin, "width": size[0] / scale, "height": size[1] / scale, "scale": scale},
+            "clip": {**origin, "width": math.ceil(size[0] / scale), "height": math.ceil(size[1] / scale), "scale": scale},
         })
     finally:
         session.detach()
-    png = base64.b64decode(result["data"])
+    encoded = result["data"]
+    png = base64.b64decode(encoded)
+    actual = struct.unpack_from(">II", png, 16)
+    if actual == size:
+        return png
+    if any(have < want for have, want in zip(actual, size)):
+        raise ExportError(f"PNG capture did not cover the requested {size[0]} × {size[1]} pixels.")
+    # Crop in a blank document so authored scripts cannot affect encoding. A
+    # canvas clips the extra device pixels without resampling or needing Pillow.
+    crop_page = page.context.new_page()
+    try:
+        png = base64.b64decode(crop_page.evaluate(PNG_CROP_JS, [encoded, *size]))
+    finally:
+        crop_page.close()
     if struct.unpack_from(">II", png, 16) != size:
         raise ExportError(f"PNG capture did not produce the requested {size[0]} × {size[1]} pixels.")
     return png
@@ -487,7 +517,8 @@ def write_png(source: Path, destination: Path, scale: float, *, system_fonts: bo
         with sync_playwright() as playwright:
             browser = playwright.chromium.launch()
             try:
-                page = browser.new_page(device_scale_factor=scale, reduced_motion="reduce")
+                context = browser.new_context(device_scale_factor=scale, reduced_motion="reduce")
+                page = context.new_page()
                 if system_fonts:
                     page.route(re.compile(r"^https?://"), lambda route: route.abort())
                 page.goto(source.resolve().as_uri() + "?motion=static", wait_until="domcontentloaded")

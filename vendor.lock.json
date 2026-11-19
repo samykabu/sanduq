@@ -11,7 +11,7 @@
       "internal": true,
       "exclusive": true,
       "ref": "illustration-tools-v3.9.1",
-      "sha": "e76cf6b14ffa94664f0c831023d33db8d2f16ef6",
+      "sha": "89dbc9ca57ab786c273c1cb9289fa832f084217b",
       "files": {
         "extensions/illustrate/skill/SKILL.md": "7b502ddcb737f0f67175a8ababef3d31949a245e123c15b8d7d7e37f8cfe36c2",
         "extensions/illustrate/skill/agents/openai.yaml": "94f4c310ca3cfea9f74c10f98e9999f7510a4d896e64c3ea91838054e76b3e8d",
@@ -462,7 +462,7 @@
         "extensions/illustrate/skill/scripts/css_property_scan.py": "427a5028f5540a4b3010c6859bf795d5b70ac2294bf501caf06b098cfb56166c",
         "extensions/illustrate/skill/scripts/drawio_extract.py": "35af5030bceae05b9b2a34331e51b3fe7183096ea465f9c9b9f82ffa0aaafde6",
         "extensions/illustrate/skill/scripts/excalidraw_extract.py": "b2a0dff3b177653567887822617bf6da572a8e7a5e4fa7537f5560aee5d983a4",
-        "extensions/illustrate/skill/scripts/export_diagram.py": "d3a6b872369e12b77faadf916500034bfc11a7d9ff658fd4234fd7868530461c",
+        "extensions/illustrate/skill/scripts/export_diagram.py": "586c03c20a20f3d3d6da108a1f5a336c0d58c88a6dd63dbe79751d6a1888886f",
         "extensions/illustrate/skill/scripts/fix-mojibake.py": "5e35186628f92d35cc9bd314b12271cc6ad90f9cf9f7a6a00c3bc40676186861",
         "extensions/illustrate/skill/scripts/generate-hand-variants.cjs": "6b97c844fd9a5f6259e4e6f73b03a1db27ac1f927cb89ce582f9ae6ef48fd425",
         "extensions/illustrate/skill/scripts/icon_lookup.py": "292340bab422d63f4a1ade80c77788da8b22471ba647150ed2a7fc725f9ead70",

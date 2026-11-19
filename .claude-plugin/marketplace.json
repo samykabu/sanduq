@@ -16,7 +16,7 @@
         "url": "https://github.com/samykabu/sanduq-skills.git",
         "path": "skills/illustration-tools",
         "ref": "illustration-tools-v3.9.1",
-        "sha": "e76cf6b14ffa94664f0c831023d33db8d2f16ef6"
+        "sha": "89dbc9ca57ab786c273c1cb9289fa832f084217b"
       },
       "description": "Generate, import, and export 51 diagram and chart types, including BPMN 2.0 as a Process variant.",
       "author": {
