@@ -201,14 +201,14 @@ def timeline(style: str, intro_ms: int) -> tuple[int, int]:
 
 
 def render_gif(svg_text: str, destination, total_ms: int, hold_ms: int, fps: int = 15, scale: int = 1,
-               theme: str = "light") -> int:
+               theme: str = "light", *, include_motion_colors: bool = False) -> int:
     """Render svg_text frame by frame in Chromium (time set through the Web Animations API) into a GIF."""
     try:
         from playwright.sync_api import sync_playwright
     except ImportError as exc:
         raise RuntimeError("Playwright isn't installed. Run: pip install playwright && playwright install chromium") from exc
     try:
-        from PIL import Image
+        from PIL import Image, ImageChops
     except ImportError as exc:
         raise RuntimeError("Pillow isn't installed. Run: pip install pillow") from exc
     import io
@@ -236,8 +236,27 @@ def render_gif(svg_text: str, destination, total_ms: int, hold_ms: int, fps: int
                     frames.append(Image.open(io.BytesIO(page.screenshot())).convert("RGB"))
             finally:
                 browser.close()
-    # One palette for every frame (from the complete last frame) so colours do not flicker.
-    shared = frames[-1].quantize(colors=255, method=Image.Quantize.MEDIANCUT, dither=Image.Dither.NONE)
+    # One shared palette prevents flicker. BPMN holds on a static frame, so also
+    # reserve colors for its themed token, which is visible only during motion.
+    last = frames[-1]
+    motion_colors = []
+    if include_motion_colors:
+        stride = (len(frames) + 5) // 6
+        samples = []
+        for index in range(0, len(frames) - 1, stride):
+            frame = frames[index]
+            bounds = ImageChops.difference(last, frame).getbbox()
+            if bounds:
+                samples.append(frame.transform((32, 32), Image.Transform.EXTENT, bounds))
+        if samples:
+            strip = Image.new("RGB", (32, 32 * len(samples)))
+            for row, sample in enumerate(samples):
+                strip.paste(sample, (0, row * 32))
+            motion_colors = strip.quantize(colors=16, method=Image.Quantize.MEDIANCUT).getpalette()
+    static_colors = 239 if motion_colors else 255
+    shared = last.quantize(colors=static_colors, method=Image.Quantize.MEDIANCUT, dither=Image.Dither.NONE)
+    if motion_colors:
+        shared.putpalette(shared.getpalette()[:static_colors * 3] + motion_colors[:16 * 3])
     palette = [frame.quantize(palette=shared, dither=Image.Dither.NONE) for frame in frames]
     durations = [frame_ms] * len(palette)
     durations[-1] += hold_ms

@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Expense approval · BPMN · Hand-drawn</title>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --color-paper:   #f5f5f5;
+      --color-ink:     #2d3142;
+      --color-muted:   #4f5d75;
+      --color-accent:  #eb6c36;
+      --font-sans:     'Geist', system-ui, sans-serif;
+      --font-serif:    'Instrument Serif', serif;
+      --font-mono:     'Geist Mono', ui-monospace, monospace;
+    }
+
+    body {
+      font-family: var(--font-sans);
+      background: var(--color-paper);
+      color: var(--color-ink);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 3rem 2rem;
+    }
+
+    .frame { max-width: 1200px; width: 100%; }
+
+    .eyebrow {
+      font-family: var(--font-mono);
+      font-size: 0.75rem;
+      font-weight: 500;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--color-muted);
+      margin-bottom: 0.5rem;
+    }
+
+    h1 {
+      font-family: var(--font-serif);
+      font-size: clamp(1.5rem, 2.4vw + 0.75rem, 2rem);
+      font-weight: 400;
+      letter-spacing: -0.02em;
+      line-height: 1.15;
+      color: var(--color-ink);
+      margin-bottom: 1.5rem;
+    }
+
+    svg { width: 100%; min-width: 960px; display: block; }
+    /* min-width == viewBox width keeps the type ramp; this wrapper scrolls the diagram, not the page. */
+    .diagram-container { width: 100%; overflow-x: auto; }
+    /* Paper has no scrollbar, so the local scroller would clip instead of
+       scroll. Let the diagram scale down to the sheet. Must follow the svg rule. */
+    @media print {
+      .diagram-container { overflow-x: visible; }
+      svg { min-width: 0; }
+    }
+  </style>
+</head>
+<body>
+  <div class="frame">
+    <p class="eyebrow">BPMN 2.0.2 · Process · Hand</p>
+    <h1>Expense approval</h1>
+
+    <div class="diagram-container">
+      <svg viewBox="0 0 960 600" xmlns="http://www.w3.org/2000/svg" role="img"
+           aria-labelledby="bpmn-hand-title bpmn-hand-desc" data-diagram="bpmn" data-bpmn-default-route="approved">
+        <title id="bpmn-hand-title">Expense approval</title>
+        <desc id="bpmn-hand-desc">BPMN process in one pool with Employee, Manager and Finance lanes: the employee fills out an expense form, the manager reviews it, and an exclusive gateway either ends the process in the Employee lane when rejected or sends it to Finance to process the payment when approved.</desc>
+        <defs>
+          <marker id="arrow" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#4f5d75"/></marker>
+        </defs>
+
+        <rect width="100%" height="100%" fill="#f5f5f5"/>
+
+        <!-- Hand-drawn register: each outline is a sketched path over its canonical shape, which stays as the
+             fill and carries the bounds. BPMN markers, arrowheads and text stay canonical.
+             Pool (participant): square corners, solid single line. Its name sits in the left band,
+             closed by the lanes' left edge at x=72 (BPMN 2.0.2 clause 9.3). -->
+        <g data-bpmn="participant" data-bpmn-id="pool-expense-approval" data-bpmn-name="Expense Approval">
+          <rect class="rough-fill-mask" x="40" y="48" width="880" height="432" fill="#f5f5f5" stroke="none"/>
+          <path class="rough-generated" d="M40 48 C333.33 45.68, 626.67 50.29, 920 48 C922.01 192, 917.79 336, 920 480 C626.67 481.69, 333.33 478.28, 40 480 C38.01 336, 40.09 192, 40 48 Z" fill="none" stroke="#2d3142" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/>
+          <text x="60" y="264" transform="rotate(-90 60 264)" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Expense Approval</text>
+        </g>
+
+        <!-- Lanes: square corners, solid single line; no line separates the name (clause 10.8). -->
+        <g data-bpmn="lane" data-bpmn-id="lane-employee" data-bpmn-name="Employee" data-pool="pool-expense-approval">
+          <rect class="rough-fill-mask" x="72" y="48" width="848" height="144" fill="#f5f5f5" stroke="none"/>
+          <path class="rough-generated" d="M72 48 C354.67 46.88, 637.33 50.23, 920 48 C921.08 96, 921.68 144, 920 192 C637.33 190.14, 354.67 193.62, 72 192 C70.13 144, 74.29 96, 72 48 Z" fill="none" stroke="#2d3142" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/>
+          <text x="90" y="120" transform="rotate(-90 90 120)" fill="#4f5d75" font-size="12" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.18em">EMPLOYEE</text>
+        </g>
+        <g data-bpmn="lane" data-bpmn-id="lane-manager" data-bpmn-name="Manager" data-pool="pool-expense-approval">
+          <rect class="rough-fill-mask" x="72" y="192" width="848" height="144" fill="#f5f5f5" stroke="none"/>
+          <path class="rough-generated" d="M72 192 C354.67 191.45, 637.33 191.84, 920 192 C920.04 240, 918.91 288, 920 336 C637.33 336.66, 354.67 335.13, 72 336 C71.94 288, 71.65 240, 72 192 Z" fill="none" stroke="#2d3142" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/>
+          <text x="90" y="264" transform="rotate(-90 90 264)" fill="#4f5d75" font-size="12" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.18em">MANAGER</text>
+        </g>
+        <g data-bpmn="lane" data-bpmn-id="lane-finance" data-bpmn-name="Finance" data-pool="pool-expense-approval">
+          <rect class="rough-fill-mask" x="72" y="336" width="848" height="144" fill="#f5f5f5" stroke="none"/>
+          <path class="rough-generated" d="M72 336 C354.67 335.4, 637.33 337.21, 920 336 C920.78 384, 920.6 432, 920 480 C637.33 480.66, 354.67 481.92, 72 480 C72.48 432, 72.5 384, 72 336 Z" fill="none" stroke="#2d3142" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/>
+          <text x="90" y="408" transform="rotate(-90 90 408)" fill="#4f5d75" font-size="12" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.18em">FINANCE</text>
+        </g>
+
+        <!-- Sequence flows (drawn first): solid single line, solid arrowhead, orthogonal, all inside the pool
+             (clauses 8.4.13 and 9.3). data-bpmn-routes names the routes that travel each flow. -->
+        <line data-bpmn="sequenceFlow" data-bpmn-id="flow-start-fill" data-source="start" data-target="fill-form" data-bpmn-routes="approved rejected"
+              x1="164" y1="120" x2="208" y2="120" stroke="#4f5d75" stroke-width="1.5" marker-end="url(#arrow)"/>
+        <path data-bpmn="sequenceFlow" data-bpmn-id="flow-fill-review" data-source="fill-form" data-target="review" data-bpmn-routes="approved rejected"
+              d="M336 120 H456 Q464 120 464 128 V228" fill="none" stroke="#4f5d75" stroke-width="1.5" marker-end="url(#arrow)"/>
+        <line data-bpmn="sequenceFlow" data-bpmn-id="flow-review-decision" data-source="review" data-target="decision" data-bpmn-routes="approved rejected"
+              x1="528" y1="264" x2="600" y2="264" stroke="#4f5d75" stroke-width="1.5" marker-end="url(#arrow)"/>
+        <line data-bpmn="sequenceFlow" data-bpmn-id="flow-rejected" data-bpmn-name="Rejected" data-source="decision" data-target="end-rejected" data-bpmn-routes="rejected"
+              x1="624" y1="240" x2="624" y2="138" stroke="#4f5d75" stroke-width="1.5" marker-end="url(#arrow)"/>
+        <path data-bpmn="sequenceFlow" data-bpmn-id="flow-approved" data-bpmn-name="Approved" data-source="decision" data-target="pay" data-bpmn-routes="approved"
+              d="M624 288 V400 Q624 408 632 408 H688" fill="none" stroke="#4f5d75" stroke-width="1.5" marker-end="url(#arrow)"/>
+        <line data-bpmn="sequenceFlow" data-bpmn-id="flow-pay-end" data-source="pay" data-target="end-paid" data-bpmn-routes="approved"
+              x1="816" y1="408" x2="854" y2="408" stroke="#4f5d75" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+        <!-- Condition labels: masked, beside their vertical segment with a 10px gap -->
+        <rect x="634" y="201" width="73" height="17" rx="2" fill="#f5f5f5"/>
+        <text data-bpmn-label-for="flow-rejected" x="671" y="213" fill="#4f5d75" font-size="11" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.06em">REJECTED</text>
+        <rect x="634" y="301" width="73" height="17" rx="2" fill="#f5f5f5"/>
+        <text data-bpmn-label-for="flow-approved" x="671" y="313" fill="#4f5d75" font-size="11" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.06em">APPROVED</text>
+
+        <!-- None start event: circle, single thin line (clause 10.5.2) -->
+        <g data-bpmn="startEvent" data-bpmn-id="start" data-bpmn-name="Claim opened" data-lane="lane-employee">
+          <circle class="rough-fill-mask" cx="148" cy="120" r="16" fill="#ffffff" stroke="none"/>
+          <path class="rough-generated" d="M164 120 C164 129.72, 157.2 136, 148 136 C138.73 136, 132 128.04, 132 120 C132 111.46, 138.98 104, 148 104 C156.91 104, 164 111.06, 164 120 Z" fill="none" stroke="#2d3142" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          <text x="148" y="160" fill="#4f5d75" font-size="13" font-family="'Geist', sans-serif" text-anchor="middle">Claim opened</text>
+        </g>
+
+        <!-- User task: rounded rectangle, single thin line, human figure marker upper left (clause 10.3.3) -->
+        <g data-bpmn="userTask" data-bpmn-id="fill-form" data-bpmn-name="Fill Out Expense Form" data-lane="lane-employee">
+          <rect class="rough-fill-mask" x="208" y="84" width="128" height="72" rx="8" fill="#ffffff" stroke="none"/>
+          <path class="rough-generated" d="M216 84 C253.33 82.19, 290.67 85.57, 328 84 Q336 84 336 92 C336.73 110.67, 336.2 129.33, 336 148 Q336 156 328 156 C290.67 156.91, 253.33 154.86, 216 156 Q208 156 208 148 C207.17 129.33, 208.34 110.67, 208 92 Q208 84 216 84 Z" fill="none" stroke="#2d3142" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          <g data-bpmn-marker="user" fill="none" stroke="#2d3142" stroke-width="1.2" stroke-linejoin="round">
+            <circle cx="224" cy="97" r="3.5"/>
+            <path d="M217 109 V107 A7 6 0 0 1 231 107 V109 Z"/>
+          </g>
+          <text x="272" y="124" fill="#2d3142" font-size="14" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle"><tspan x="272" y="124">Fill Out</tspan><tspan x="272" y="141">Expense Form</tspan></text>
+        </g>
+
+        <g data-bpmn="userTask" data-bpmn-id="review" data-bpmn-name="Review Expenses" data-lane="lane-manager">
+          <rect class="rough-fill-mask" x="400" y="228" width="128" height="72" rx="8" fill="#ffffff" stroke="none"/>
+          <path class="rough-generated" d="M408 228 C445.33 227.5, 482.67 226.97, 520 228 Q528 228 528 236 C526.91 254.67, 527.89 273.33, 528 292 Q528 300 520 300 C482.67 299.62, 445.33 299.8, 408 300 Q400 300 400 292 C400.38 273.33, 401.2 254.67, 400 236 Q400 228 408 228 Z" fill="none" stroke="#2d3142" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          <g data-bpmn-marker="user" fill="none" stroke="#2d3142" stroke-width="1.2" stroke-linejoin="round">
+            <circle cx="416" cy="241" r="3.5"/>
+            <path d="M409 253 V251 A7 6 0 0 1 423 251 V253 Z"/>
+          </g>
+          <text x="464" y="268" fill="#2d3142" font-size="14" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle"><tspan x="464" y="268">Review</tspan><tspan x="464" y="285">Expenses</tspan></text>
+        </g>
+
+        <!-- Exclusive gateway: diamond, single thin line, X marker (clause 10.6.2) -->
+        <g data-bpmn="exclusiveGateway" data-bpmn-id="decision" data-bpmn-name="Approved?" data-lane="lane-manager">
+          <polygon class="rough-fill-mask" points="624,240 648,264 624,288 600,264" fill="#ffffff" stroke="none"/>
+          <path class="rough-generated" d="M624 240 C631.45 248.55, 639.87 256.13, 648 264 C640.31 272.31, 632.64 280.64, 624 288 C615.59 280.41, 607.93 272.07, 600 264 C607.68 255.68, 616.13 248.13, 624 240 Z" fill="none" stroke="#2d3142" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          <path data-bpmn-marker="exclusive" d="M617 257 L631 271 M631 257 L617 271" fill="none" stroke="#2d3142" stroke-width="2.5" stroke-linecap="round"/>
+          <text x="658" y="268" fill="#2d3142" font-size="14" font-weight="500" font-family="'Geist', sans-serif">Approved?</text>
+        </g>
+
+        <!-- None end event, rejected route: circle, single thick line (clause 10.5.3) -->
+        <g data-bpmn="endEvent" data-bpmn-id="end-rejected" data-bpmn-name="Request denied" data-lane="lane-employee">
+          <circle class="rough-fill-mask" cx="624" cy="120" r="16" fill="#ffffff" stroke="none"/>
+          <path class="rough-generated" d="M640 120 C640 128.51, 633.33 136, 624 136 C614.43 136, 608 129.42, 608 120 C608 111.24, 615.75 104, 624 104 C633.02 104, 640 110.56, 640 120 Z" fill="none" stroke="#2d3142" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+          <text x="649" y="124" fill="#4f5d75" font-size="13" font-family="'Geist', sans-serif">Request denied</text>
+        </g>
+
+        <!-- Task with no marker: the generic task -->
+        <g data-bpmn="task" data-bpmn-id="pay" data-bpmn-name="Process Payment" data-lane="lane-finance">
+          <rect class="rough-fill-mask" x="688" y="372" width="128" height="72" rx="8" fill="#ffffff" stroke="none"/>
+          <path class="rough-generated" d="M696 372 C733.33 373.36, 770.67 372.89, 808 372 Q816 372 816 380 C815.56 398.67, 815.77 417.33, 816 436 Q816 444 808 444 C770.67 444.51, 733.33 443.32, 696 444 Q688 444 688 436 C688.04 417.33, 687.55 398.67, 688 380 Q688 372 696 372 Z" fill="none" stroke="#2d3142" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          <text x="752" y="405" fill="#2d3142" font-size="14" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle"><tspan x="752" y="405">Process</tspan><tspan x="752" y="422">Payment</tspan></text>
+        </g>
+
+        <!-- None end event, approved route: a separate thick-line circle -->
+        <g data-bpmn="endEvent" data-bpmn-id="end-paid" data-bpmn-name="Payment completed" data-lane="lane-finance">
+          <circle class="rough-fill-mask" cx="872" cy="408" r="16" fill="#ffffff" stroke="none"/>
+          <path class="rough-generated" d="M888 408 C888 416.81, 880.69 424, 872 424 C863.69 424, 856 417.49, 856 408 C856 399, 863.2 392, 872 392 C880.63 392, 888 399.18, 888 408 Z" fill="none" stroke="#2d3142" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+          <text x="899" y="464" fill="#4f5d75" font-size="13" font-family="'Geist', sans-serif" text-anchor="end">Payment completed</text>
+        </g>
+
+        <!-- Legend -->
+        <path class="rough-generated" d="M40 508 C333.33 507.56, 626.67 506.74, 920 508" fill="none" stroke="rgba(45,49,66,0.12)" stroke-width="0.8" stroke-linecap="round" stroke-linejoin="round"/>
+        <text x="40" y="526" fill="#4f5d75" font-size="11" font-family="'Geist Mono', monospace" letter-spacing="0.14em">LEGEND</text>
+
+        <circle cx="47" cy="546" r="6" fill="#ffffff" stroke="#2d3142" stroke-width="1.2"/>
+        <text x="60" y="549" fill="#4f5d75" font-size="12" font-family="'Geist', sans-serif">Start event</text>
+
+        <circle cx="141" cy="546" r="6" fill="#ffffff" stroke="#2d3142" stroke-width="3"/>
+        <text x="155" y="549" fill="#4f5d75" font-size="12" font-family="'Geist', sans-serif">End event</text>
+
+        <g fill="none" stroke="#2d3142" stroke-width="1.2" stroke-linejoin="round">
+          <circle cx="235" cy="541" r="3.5"/>
+          <path d="M228 553 V551 A7 6 0 0 1 242 551 V553 Z"/>
+        </g>
+        <text x="250" y="549" fill="#4f5d75" font-size="12" font-family="'Geist', sans-serif">User task</text>
+
+        <polygon points="328,538 336,546 328,554 320,546" fill="#ffffff" stroke="#2d3142" stroke-width="1.2"/>
+        <path d="M325.5 543.5 L330.5 548.5 M330.5 543.5 L325.5 548.5" fill="none" stroke="#2d3142" stroke-width="1.2" stroke-linecap="round"/>
+        <text x="344" y="549" fill="#4f5d75" font-size="12" font-family="'Geist', sans-serif">Exclusive gateway</text>
+
+        <line x1="474" y1="546" x2="502" y2="546" stroke="#4f5d75" stroke-width="1.5" marker-end="url(#arrow)"/>
+        <text x="510" y="549" fill="#4f5d75" font-size="12" font-family="'Geist', sans-serif">Sequence flow</text>
+      </svg>
+    </div>
+  </div>
+</body>
+</html>

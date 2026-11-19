@@ -54,18 +54,11 @@ import re
 import sys
 from pathlib import Path
 
+from svg_layout import ViewBoxParser
+
 SKILL_ROOT = Path(__file__).resolve().parent.parent
 ASSET_DIR = SKILL_ROOT / "assets"
 BASELINE = SKILL_ROOT / "scripts/verify-geometry-baseline.txt"
-
-RECT_RE = re.compile(
-    r"<rect\b[^>]*?"
-    r'\bx="(?P<x>-?[\d.]+)"\s+'
-    r'y="(?P<y>-?[\d.]+)"\s+'
-    r'width="(?P<w>[\d.]+)"\s+'
-    r'height="(?P<h>[\d.]+)"',
-    re.IGNORECASE,
-)
 
 NODE_MIN_W = 60.0
 NODE_MIN_H = 40.0
@@ -79,11 +72,11 @@ MAX_HOP = 24.0  # a bridge/hop over a crossing (connector rule 3) is a half turn
 
 
 class Rect:
-    __slots__ = ("x", "y", "w", "h", "line", "offset")
+    __slots__ = ("x", "y", "w", "h", "line", "column", "viewport")
 
-    def __init__(self, x, y, w, h, line, offset) -> None:
+    def __init__(self, x, y, w, h, line, column, viewport) -> None:
         self.x, self.y, self.w, self.h = x, y, w, h
-        self.line, self.offset = line, offset
+        self.line, self.column, self.viewport = line, column, viewport
 
     @property
     def right(self) -> float:
@@ -98,19 +91,12 @@ class Rect:
 
 
 def parse_rects(source: str) -> list[Rect]:
-    rects: list[Rect] = []
-    for match in RECT_RE.finditer(source):
-        rects.append(
-            Rect(
-                float(match.group("x")),
-                float(match.group("y")),
-                float(match.group("w")),
-                float(match.group("h")),
-                source.count("\n", 0, match.start()) + 1,
-                match.start(),
-            )
-        )
-    return rects
+    """Read actual painted rectangles in their viewport's translated coordinate space."""
+    return [
+        Rect(*rect, viewport)
+        for viewport, diagram in enumerate(ViewBoxParser(source, rectangles_only=True).svgs)
+        for rect in diagram.rects
+    ]
 
 
 def overlap(a: Rect, b: Rect) -> tuple[float, float]:
@@ -142,8 +128,8 @@ def check(path: Path) -> list[str]:
     findings: list[str] = []
     for mask in masks:
         for node in nodes:
-            if node.offset <= mask.offset:
-                continue  # painted before the label; the label stays on top
+            if node.viewport != mask.viewport or (node.line, node.column) <= (mask.line, mask.column):
+                continue  # another viewport, or the label is painted above this node
             dx, dy = overlap(mask, node)
             if dx <= 1.0 or dy <= 1.0 or contained(mask, node):
                 continue

@@ -75,7 +75,7 @@ One page per extension: purpose, lifecycle phase, hooks, dependencies, setup, an
 
 | Example | Page |
 | --- | --- |
-| Draw a process and choose preset or custom colors | [Illustrate examples](illustrate-examples.md) |
+| Draw a process, use BPMN 2.0 notation, or choose preset or custom colors | [Illustrate examples](illustrate-examples.md) |
 | Bound a debate, run parallel reviews, or automate delegation | [Delegate Task examples](delegate-examples.md) |
 | Compare real manual themes and install your own | [User Manual theme gallery](user-manual-examples.md) |
 

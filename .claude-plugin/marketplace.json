@@ -15,10 +15,10 @@
         "source": "git-subdir",
         "url": "https://github.com/samykabu/sanduq-skills.git",
         "path": "skills/illustration-tools",
-        "ref": "illustration-tools-v3.7.1",
-        "sha": "150f808bcd44456a1f9f8378858cae1dc0cccd38"
+        "ref": "illustration-tools-v3.9.1",
+        "sha": "89dbc9ca57ab786c273c1cb9289fa832f084217b"
       },
-      "description": "Generate, import, and export forty-four kinds of technical, product, architecture, process, and data illustrations through one unified skill.",
+      "description": "Generate, import, and export 51 diagram and chart types, including BPMN 2.0 as a Process variant.",
       "author": {
         "name": "Samy K. Abushanab"
       },
@@ -27,6 +27,7 @@
         "illustrate",
         "architecture",
         "process-flow",
+        "bpmn",
         "workflow",
         "documentation",
         "svg",

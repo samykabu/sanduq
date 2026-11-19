@@ -1,5 +1,9 @@
 # Changelog
 
+## [2.4.1] - 2026-11-20
+
+- Update the required Illustrate dependency to 2.8.0.
+
 ## [2.4.0] - 2026-11-09
 
 - `execution.analyze: skip` drops the Analyze stage; `run` is the default and any other value is refused with `ANALYZE_POLICY_INVALID`.

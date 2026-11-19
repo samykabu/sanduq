@@ -12,10 +12,16 @@ Routed from SKILL.md §10. Every first-class diagram ships in four core variants
 | **Technical-color architecture** | `assets/technical-color/architecture/` | Cloud, infrastructure, security, and topology illustrations with semantic component colors and built-in Copy/PNG/PDF. |
 | **Technical-color process flow** | `assets/technical-color/process-flow/` | Approval, automation, runbook, and decision workflows with numbered steps and built-in Copy/PNG/PDF. |
 
+Architecture containment, Box plot and Arc diagram use the same four variants as their parent types. See the [type index](type-index.md) for their templates and verifiers.
+
 **Hand-drawn generation** — see [primitive-sketchy.md](primitive-sketchy.md). Convert your finished minimal light
 file with `node scripts/generate-hand-variants.cjs --in <file> --out <file>-hand.html` (Node 18+ and a one-time
 `npm ci`). Without Node, deliver the minimal variant and say so. The committed `-hand` files are generated from
 every minimal example with Rough.js; do not edit them manually.
+
+For the [BPMN Process variant](type-bpmn.md), start with `example-bpmn-hand.html`.
+Keep its native event circles, task markers, gateway marker and sequence flows. Copy its
+handwritten outline treatment for tasks and pool or lane borders when adapting the example.
 
 **Terminal variant** (optional, replaces any of the above) — see [primitive-terminal.md](primitive-terminal.md).
 `template-terminal.html`, `example-<type>-terminal.html`. Charcoal-black CLI-window chrome, monospace

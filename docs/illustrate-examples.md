@@ -7,6 +7,7 @@ booking refund scenario as the [skill guide](scenarios/skills-only.md#illustrate
 ## Table of contents
 
 - [Draw the process](#draw-the-process)
+- [BPMN 2.0 expense approval](#bpmn-20-expense-approval)
 - [Choose a preset](#choose-a-preset)
 - [Supply your own colors](#supply-your-own-colors)
 - [Export and check](#export-and-check)
@@ -29,6 +30,30 @@ reconciled. [Open the editable example](diagrams/refund-process-cobalt-light.htm
 For a payload and tool map, ask for the **process** type and name each step's input, output, tool,
 and owner. For branching logic, ask for a **flowchart** with labeled permission, rejection, and
 settlement-failure paths. Use observed application states when documenting a real project.
+
+## BPMN 2.0 expense approval
+
+Ask for a BPMN 2.0 Process diagram when the diagram needs standard event, task, gateway,
+and sequence-flow symbols. This example uses Employee, Manager, and Finance lanes in one
+pool. The manager's exclusive gateway sends the claim to payment or ends it as denied.
+
+![BPMN expense approval. Employee opens and fills out the claim. Manager reviews and chooses one outcome. Rejection ends with Request denied. Approval moves to Finance for payment and ends with Payment completed. A token follows the approved route.](diagrams/expense-approval-bpmn.animated.svg)
+
+Editable HTML in [light](../extensions/illustrate/skill/assets/example-bpmn.html),
+[dark](../extensions/illustrate/skill/assets/example-bpmn-dark.html),
+[full editorial](../extensions/illustrate/skill/assets/example-bpmn-full.html),
+and [handwritten](../extensions/illustrate/skill/assets/example-bpmn-hand.html).
+Browse the [Illustrate gallery](../extensions/illustrate/skill/assets/index.html) for BPMN 2.0
+under process and flow diagrams.
+
+Reproduce the preview from the Sanduq repository root.
+
+```bash
+python extensions/illustrate/skill/scripts/export_diagram.py extensions/illustrate/skill/assets/example-bpmn.html --animated --bpmn-route approved --output docs/diagrams/expense-approval-bpmn
+```
+
+To play the other outcome, select `--bpmn-route rejected` and set a separate output base.
+Use `--gif` for GIF or omit the animation flags to export the complete diagram as SVG and PNG.
 
 ## Choose a preset
 

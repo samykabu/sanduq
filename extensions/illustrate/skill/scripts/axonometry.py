@@ -74,6 +74,12 @@ class Rect:
     y1: float
     r: float = 0
 
+    def __post_init__(self):
+        if self.x1 < self.x0 or self.y1 < self.y0:
+            raise ValueError(f"Rect bounds are inverted: ({self.x0}, {self.y0}) to ({self.x1}, {self.y1})")
+        if self.r < 0:
+            raise ValueError(f"Rect corner radius must not be negative: {self.r}")
+
     def centers(self):
         r = self.r
         return [(self.x1 - r, self.y1 - r), (self.x0 + r, self.y1 - r),

@@ -102,6 +102,7 @@ import sys
 import unicodedata
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+from css_property_scan import escaped_property_findings, mask_css_data  # noqa: E402
 import svg_scan  # noqa: E402  shared SVG scanning helpers, loaded like theme_tokens.py
 from svg_scan import is_hand_variant  # noqa: E402
 
@@ -138,7 +139,6 @@ CSS_SIZE_PROPS = ("width", "height")
 # A CSS comment, `/* ... */`, non-greedy so two comments in one declaration
 # block do not merge into one; blanked to whitespace, never removed, so the
 # line arithmetic in a finding stays right.
-CSS_COMMENT_RE = re.compile(r"/\*.*?\*/", re.DOTALL)
 # An HTML comment. The parser already refuses to tokenize its contents; scope
 # detection reads raw text and must refuse the same way, or a commented-out
 # draft claims an unrelated file.
@@ -282,21 +282,10 @@ def transform_carrier(attrs: dict):
         return "transform=%r" % attrs["transform"]
     style = attrs.get("style")
     if style is not None:
-        found = CSS_MOVES_MARK_RE.search(blank_css_comments(style))
+        found = CSS_MOVES_MARK_RE.search(mask_css_data(style))
         if found is not None:
             return "style=%r (the %s property)" % (style, found.group("prop").lower())
     return None
-
-
-def blank_css_comments(css: str) -> str:
-    """CSS with every `/* ... */` replaced by whitespace of the same line count.
-
-    A browser drops a comment before it tokenizes declarations, so a comment
-    is whitespace to it and must be whitespace to CSS_MOVES_MARK_RE, whose
-    boundary permits nothing else. Newlines inside the comment are kept so a
-    match offset still counts lines from the top of the <style> body.
-    """
-    return CSS_COMMENT_RE.sub(lambda found: " " + "\n" * found.group().count("\n"), css)
 
 
 def strip_html_comments(source: str) -> str:
@@ -574,7 +563,7 @@ def check_transforms(doc: _Scanner, segments: list, findings: list, name: str) -
             check_element(element, "a bound label (%s)" % plain(element.body)[:20])
 
     for element in doc.styles:
-        css = blank_css_comments(element.body)
+        css = mask_css_data(element.body)
         found = css_geometry_declaration(css, segments)
         if found:
             findings.append(
@@ -904,6 +893,9 @@ def check_markers(doc: _Scanner, segments: list, findings: list, name: str) -> N
 
 def check_source(path: Path, raw: str) -> list:
     """Findings for one already-read document."""
+    escaped = escaped_property_findings(raw)
+    if escaped:
+        return [f"{path.name}: {finding}" for finding in escaped]
     findings: list = []
     doc = parse_document(raw)
     if doc.error is not None:

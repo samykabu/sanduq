@@ -8,7 +8,7 @@ copy that includes that material.
 
 The Illustrate extension vendors the `illustrate` skill from the `illustration-tools` plugin of
 [sanduq-skills](https://github.com/samykabu/sanduq-skills) (MIT, Copyright (c) 2026 Samy K. Abushanab), pinned in
-[`vendor.lock.json`](vendor.lock.json). Portions of that skill are derived from work by Cathryn Lavery:
+[`vendor.lock.json`](vendor.lock.json). Portions of that skill are derived from [Diagram Design](https://github.com/cathrynlavery/diagram-design) by Cathryn Lavery. This includes material from [d74d8c2d](https://github.com/cathrynlavery/diagram-design/tree/d74d8c2d0c78a9e1efd43137f6a9a51182a8b5f0).
 
 > MIT License
 >

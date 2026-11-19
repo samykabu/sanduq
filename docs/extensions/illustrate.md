@@ -1,7 +1,7 @@
 # Illustrate
 
 **Purpose:** draw diagrams and charts as editable HTML with inline SVG, in your project's tracked
-color and font theme. It supports 44 diagram types and exports SVG and PNG on request, and an animated SVG or GIF for README images, with arrows that draw, flow, pulse or slide chevrons in their direction.
+color and font theme. It supports 51 diagram types and exports SVG and PNG on request, and an animated SVG or GIF for README images, with arrows that draw, flow, pulse or slide chevrons in their direction.
 
 | | |
 | --- | --- |
@@ -16,6 +16,10 @@ color and font theme. It supports 44 diagram types and exports SVG and PNG on re
 The extension carries its own version-matched copy of the Illustrate skill under
 `.specify/extensions/illustrate/skill/`. It does not need a separately installed skill. The copy is
 [vendored](../../vendor.lock.json) from [sanduq-skills](https://github.com/samykabu/sanduq-skills).
+
+The catalog now includes Service Blueprint, Steps, Unit Grid, Requirement Traceability,
+Event Modeling, Schedule Network and educational SBGN Process Description. It also includes
+Architecture Containment, Box Plot, Arc Diagram and BPMN 2.0 as variants.
 
 ## Setup
 
@@ -39,9 +43,29 @@ dark modes.
 /speckit-illustrate-export docs/refund-approval-animated.html --animated
 /speckit-illustrate-export docs/refund-approval.html --gif --arrows pulse
 /speckit-illustrate-import docs/legacy/order-flow.mmd --size doc-wide --detail balanced
+/speckit-illustrate-import docs/legacy/checkout.puml --size doc-wide
+/speckit-illustrate-export docs/refund-approval.html --png-only --scale 1.5
 ```
 
 The [process and theme gallery](../illustrate-examples.md) shows the presets and a custom theme.
+
+## BPMN 2.0 Process diagrams
+
+Ask for BPMN 2.0 explicitly with Illustrate 2.8.0. The Process variant uses one pool with
+horizontal role lanes, standard start and end events, generic tasks and User Tasks,
+exclusive gateways, and solid sequence flows. SVG and PNG show the complete process.
+Use `--bpmn-route <name>` with animated SVG or GIF to play a selected route while all
+branches stay visible.
+
+```text
+/speckit-illustrate-generate Draw a BPMN 2.0 expense approval process with Employee, Manager and Finance lanes. Name the routes approved and rejected. Save it to docs/expense-approval.html.
+/speckit-illustrate-export docs/expense-approval.html --animated --bpmn-route approved
+/speckit-illustrate-export docs/expense-approval.html --gif --bpmn-route rejected
+```
+
+The [expense approval example](../illustrate-examples.md#bpmn-20-expense-approval) includes
+all four styles and a playable approved route. The [authoring guide](../../extensions/illustrate/skill/references/type-bpmn.md)
+covers the supported notation, route names, and validation.
 
 ## How it runs
 

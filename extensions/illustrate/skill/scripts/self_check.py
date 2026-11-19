@@ -19,9 +19,9 @@ inside the viewBox, the svg `min-width` equal to the viewBox width, no
 `writing-mode`, no `box-shadow`, `rx` at most 10 (full pills excepted), node and
 zone rects on the 4px grid (`.5` stroke offsets and data-bound `data-*` rects
 excepted), the font role per element class (the terminal variant excepted), no
-pure black, and orthogonal connectors (`verify-geometry.py --orthogonal`).
+pure black, viewBox clipping, boxed-label fit, and orthogonal connectors (`verify-geometry.py --orthogonal`).
 `lint-skin.py` imports the skin checks (pure black, scripts, external assets)
-from here. Without `--strict` the run is unchanged.
+from here. Document completeness and unique naming IDs apply in both modes.
 
 `--profile technical-color` is the check for the technical-color family, whose
 references require a built-in export toolbar: it runs the default checks but
@@ -41,6 +41,8 @@ from collections import Counter
 from html.parser import HTMLParser
 from pathlib import Path
 from urllib.parse import urlparse
+
+from svg_layout import check_text_fit, check_viewbox
 
 SKILL_DIR = Path(__file__).resolve().parent.parent
 MOTION_TEMPLATE = SKILL_DIR / "assets" / "template-motion.html"
@@ -90,6 +92,34 @@ REFERENCE_ATTRS = {
     "formaction",
 }
 
+REPLACEMENT_CHAR = "\ufffd"
+# Container elements whose end tag HTML requires, so an unmatched count is real damage: a
+# file that stops mid-element, a dropped </text>, a stray </span>. Void elements and the
+# optional-end-tag elements (html, head, body, p, li, ...) stay out, so valid HTML cannot
+# trip the count; the closing </html> of the generated shell is checked separately.
+PAIRED_CONTAINER_TAGS = (
+    "title",
+    "desc",
+    "div",
+    "section",
+    "main",
+    "article",
+    "header",
+    "footer",
+    "figure",
+    "figcaption",
+    "svg",
+    "g",
+    "defs",
+    "pattern",
+    "marker",
+    "style",
+    "script",
+    "span",
+    "text",
+    "tspan",
+)
+
 
 class DiagramParser(HTMLParser):
     def __init__(self) -> None:
@@ -104,6 +134,7 @@ class DiagramParser(HTMLParser):
         self.styles: list[str] = []
         self.css_attributes: list[str] = []
         self.svgs: list[dict[str, object]] = []
+        self.ids: Counter[str] = Counter()
         self.unsafe: list[str] = []
         self.handlers: list[tuple[str, str, str]] = []  # (tag, attribute, value) of every on* attribute
         self.references: list[tuple[str, str, str]] = []
@@ -122,6 +153,8 @@ class DiagramParser(HTMLParser):
         data: dict[str, str] = {}
         for key, value in normalized_attrs:
             data.setdefault(key, value)
+        if data.get("id"):
+            self.ids[data["id"]] += 1
         if tag in {"base", "embed", "object", "iframe"}:
             self.unsafe.append(f"<{tag}> is not allowed in a diagram file")
         for key, value in normalized_attrs:
@@ -364,6 +397,113 @@ def apply_technical_color(parser: DiagramParser, errors: list[str]) -> None:
     parser.handlers = [h for h in parser.handlers if not (h[0] == "button" and h[1] == "onclick" and h[2] in TOOLBAR_HANDLERS)]
 
 
+class BalanceParser(HTMLParser):
+    """Counts start and end tags as parsed, so attribute values and CDATA stay opaque.
+
+    Reading the raw source with a regular expression instead would count tag-like text
+    inside a quoted attribute or a stylesheet as markup, and report an imbalance the
+    document does not have. A self-closing tag arrives as both a start and an end tag,
+    so it balances itself.
+
+    Titles and text areas are RCDATA: `<title>Using <span> labels</title>` is literal
+    text, not a span element. `HTMLParser` only separates RCDATA from markup from
+    Python 3.13 on, so on the versions the skill supports the inner tag arrives here as
+    a real one; this class ignores markup until the matching end tag instead.
+    """
+
+    RCDATA_ELEMENTS = ("title", "textarea")
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.opens: Counter[str] = Counter()
+        self.closes: Counter[str] = Counter()
+        self.rcdata = ""
+        self.html_close: tuple[int, int] | None = None
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if self.rcdata:
+            return
+        self.opens[tag] += 1
+        if tag in self.RCDATA_ELEMENTS:
+            self.rcdata = tag
+
+    def handle_endtag(self, tag: str) -> None:
+        if self.rcdata:
+            if tag == self.rcdata:
+                self.rcdata = ""
+                self.closes[tag] += 1
+            return
+        self.closes[tag] += 1
+        if tag == "html":
+            self.html_close = self.getpos()
+
+
+def ends_with_shell_close(source: str, position: tuple[int, int] | None) -> bool:
+    """True when the last markup in the document is `</html>`.
+
+    HTML allows comments and whitespace after the `</html>` end tag, so stripping only
+    whitespace would reject valid files; a document that really stopped early has no
+    closing tag left once trailing comments are removed.
+    """
+    if position is None:
+        return False
+    line, column = position
+    tail = source.split("\n", line - 1)[-1][column:]
+    closing = re.match(r"</html\s*>", tail, re.IGNORECASE)
+    if closing is None:
+        return False
+    offset = closing.end()
+    while offset < len(tail):
+        if tail[offset].isspace():
+            offset += 1
+        elif tail.startswith("<!--", offset):
+            end = tail.find("-->", offset + 4)
+            if end < 0:
+                return False
+            offset = end + 3
+        else:
+            return False
+    return True
+
+
+def check_document_completeness(source: str, errors: list[str]) -> None:
+    """Reject a document that is not whole: truncation, mojibake, unbalanced markup.
+
+    The other checks read a document's contents; none of them notices that the document
+    stopped early. A generated file that was cut off mid-write still satisfies the
+    accessible-SVG contract for the part that survived, so this check reads the shape of
+    the whole file instead.
+    """
+    parser = BalanceParser()
+    parser.feed(source)
+    parser.close()
+    if not ends_with_shell_close(source, parser.html_close):
+        errors.append("document does not end with </html>; the file looks truncated")
+
+    replacements = source.count(REPLACEMENT_CHAR)
+    if replacements:
+        line = source[: source.index(REPLACEMENT_CHAR)].count("\n") + 1
+        errors.append(
+            f"contains {replacements} U+FFFD replacement character(s), first on line {line}:"
+            " the file has mojibake or a truncated multi-byte character"
+        )
+
+    if parser.rcdata:
+        # Everything after an unterminated RCDATA element is text, so the tag counts
+        # below describe the damage rather than the cause; report the cause alone.
+        errors.append(
+            f"<{parser.rcdata}> is never closed; the rest of the document reads as its text"
+        )
+        return
+    for tag in PAIRED_CONTAINER_TAGS:
+        opens, closes = parser.opens[tag], parser.closes[tag]
+        if opens != closes:
+            errors.append(
+                f"<{tag}> opens {opens} time(s) and closes {closes} time(s);"
+                " the document is not balanced"
+            )
+
+
 def check_svgs(parser: DiagramParser, errors: list[str]) -> None:
     checkable = [
         svg
@@ -393,6 +533,9 @@ def check_svgs(parser: DiagramParser, errors: list[str]) -> None:
         desc_id = desc_attrs.get("id", "")
         if title_id in {"", "title"} or desc_id in {"", "desc"}:
             errors.append(f"svg {number} title/desc IDs must be diagram-prefixed, never bare")
+        for naming_id in dict.fromkeys((title_id, desc_id)):
+            if parser.ids[naming_id] > 1:
+                errors.append(f"duplicate accessible SVG naming ID {naming_id!r}")
         if labelled != [title_id, desc_id]:
             errors.append(f"svg {number} aria-labelledby must name title then desc")
 
@@ -613,7 +756,7 @@ class StrictParser(HTMLParser):
         self.elements: list[dict[str, object]] = []
         self.legend_at: int | None = None  # index into elements where the legend strip begins
         self.styles: list[str] = []
-        self._stack: list[tuple[str, float, bool]] = []  # (tag, translate-y, aria-hidden or decorative)
+        self._stack: list[tuple[str, float, bool, bool]] = []  # tag, vertical offset, hidden, in SBGN glyph
         self._done = False
         self._in_style = False
         self._text_target: dict[str, object] | None = None
@@ -628,11 +771,14 @@ class StrictParser(HTMLParser):
         if self.svg_attrs is None:
             if tag == "svg" and attrs.get("aria-hidden", "").casefold() != "true":
                 self.svg_attrs = attrs
-                self._stack = [("svg", 0.0, False)]
+                self._stack = [("svg", 0.0, False, False)]
             return
         ty = self._stack[-1][1] if self._stack else 0.0
         hidden = (self._stack[-1][2] if self._stack else False) or attrs.get("aria-hidden", "").casefold() == "true"
         hidden = hidden or "data-motion-decorative" in attrs
+        macromolecule = (self._stack[-1][3] if self._stack else False) or (
+            tag == "g" and attrs.get("data-kind") == "macromolecule"
+        )
         match = TRANSLATE_RE.search(attrs.get("transform", ""))
         if match and match.group(2):
             ty += float(match.group(2))
@@ -640,6 +786,7 @@ class StrictParser(HTMLParser):
         element: dict[str, object] = {
             "tag": tag, "attrs": attrs, "line": self.getpos()[0], "ty": ty,
             "in_defs": "defs" in tags or "marker" in tags, "hidden": hidden, "text": "",
+            "macromolecule": macromolecule,
         }
         self.elements.append(element)
         if tag == "text":
@@ -648,7 +795,7 @@ class StrictParser(HTMLParser):
         if self.legend_at is None and "legend" in ident:
             self.legend_at = len(self.elements) - 1
         if not closes:
-            self._stack.append((tag, ty, hidden))
+            self._stack.append((tag, ty, hidden, macromolecule))
 
     def handle_starttag(self, tag, attrs):
         self._start(tag, attrs, False)
@@ -784,6 +931,7 @@ def strict_errors(source: str) -> list[str]:
 
     view_box = [_num(v) for v in parser.svg_attrs.get("viewbox", "").replace(",", " ").split()]
     vb_w, vb_h = (view_box[2], view_box[3]) if len(view_box) == 4 and None not in view_box else (None, None)
+    sbgn = parser.svg_attrs.get("data-diagram") == "sbgn"
 
     def rect_of(element: dict[str, object]) -> tuple[float, float, float, float] | None:
         attrs = element["attrs"]
@@ -824,7 +972,8 @@ def strict_errors(source: str) -> list[str]:
         attrs = element["attrs"]
         assert isinstance(attrs, dict)
         rx = _num(attrs.get("rx", "") or "0")
-        if rx is not None and rx > MAX_RADIUS and (box is None or rx * 2 < box[3] - 0.5):
+        glyph_radius = sbgn and element["macromolecule"] and rx == 16
+        if rx is not None and rx > MAX_RADIUS and not glyph_radius and (box is None or rx * 2 < box[3] - 0.5):
             errors.append(f"line {element['line']}: rx={rx:g} exceeds {MAX_RADIUS:g}")
         if not is_node(box) or any(k.startswith("data-") and not k.startswith(GRID_EXEMPT_DATA) for k in attrs):
             continue
@@ -857,8 +1006,10 @@ def strict_errors(source: str) -> list[str]:
                 extent = _num(attrs.get("height", "")) if key == "y" else _num(attrs.get("r", "")) if key == "cy" else None
                 tops.append(value + ty)
                 bottoms.append(value + ty + (extent or 0.0))
+        # An SBGN compartment surrounds glyphs, so its bounds are not a node.
+        nodes = (e for e in drawing if not (sbgn and e["attrs"].get("data-kind") == "compartment"))  # type: ignore[union-attr]
         node_bottom = max(
-            (box[1] + box[3] + float(e["ty"]) for e in drawing for box in [rect_of(e)] if is_node(box)),  # type: ignore[arg-type]
+            (box[1] + box[3] + float(e["ty"]) for e in nodes for box in [rect_of(e)] if is_node(box)),  # type: ignore[arg-type]
             default=None,
         )
         if tops and node_bottom is not None and min(tops) < node_bottom:
@@ -906,12 +1057,15 @@ def verify(path: Path, strict: bool = False, profile: str = "editorial") -> list
         finding = reference_error(tag, rel, value)
         if finding:
             errors.append(finding)
+    check_document_completeness(source, errors)
     check_svgs(parser, errors)
     check_scripts(parser, errors)
     check_motion(parser, source, errors)
     errors.extend(arrow_end_errors(source))
     if strict:
         errors.extend(strict_errors(source))
+        check_viewbox(source, errors, styles=parser.styles)
+        check_text_fit(source, errors, styles=parser.styles)
         errors.extend(orthogonal_errors(source))
     return errors
 

@@ -79,7 +79,7 @@ def draw_part(P, p: Part, sk, focal: bool, uid: str):
         for k in KEYS:
             cx, cy = k.center()
             out.append(f'<path d="{outline(P, Rect(cx - 7, cy - 7, cx + 7, cy + 7, 1), z1)}" fill="{sk["cavity"]}" stroke="{inner}" stroke-width="0.5"/>')
-    elif p.kind == "pcb":
+    if p.kind == "pcb":
         out += finish(pr, stroke, inner)
         for k in KEYS:
             cx, cy = k.center()
@@ -92,10 +92,10 @@ def draw_part(P, p: Part, sk, focal: bool, uid: str):
         out.append(f'<path d="{outline(P, r.inset(4), z1)}" fill="{sk["screen"]}"/>')
         cx = (r.x0 + r.x1) / 2
         out.append(f'<path d="{outline(P, Rect(cx - 16, r.y0 + 12, cx + 16, r.y0 + 22, 5), z1)}" fill="{sk["island"]}"/>')
-    elif p.kind == "battery":
+    if p.kind == "battery":
         out.append(f'<path d="{outline(P, r.inset(8), z1)}" fill="none" stroke="{inner}" stroke-width="0.8"/>')
         out.append(f'<path d="{outline(P, Rect(r.x0 + 12, r.y0 + 4, r.x0 + 36, r.y0 + 10, 0), z1)}" fill="{sk["chip_top"]}"/>')
-    elif p.kind == "board":
+    if p.kind == "board":
         out += finish(pr, stroke, inner)
         cam = Rect(r.x0 + 8, r.y0 + 8, r.x0 + 52, r.y0 + 52, 8)
         cpr, cbody = solid(P, cam, z1, z1 + 6, sk, sk["shade"], sk["sil"], sk["inner"], role=False)
@@ -108,20 +108,20 @@ def draw_part(P, p: Part, sk, focal: bool, uid: str):
             chip = prism(P, Rect(r.x0 + ax, r.y0 + ay, r.x0 + bx, r.y0 + by, 1), z1, z1 + h)
             out += [f'<path d="{chip["sil"]}" fill="{sk["chip_side"]}"/>', f'<path d="{chip["top"]}" fill="{sk["chip_top"]}"/>']
         return pr, out
-    elif p.kind == "insert":
+    if p.kind == "insert":
         for well in (Rect(SPK.x0 - 4, SPK.y0 - 4, SPK.x1 + 4, SPK.y1 + 4, SPK.r + 4),
                      Rect(CABLE.x0 - 3, CABLE.y0 - 3, CABLE.x1 + 3, CABLE.y1 + 3, 5)):
             out.append(f'<path d="{outline(P, well, z1)}" fill="{sk["well"]}" stroke="{inner}" stroke-width="0.8"/>')
-    elif p.kind == "speaker":
+    if p.kind == "speaker":
         for zz in range(int(z0) + 10, int(z0 + p.t * 0.72), 8):
             out.append(f'<path d="{M(point(P, r, 135, zz))} {walk(P, r, 135, -45, zz)}" fill="none" stroke="{inner}" stroke-width="0.6"/>')
         out.append(f'<path d="{outline(P, r.inset(10), z1)}" fill="none" stroke="{inner}" stroke-width="0.8"/>')
         dot = Rect(r.x0 + 36, r.y0 + 36, r.x1 - 36, r.y1 - 36, 10)
         out.append(f'<path d="{outline(P, dot, z1)}" fill="{sk["accent"] if focal else sk["chip_top"]}"/>')
-    elif p.kind == "cable":
+    if p.kind == "cable":
         for k in (6, 11):
             out.append(f'<path d="{outline(P, r.inset(k, 4), z1)}" fill="none" stroke="{inner}" stroke-width="0.8"/>')
-    elif p.kind == "lid":
+    if p.kind == "lid":
         out.append(f'<path d="{outline(P, r.inset(14), z1)}" fill="none" stroke="{inner}" stroke-width="0.8"/>')
         cx, cy = (r.x0 + r.x1) / 2, (r.y0 + r.y1) / 2
         mark = Rect(cx - 14, cy - 14, cx + 14, cy + 14, 14)

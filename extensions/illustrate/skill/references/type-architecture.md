@@ -72,6 +72,10 @@ Rules:
 - Bidirectional arrow when one direction is obvious from context.
 - Legend floating inside the diagram area.
 
+## Variants
+
+- **Architecture containment:** Hierarchy across nested administrative and traffic scopes. See [type-architecture-containment.md](type-architecture-containment.md).
+
 ## Examples
 - `assets/example-architecture.html` — minimal light
 - `assets/example-architecture-dark.html` — minimal dark

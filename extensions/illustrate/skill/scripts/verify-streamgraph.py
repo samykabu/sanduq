@@ -100,6 +100,7 @@ import re
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+from css_property_scan import escaped_property_findings, mask_css_data  # noqa: E402
 import svg_scan  # noqa: E402  shared SVG scanning helpers, loaded like theme_tokens.py
 from svg_scan import attrs_of, is_hand_variant, median  # noqa: E402,F401  attrs_of: its test reads it here
 
@@ -142,16 +143,13 @@ CSS_MOVES_MARK_RE = re.compile(
 # whitespace it is BEFORE the regex runs, or a comment is a free pass
 # through the guard. Non-greedy and DOTALL: a comment may span lines and
 # the first `*/` ends it, as in the tokenizer.
-CSS_COMMENT_RE = re.compile(r"/\*.*?\*/", re.DOTALL)
 # Detection reads raw text, and a commented-out tag is not in the document
 # a browser builds - stripped before the raw signal is consulted so an old
 # draft in a comment cannot claim an unrelated file for this checker.
 HTML_COMMENT_RE = re.compile(r"<!--.*?-->", re.DOTALL)
-# Detection only - deliberately a text search over the raw text (HTML
-# comments removed), so a file that so much as mentions a layer binding in
-# live markup is held to the contract even when the parser finds no complete
-# layer - that is check_source's fail-closed case, not a skip.
-DECLARES_LAYER_RE = re.compile(r"\bdata-layer\s*=", re.IGNORECASE)
+# Raw path or legend text can claim this format even when the parser cannot
+# read the layer. Other types use data-layer on groups for their own layout.
+DECLARES_LAYER_RE = re.compile(r"<(?:path|text)\b[^<>]*?\bdata-layer\s*=", re.IGNORECASE)
 # Path grammar: absolute M/C/L/Z and numbers only. Relative commands, arcs,
 # shorthand curves and H/V would need a transform stack this checker refuses
 # to half-implement; a partial parse looks like coverage without being it.
@@ -188,18 +186,6 @@ def parse_document(source: str) -> svg_scan.Scanner:
     return svg_scan.Scanner(source, ("path",), transform_carrier)
 
 
-def strip_css_comments(text: str) -> str:
-    """CSS text with every `/* ... */` replaced by the whitespace it is.
-
-    Each comment becomes one space plus the newlines it contained, so the
-    result tokenizes as the browser tokenizes the original AND keeps every
-    line number where it was: the <style> finding reports the line of the
-    declaration by counting newlines up to the match, and a comment that
-    swallowed its newlines would shift that line.
-    """
-    return CSS_COMMENT_RE.sub(lambda found: " " + "\n" * found.group().count("\n"), text)
-
-
 def transform_carrier(attrs: dict):
     """How this element carries a transform, phrased for the finding, or None.
 
@@ -214,7 +200,7 @@ def transform_carrier(attrs: dict):
         return "transform=%r" % attrs["transform"]
     style = attrs.get("style")
     if style is not None:
-        found = CSS_MOVES_MARK_RE.search(strip_css_comments(style))
+        found = CSS_MOVES_MARK_RE.search(mask_css_data(style))
         if found is not None:
             return "style=%r (the %s property)" % (style, found.group("prop").lower())
     return None
@@ -251,7 +237,7 @@ def looks_like_streamgraph(path: Path, source: str) -> bool:
     the contract even if it declares nothing parseable - that combination is
     the fail-closed case, not a pass. HTML comments are not markup, so a
     commented-out draft of a layer cannot pull another example type into
-    scope; a mangled tag whose bytes still say `data-layer=` can, and then
+    scope; a mangled path or text tag whose bytes still say `data-layer=` can, and then
     the parser finding no complete layer is exactly what is reported.
     """
     if is_hand_variant(path, source):
@@ -456,7 +442,7 @@ def check_transforms(doc: svg_scan.Scanner, findings: list, name: str) -> None:
         # Comments become whitespace before the search (a `/**/` prefix is
         # not a declaration boundary the regex knows), with newlines kept so
         # the reported line is the declaration's line in the source.
-        body = strip_css_comments(element.body)
+        body = mask_css_data(element.body)
         found = CSS_MOVES_MARK_RE.search(body)
         if found:
             findings.append(
@@ -784,6 +770,9 @@ def check_captions(layers: list, doc: svg_scan.Scanner, findings: list, name: st
 
 def check_source(path: Path, raw: str) -> list:
     """Findings for one already-read document."""
+    escaped = escaped_property_findings(raw)
+    if escaped:
+        return [f"{path.name}: {finding}" for finding in escaped]
     findings: list = []
     doc = parse_document(raw)
     if doc.error is not None:

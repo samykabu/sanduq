@@ -274,7 +274,7 @@ diagram and an exported PNG image:
 ## Example Process Types
 
 ### Automation Flow (e.g. Sprint Reports)
-- Prerequisites: GitHub configured, access tokens
+- Prerequisites: GitHub configured, API credentials
 - Steps: Manual input → Automated processing → Review → Integration call
 - Mix of manual (emerald) and automated (violet) steps
 - See `../assets/technical-color/process-flow/examples/sprint-report-flow.html`

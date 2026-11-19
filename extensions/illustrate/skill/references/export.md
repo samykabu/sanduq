@@ -27,11 +27,24 @@ Run the bundled exporter from the skill root:
 python scripts/export_diagram.py path/to/diagram.html
 python scripts/export_diagram.py path/to/diagram.html --svg-only
 python scripts/export_diagram.py path/to/diagram.html --png-only --scale 3
+python scripts/export_diagram.py path/to/diagram.html --png-only --scale 1.25      # exact 1.25x pixels
+python scripts/export_diagram.py path/to/diagram.html --system-fonts              # offline: no font fetches
 python scripts/export_diagram.py path/to/diagram.html --output path/to/output-base
 ```
 
 The script validates the source, refuses the gallery, extracts a standalone SVG, checks Playwright
-before PNG export, and reports every written file. The procedure below is the behavioral contract
+before PNG export, and reports every written file. Output names never change: `<base>.svg`,
+`<base>.png`, `<base>.animated.svg`, `<base>.gif`. When the SVG is written but the PNG fails
+(no Playwright, no Chromium, a motion figure that never reaches its static frame), the exit code
+is 2, the SVG is still listed, and the error names what to fix.
+
+| Flag | Values |
+| --- | --- |
+| `--scale` | PNG: any finite number from 1 to 4, fractions included (`1.25`); GIF: 1, 2 or 3. Default 2. |
+| `--system-fonts` | SVG without the Google Fonts `@import`; PNG captured with remote requests blocked. Text falls through the theme's font stacks to installed faces. |
+| `--svg-only` / `--png-only` | One format. |
+| `--bpmn-route <name>` | Named BPMN route for animated SVG or GIF. |
+| `--output <base>` | Output base; the extension is appended. | The procedure below is the behavioral contract
 and fallback reference; do not rewrite it into a temporary script when the bundled exporter is
 available.
 
@@ -73,6 +86,19 @@ tip-to-start for start-only heads, and from the middle out for two-headed arrows
   before repeating; looping styles loop seamlessly. A GIF cannot follow the reader's reduced-motion
   setting, so prefer the `.animated.svg` where SVG images are allowed.
 
+### BPMN route playback
+
+The [BPMN Process variant](type-bpmn.md) keeps all sequence flows solid and visible. One token
+moves through the selected route. The generic arrow-style setting applies to other diagram types.
+
+```bash
+python scripts/export_diagram.py assets/example-bpmn.html --animated --bpmn-route approved --output expense-approved
+python scripts/export_diagram.py assets/example-bpmn.html --gif --bpmn-route rejected --output expense-rejected
+```
+
+A single linear route can play automatically. For branches, supply a route name or use the
+default authored on the diagram. The static SVG and PNG include all outcomes.
+
 Embed either like any image, with alt text that describes the complete figure, and keep the HTML
 source beside it.
 
@@ -93,27 +119,62 @@ idempotent, so running it again before every export is safe.
 ## SVG export procedure
 
 1. Read the source HTML file.
-2. Extract the **first** `<svg ...>...</svg>` block. Use a multiline regex anchored on `<svg` and `</svg>`. Most generated diagrams have only one SVG; if there are multiple, the first is the diagram (gallery files are an exception — see *Edge cases*).
+2. Extract the first live SVG element and its nested SVG icons. Ignore comments, raw-text elements and inert templates. Gallery files remain a separate case.
 3. Make it standalone:
-   - Ensure the opening tag has `xmlns="http://www.w3.org/2000/svg"`. Add it if missing.
-   - Ensure a `viewBox` is present. The skill's templates always include one; warn the user if absent rather than guessing.
-   - Inject Google Fonts `@import` so the SVG renders with correct typography in a browser:
+   - Ensure the opening tag has `xmlns="http://www.w3.org/2000/svg"`. Add it if missing; refuse any
+     other value. Declare `xmlns:xlink` when the figure uses `xlink:href`.
+   - Ensure the root `viewBox` is four finite numbers with a positive width and height. The skill's
+     templates always include one; refuse rather than guess when it is absent or invalid.
+   - Drop HTML comments (refuse `<!-->`, `<!--->` and `--!>`, which a browser closes early), quote
+     valueless and unquoted attributes, and turn HTML character references into XML text once
+     (`&nbsp;`, `&rarr;`; numeric ones keep their HTML meaning, so `&#128;` is the euro sign).
+     CDATA and `<style>`/`<script>` bodies are copied unchanged.
+   - Inject the page's own Google Fonts as an `@import` so the SVG renders with the applied theme's
+     typography in a browser. The source `<link>` supplies the font profile. A sample with no link or theme stamp uses the bundled default:
      ```svg
      <defs>
-       <style>@import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500;600&display=swap');</style>
+       <style>@import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&amp;family=Geist:wght@400;500;600&amp;family=Geist+Mono:wght@400;500;600&amp;display=swap');</style>
      </defs>
      ```
-     If the SVG already contains a `<defs>` block, **merge** the `<style>` into it (don't add a second `<defs>`).
-4. Prepend `<?xml version="1.0" encoding="UTF-8"?>\n` so the file is well-formed XML.
+     Only `https://fonts.googleapis.com/css2?` URLs are carried. Local and system theme stamps and `--system-fonts` omit the remote font import.
+     If the SVG already contains a `<defs>` block, **merge** the `<style>` into it (don't add a second
+     `<defs>`); a new `<defs>` goes after the leading `<title>` and `<desc>`, which stay first.
+   - Carry the page's live `<style>` rules (not commented-out styles, not style text inside `<script>`
+     or `<textarea>`; CDATA in an SVG style is unwrapped). Scope the carried selectors to the exported
+     SVG so inline figures keep separate theme tokens. `html` and `body` rules pass only tokens and
+     inherited text and paint properties. `@media` (print included), `@supports`
+     and `@layer` keep their conditions, so print-only paint stays print-only; `@import`,
+     `@font-face`, `@keyframes`, animation and transition declarations and motion runtime selectors
+     stay behind. CSS comments go; quoted text that looks like a comment, and escaped selector
+     characters, stay.
+   - Prefix every referenceable `<defs>` ID with the file slug (`flow.html`: `arrow` becomes
+     `flow-arrow`) and retarget `url(#id)` (quoted, `&quot;`-quoted and CSS-escaped forms),
+     `href`/`xlink:href="#id"`, SMIL paint values and `#id` selectors, so two exported figures inlined
+     in one page cannot resolve each other's markers or gradients. IDs that already carry the prefix
+     and IDs outside `<defs>` (title, desc) are unchanged.
+   - For PowerPoint, which paints `rgba(...)` and `transparent` opaque black: split `fill`/`stroke`
+     presentation attributes into hex paint plus `fill-opacity`/`stroke-opacity` (`transparent`
+     becomes `none`), clamping channels and alpha, and combining an existing local opacity. Keep the
+     rgba when CSS, an inherited opacity or a descendant's own paint makes the split unsafe.
+4. Prepend `<?xml version="1.0" encoding="UTF-8"?>\n` and parse the result: refuse to write an SVG
+   that is not well-formed XML.
 5. Write to `<basename>.svg` next to the source (e.g. `example-architecture.html` → `example-architecture.svg`). Honour an explicit output path if the user provides one.
 
 ### Caveat to surface to the user
 
-Tools that don't fetch remote fonts at import time (offline Illustrator, some Figma import paths, older SVG viewers) will substitute typography. The SVG renders correctly in any modern browser. For pixel-perfect portability, recommend the PNG export.
+Tools that don't fetch remote fonts at import time (offline Illustrator, some Figma import paths, older SVG viewers) will substitute typography. The SVG renders correctly in any modern browser. For pixel-perfect portability, recommend the PNG export. For an offline or air-gapped destination, `--system-fonts` leaves the `@import` out so nothing is fetched and text uses installed faces from the theme's font stacks.
 
 ## PNG export procedure
 
-Render **the original HTML** (not the extracted SVG) and screenshot only the `<svg>` element's bounding box. This keeps font loading reliable (already wired in the source HTML) while satisfying the "diagram only" rule. The PNG always has a **transparent background** (`omit_background=True`) so it can be placed on any slide or doc colour without a white halo.
+Render **the original HTML** (not the extracted SVG) and screenshot only the `<svg>` element's bounding box. This keeps font loading reliable (already wired in the source HTML) while satisfying the "diagram only" rule. The PNG has a **transparent background** (`omit_background=True`) wherever the page itself paints none, so it can be placed on any slide or doc colour without a white halo.
+
+The PNG is exactly the viewBox size times `--scale` (rounded to whole pixels): the SVG is pinned to
+one CSS pixel per viewBox unit. Capture rounds each dimension to a whole pixel, even at fractional page positions. Waits are
+bounded: if the page never goes network-idle within 15 s (a stalled font or stylesheet behind a
+proxy), the exporter cancels the load with `window.stop()`, captures with fallback typography and
+prints a warning to stderr (pass it on); font readiness is awaited for at most 5 s. Motion figures
+load with `?motion=static` under reduced motion, and every `[data-motion-root]` must reach
+`data-frame="static"` (the complete figure) or the PNG is refused.
 
 ### Detection
 
@@ -139,21 +200,44 @@ Don't auto-install. The user asked for one feature, not a system change.
 The bundled exporter implements the following Playwright behavior:
 
 ```python
-from playwright.sync_api import sync_playwright
-import sys, pathlib
+from playwright.sync_api import TimeoutError as PlaywrightTimeoutError, sync_playwright
+import math, pathlib, sys
 
-src, out = sys.argv[1], sys.argv[2]
-scale = int(sys.argv[3]) if len(sys.argv) > 3 else 2
+src, out = pathlib.Path(sys.argv[1]), sys.argv[2]
+scale = float(sys.argv[3]) if len(sys.argv) > 3 else 2.0
+if not math.isfinite(scale) or not 1 <= scale <= 4:
+    sys.exit("scale must be a number from 1 to 4")
 
 with sync_playwright() as p:
     browser = p.chromium.launch()
-    page = browser.new_page(device_scale_factor=scale)
-    page.goto(f"file://{pathlib.Path(src).resolve()}")
-    page.wait_for_load_state("networkidle")
+    page = browser.new_page(device_scale_factor=scale, reduced_motion="reduce")
+    page.goto(src.resolve().as_uri() + "?motion=static", wait_until="domcontentloaded")
+    try:
+        page.wait_for_load_state("networkidle", timeout=15_000)
+    except PlaywrightTimeoutError:
+        # A stalled webfont request: cancel it and capture with fallback typography.
+        page.evaluate("window.stop()")
+        page.wait_for_timeout(4_000)
+        print("warning: captured with fallback typography", file=sys.stderr)
+    page.evaluate("Promise.race([document.fonts.ready, new Promise(r => setTimeout(r, 5000))])")
+    page.wait_for_function("[...document.querySelectorAll('[data-motion-root]')]"
+                           ".every(r => r.dataset.frame === 'static')", timeout=5_000)
     svg = page.locator("svg").first
     # Release every clipping ancestor (local scroller, overflow:hidden chrome)
     # so an SVG wider than its frame is captured whole.
     svg.evaluate("el => { for (let a = el.parentElement; a; a = a.parentElement) a.style.setProperty('overflow', 'visible', 'important'); }")
+    # One CSS pixel per viewBox unit, snapped to the device-pixel grid: exact viewBox x scale pixels.
+    svg.evaluate("""el => {
+        const box = el.viewBox.baseVal;
+        if (![box.width, box.height].every(n => Number.isFinite(n) && n > 0))
+            throw new Error('PNG export needs a finite, positive viewBox');
+        for (const [axis, size] of [['width', box.width], ['height', box.height]])
+            for (const prefix of ['', 'min-', 'max-'])
+                el.style.setProperty(prefix + axis, size + 'px', 'important');
+        const k = devicePixelRatio, r = el.getBoundingClientRect();
+        const snap = v => (Math.round(v * k) - v * k) / k;
+        el.style.setProperty('translate', `${snap(r.left + scrollX)}px ${snap(r.top + scrollY)}px`, 'important');
+    }""")
     svg.screenshot(path=out, omit_background=True)
     browser.close()
 ```
@@ -163,7 +247,7 @@ equals the viewBox width, so a 1280-wide SVG inside a 1200px frame is clipped on
 scroller, and without the release the PNG comes out full size with a blank right edge.
 `scripts/lint-render.py --self-test` runs this snippet against a wide fixture to keep it honest.
 
-Default `device_scale_factor=2` for crisp output. Accept `1` for compact assets or `3` for print/retina hero use, passed as a third CLI arg.
+Default `device_scale_factor=2` for crisp output. Accept `1` for compact assets, `3` or `4` for print/retina hero use, or a fraction such as `1.25` for an exact pixel size, passed as a third CLI arg. Never go past 4: redraw at a larger size preset instead. `--gif` keeps its own scales 1, 2 and 3.
 
 ### Output naming
 
@@ -172,11 +256,14 @@ Default `device_scale_factor=2` for crisp output. Accept `1` for compact assets 
 ## Edge cases
 
 - **No source path given**: ask which `.html` file to export. Don't guess.
-- **`--scale` outside {1, 2, 3}**: reject it and name the valid values.
+- **`--scale` not a finite number from 1 to 4** (or, with `--gif`, not 1, 2 or 3): reject it and name the valid values.
+- **A file name with `#` or `%`**: fine; the source is opened as a percent-encoded `file://` URI.
+- **Two exported SVGs inlined in one page**: fine; defs IDs carry each file's slug.
 - **Block metadata requested** (`--registry`, a Traceable block decomposition): follow [`export-registry.md`](export-registry.md); the sidecar is `<name>.registry.json`.
 - **Source is `assets/index.html`** (the gallery, multiple SVGs in one file): refuse the export and ask the user which specific diagram file they meant. Don't guess.
 - **No `<svg>` block found**: the source isn't a diagram file. Tell the user; don't write anything.
 - **Surrounding HTML matters to the user**: they want cards/header in the image. Tell them this skill exports diagrams only, and recommend a browser-based full-page screenshot (or a separate PDF print).
+- **A stalled font request**: the PNG is captured with fallback typography after 15 s and a warning; retry on a working network, or use `--system-fonts` to capture with installed faces at once.
 - **Source is missing fonts at runtime**: Playwright will substitute, the screenshot will look off. Check that the source HTML has the `<link href="...fonts.googleapis.com...">` tag in `<head>`. If absent, the file isn't from a current template — fix the source rather than working around it in export.
 
 ## What this command never does

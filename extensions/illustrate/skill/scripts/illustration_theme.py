@@ -62,6 +62,15 @@ DEFAULT_LITERALS = {
         "link": "#6a95d8",
     },
 }
+# Newer Diagram Design sources use these role literals. They do not change the
+# Sanduq palette or the priority of an already-recognized source color.
+UPSTREAM_ROLE_ALIASES = {
+    "#bf4520": "accent",
+    "rgba(191,69,32,0.08)": "accent-tint",
+    "#5a6580": "soft",
+    "#949eb2": "soft",
+    "#739fdf": "link",
+}
 DEFAULT_FONTS = {"Geist Mono": "mono", "Geist": "sans", "Instrument Serif": "serif"}
 
 
@@ -573,6 +582,11 @@ def color_map(
             exact.setdefault(_norm_rgba(literal), target)
             if literal.startswith("#") and target.startswith("#") and role != "ink-strong" and not generic:
                 rgb.setdefault(_hex_rgb(literal), _hex_rgb(target))
+    for literal, role in UPSTREAM_ROLE_ALIASES.items():
+        target = str(colors[role])
+        exact.setdefault(literal, target)
+        if literal.startswith("#") and target.startswith("#"):
+            rgb.setdefault(_hex_rgb(literal), _hex_rgb(target))
     return exact, rgb
 
 

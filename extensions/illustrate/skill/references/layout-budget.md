@@ -60,6 +60,16 @@ These are the per-type limits. The universal rows in SKILL.md §7 (9 nodes, 12 a
 | Max components / links (wardley) | 9 / 12, 2 movement arrows |
 | Max parts / levels / focal parts (exploded axonometric) | 5 / 5 / 1, three detail levels |
 | Max tagged rooms or buildings / boxes / focal (axonometric plan) | 8 / 40 / 1 |
+| Stages (Steps) | 3–7, one focal stage |
+| Max stages / layers (service blueprint) | 6 stages; customer, frontstage and backstage required; optional evidence and support; one focal cell |
+| Unit Grid | 100 equal cells, one count and at most one focal completed cell |
+| Max requirement rows / primary design links / primary verification links (requirement traceability) | 6 / 1 per row / 1 per row, one focal row |
+| Max stages / commands / events / read models (event modeling) | 6 stages, up to one of each per stage, two accent uses |
+| Max tasks / precedence links / ranks (schedule network) | 8 / 12 / 5, all critical paths and total float |
+| Max species / processes / compartments / source-sink / arcs (SBGN) | 7 / 6 / 1 / 2 / 16, replacing the universal nodes and arrows limits for this type |
+| Max admin bands / traffic scopes / nodes (architecture containment) | 2 / 4 / 8, two accent elements |
+| Max nodes / arcs (arc diagram) | 9 / 14, one focal arc |
+| Groups (box plot) | 3–8 on the same scale, one focal group |
 | Max motion (optional) | 8 steps, 12 marked items, 2 simultaneous items |
 
 If you exceed, split into two diagrams (overview + detail).
