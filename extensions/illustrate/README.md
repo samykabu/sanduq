@@ -162,7 +162,7 @@ Claude or Codex skill.
 
 BPMN 2.0 is an opt-in Process variant. The static SVG and PNG show the whole process.
 Animated SVG and GIF follow one selected outcome with all sequence flows still visible.
-See the [BPMN expense approval example](../../docs/illustrate-examples.md#bpmn-20-expense-approval)
+See the [editable BPMN expense approval example](skill/assets/example-bpmn.html)
 and the [BPMN authoring guide](skill/references/type-bpmn.md) for the supported symbols and route setup.
 
 ## Migrate from Diagram Design

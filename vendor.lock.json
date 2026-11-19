@@ -11,7 +11,7 @@
       "internal": true,
       "exclusive": true,
       "ref": "illustration-tools-v3.9.0",
-      "sha": "ae7d4d8e25b92fbd14b00ede8ce45d15543c3202",
+      "sha": "e6908ab5804349715358f5594ff8636609f3965f",
       "files": {
         "extensions/illustrate/skill/SKILL.md": "7b502ddcb737f0f67175a8ababef3d31949a245e123c15b8d7d7e37f8cfe36c2",
         "extensions/illustrate/skill/agents/openai.yaml": "94f4c310ca3cfea9f74c10f98e9999f7510a4d896e64c3ea91838054e76b3e8d",

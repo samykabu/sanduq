@@ -4,6 +4,6 @@
     "illustrate": "2.8.0",
     "workflow": "2.4.1"
   },
-  "status": "implementation-in-progress",
+  "status": "ready",
   "note": "Illustrate 2.8.0 adds the BPMN Process variant, and Workflow 2.4.1 selects the new Illustrate version."
 }
