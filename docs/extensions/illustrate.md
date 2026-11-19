@@ -1,7 +1,7 @@
 # Illustrate
 
 **Purpose:** draw diagrams and charts as editable HTML with inline SVG, in your project's tracked
-color and font theme. It supports 44 diagram types and exports SVG and PNG on request, and an animated SVG or GIF for README images, with arrows that draw, flow, pulse or slide chevrons in their direction.
+color and font theme. It supports 51 diagram types and exports SVG and PNG on request, and an animated SVG or GIF for README images, with arrows that draw, flow, pulse or slide chevrons in their direction.
 
 | | |
 | --- | --- |
@@ -16,6 +16,10 @@ color and font theme. It supports 44 diagram types and exports SVG and PNG on re
 The extension carries its own version-matched copy of the Illustrate skill under
 `.specify/extensions/illustrate/skill/`. It does not need a separately installed skill. The copy is
 [vendored](../../vendor.lock.json) from [sanduq-skills](https://github.com/samykabu/sanduq-skills).
+
+The catalog now includes Service Blueprint, Steps, Unit Grid, Requirement Traceability,
+Event Modeling, Schedule Network and educational SBGN Process Description. It also includes
+Architecture Containment, Box Plot and Arc Diagram as variants.
 
 ## Setup
 
@@ -39,6 +43,8 @@ dark modes.
 /speckit-illustrate-export docs/refund-approval-animated.html --animated
 /speckit-illustrate-export docs/refund-approval.html --gif --arrows pulse
 /speckit-illustrate-import docs/legacy/order-flow.mmd --size doc-wide --detail balanced
+/speckit-illustrate-import docs/legacy/checkout.puml --size doc-wide
+/speckit-illustrate-export docs/refund-approval.html --png-only --scale 1.5
 ```
 
 The [process and theme gallery](../illustrate-examples.md) shows the presets and a custom theme.

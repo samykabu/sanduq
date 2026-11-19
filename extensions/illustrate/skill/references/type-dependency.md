@@ -37,6 +37,10 @@ Over budget: collapse a leaf cluster into one aggregate node labelled with its c
 - Highlighting more than one cycle in a single diagram — pick the one that matters editorially; a second cycle competes with the first and neither reads.
 - Omitting the fan-in badges — without them the reader can't see at a glance where dependencies concentrate, which is the entire reason this type exists over a plain tree.
 
+## Variants
+
+- **Arc diagram:** Dependency spans between nodes ordered along a rail. See [type-arc-diagram.md](type-arc-diagram.md).
+
 ## Examples
 
 - `assets/example-dependency.html` — minimal light

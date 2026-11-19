@@ -4,6 +4,11 @@ All notable changes to sanduq extensions/plugins are recorded here.
 Format: [Keep a Changelog](https://keepachangelog.com/). Extensions are versioned
 independently via `<extension>-vX.Y.Z` tags.
 
+## 2026-11-19 — Illustrate 2.8.0 (pending release)
+
+- Vendors illustration-tools 3.8.0 with 51 diagram types, three additional variants, PlantUML and Mermaid quadrant redraws, and fractional PNG export.
+- Carries through fixes for import fidelity, standalone SVG, and diagram verification. Existing commands, project themes, handwritten diagrams, animated SVG and GIF exports continue to work.
+
 ## 2026-11-05 — Workflow 2.3.2, Assure 2.7.5, User Manual 2.0.4
 
 - Fixes a consumer-reported blocker: one feature's committed workflow, evidence and progress records no

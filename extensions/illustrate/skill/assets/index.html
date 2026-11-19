@@ -670,7 +670,7 @@
           --topbar-h: 118px;
         }
         .detail {
-          grid-template-columns: 1fr;
+          grid-template-columns: minmax(0, 1fr);
         }
         .stage {
           height: 62vh;
@@ -716,8 +716,8 @@
         </a>
         <div class="brand-meta">
           <span class="count"
-            ><strong>29</strong> editorial types ·
-            <strong>7</strong> technical · 4 variants each</span
+            ><strong id="editorial-count"></strong> editorial examples ·
+            <strong id="technical-count"></strong> technical examples</span
           >
           <a href="icons.html" target="_blank" rel="noopener">icon library ↗</a>
         </div>
@@ -727,13 +727,13 @@
       <div class="controls" id="catalog-controls">
         <div class="families" role="tablist" aria-label="Diagram family">
           <button class="fam" role="tab" data-family="editorial">
-            <span class="fam-n">29</span>Editorial
+            <span class="fam-n"></span>Editorial
           </button>
           <button class="fam" role="tab" data-family="technical-architecture">
-            <span class="fam-n">03</span>Architecture · technical
+            <span class="fam-n"></span>Architecture · technical
           </button>
           <button class="fam" role="tab" data-family="technical-process-flow">
-            <span class="fam-n">04</span>Process flow · technical
+            <span class="fam-n"></span>Process flow · technical
           </button>
         </div>
         <div class="search" id="search" data-empty="true">
@@ -876,6 +876,7 @@
         { key: "it-state", n: "33", family: "editorial", intent: "systems", name: "IT current-state", purpose: "A legacy landscape grouped by phase — the before state.", gen: "an IT current-state diagram" },
         { key: "nested", n: "09", family: "editorial", intent: "systems", name: "Nested", purpose: "Hierarchy expressed through containment and scope.", gen: "a nested containment diagram" },
         { key: "layers", n: "12", family: "editorial", intent: "systems", name: "Layer stack", purpose: "Stacked abstraction levels.", gen: "a layer-stack diagram" },
+        { key: "architecture-containment", family: "editorial", intent: "systems", name: "Architecture containment", purpose: "Administrative scopes and traffic boundaries in an architecture diagram.", gen: "an architecture containment diagram" },
 
         // -- Editorial · flows --
         { key: "flowchart", n: "02", family: "editorial", intent: "flows", name: "Flowchart", purpose: "Decision logic with branches.", gen: "a flowchart" },
@@ -885,6 +886,10 @@
         { key: "process", n: "24", family: "editorial", intent: "flows", name: "Process", purpose: "Multi-actor process with data handoffs.", gen: "a multi-actor process diagram" },
         { key: "data-flow", n: "26", family: "editorial", intent: "flows", name: "Data flow", purpose: "Who does what at each pipeline step.", gen: "a data-flow diagram" },
         { key: "loop", n: "16", family: "editorial", intent: "flows", name: "Loop", purpose: "A reinforcing cycle where the last step feeds the first.", gen: "a loop / flywheel diagram" },
+        { key: "steps", family: "editorial", intent: "flows", name: "Steps", purpose: "A short ordered method with numbered stages.", gen: "a steps diagram" },
+        { key: "service-blueprint", family: "editorial", intent: "flows", name: "Service blueprint", purpose: "Customer, frontstage, and backstage actions across shared service stages.", gen: "a service blueprint" },
+        { key: "event-modeling", family: "editorial", intent: "flows", name: "Event modeling", purpose: "Commands, resulting events, and read models across ordered stages.", gen: "an event modeling diagram" },
+        { key: "schedule-network", family: "editorial", intent: "flows", name: "Schedule network", purpose: "Task precedence, critical paths, and float from durations.", gen: "a schedule network" },
 
         // -- Editorial · data --
         { key: "bar", n: "18", family: "editorial", intent: "data", name: "Bar chart", purpose: "Quantitative comparison across categories.", gen: "a bar chart" },
@@ -893,6 +898,8 @@
         { key: "radar", n: "15", family: "editorial", intent: "data", name: "Radar", purpose: "Entities scored across three to five criteria.", gen: "a radar chart" },
         { key: "gantt", n: "20", family: "editorial", intent: "data", name: "Gantt", purpose: "Tasks and phases on a timeline.", gen: "a Gantt chart" },
         { key: "quadrant", n: "08", family: "editorial", intent: "data", name: "Quadrant", purpose: "Two-axis positioning and prioritization.", gen: "a quadrant matrix" },
+        { key: "unit-grid", family: "editorial", intent: "data", name: "Unit Grid", purpose: "Equal cells represent one count out of 100.", gen: "a unit grid" },
+        { key: "box-plot", family: "editorial", intent: "data", name: "Box plot", purpose: "Five-number summaries, whiskers, and outliers across groups.", gen: "a box plot" },
 
         // -- Editorial · structure --
         { key: "er", n: "05", family: "editorial", intent: "structure", name: "ER / data model", purpose: "Entities, fields, and relationships.", gen: "an ER data model" },
@@ -902,6 +909,9 @@
         { key: "pyramid", n: "14", family: "editorial", intent: "structure", name: "Pyramid / funnel", purpose: "Ranked hierarchy or conversion drop-off.", gen: "a pyramid / funnel" },
         { key: "timeline", n: "06", family: "editorial", intent: "structure", name: "Timeline", purpose: "Events positioned in time.", gen: "a timeline" },
         { key: "dp-security-matrix", n: "32", family: "editorial", intent: "structure", name: "DP security matrix", purpose: "Per-role, per-component access permissions.", gen: "a DP security matrix" },
+        { key: "requirement-traceability", family: "editorial", intent: "structure", name: "Requirement traceability", purpose: "Sources, requirements, designs, and verification linked by stable IDs.", gen: "a requirements traceability diagram" },
+        { key: "arc-diagram", family: "editorial", intent: "structure", name: "Arc diagram", purpose: "Dependency spans between nodes ordered along a rail.", gen: "an arc diagram" },
+        { key: "sbgn", family: "editorial", intent: "structure", name: "SBGN", purpose: "A documented biological process depicted with standard glyphs.", gen: "an SBGN diagram" },
 
         // -- Technical color · architecture --
         { key: "aws-serverless", family: "technical-architecture", name: "AWS serverless", purpose: "A serverless topology on AWS.", gen: "an AWS serverless architecture" },
@@ -918,6 +928,19 @@
       const byKey = Object.fromEntries(TYPES.map((t) => [t.key, t]));
       const src = (t, v) =>
         FAMILIES[t.family].base + t.key + v + FAMILIES[t.family].suffix;
+
+      const familyCounts = Object.fromEntries(
+        Object.keys(FAMILIES).map((family) => [
+          family, TYPES.filter((type) => type.family === family).length,
+        ]),
+      );
+      document.getElementById("editorial-count").textContent = familyCounts.editorial;
+      document.getElementById("technical-count").textContent =
+        TYPES.length - familyCounts.editorial;
+      document.querySelectorAll(".fam[data-family]").forEach((tab) => {
+        tab.querySelector(".fam-n").textContent =
+          String(familyCounts[tab.dataset.family]).padStart(2, "0");
+      });
 
       /* -------- Elements -------- */
       const gridRoot = document.getElementById("grid-root");

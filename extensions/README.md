@@ -10,7 +10,7 @@ PR, illustration, Memory, and Progress reporting processes. Use [install by host
 | Extension | Source version | Commands |
 | --- | --- | ---: |
 | [assure](assure/README.md) | 2.7.5 | 3 |
-| [illustrate](illustrate/README.md) | 2.7.3 | 4 |
+| [illustrate](illustrate/README.md) | 2.8.0 | 4 |
 | [memory](memory/README.md) | 2.6.3 | 7 |
 | [pr](pr/README.md) | 4.7.6 | 2 |
 | [progress](progress/README.md) | 1.7.0 | 5 |

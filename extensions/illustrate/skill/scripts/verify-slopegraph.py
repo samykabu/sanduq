@@ -94,6 +94,7 @@ import re
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+from css_property_scan import escaped_property_findings, mask_css_data  # noqa: E402
 import svg_scan  # noqa: E402  shared SVG scanning helpers, loaded like theme_tokens.py
 from svg_scan import is_hand_variant, median  # noqa: E402
 
@@ -133,12 +134,6 @@ CSS_MOVES_MARK_RE = re.compile(
     r"\s*:",
     re.IGNORECASE,
 )
-# A CSS comment is whitespace to the browser, so `/**/transform:` is a live
-# declaration. CSS_MOVES_MARK_RE allows only whitespace between a declaration
-# boundary and the property name, which let a comment sitting there hide the
-# property from it while Chromium applied it. Non-greedy and DOTALL: a comment
-# spans lines, and a stylesheet holds many. See css_moves_mark.
-CSS_COMMENT_RE = re.compile(r"/\*.*?\*/", re.DOTALL)
 # Detection only - a raw-text signal read BEFORE the parser, because the parser
 # is exactly what a broken quote defeats (see declares_series). Scoped to a
 # <line> start tag: `data-series` on a <path> is the bump chart's vocabulary.
@@ -224,9 +219,7 @@ def css_moves_mark(css: str):
     an offset into `css` as written, and a <style> finding that counts
     newlines up to the property names the right line.
     """
-    stripped = CSS_COMMENT_RE.sub(
-        lambda found: re.sub(r"[^\n]", " ", found.group()), css)
-    return CSS_MOVES_MARK_RE.search(stripped)
+    return CSS_MOVES_MARK_RE.search(mask_css_data(css))
 
 
 def declares_series(source: str) -> bool:
@@ -460,6 +453,15 @@ def check_scale(series: list, findings: list, name: str) -> None:
 
     left_fit = fit(left)
     right_fit = fit(right)
+
+    if any(slope is not None and
+           (slope == 0 or not all(map(math.isfinite, (slope, intercept))))
+           for slope, intercept in (left_fit, right_fit)):
+        findings.append(
+            "%s:%d: a value axis has a zero or non-finite scale — distinct "
+            "values must map to distinct finite positions" % (name, line)
+        )
+        return
 
     if left_fit[0] is not None and right_fit[0] is not None:
         slope_drift = abs(left_fit[0] - right_fit[0]) * span
@@ -705,6 +707,9 @@ def check_captions(series: list, doc: svg_scan.Scanner, findings: list, name: st
 
 def check_source(path: Path, raw: str) -> list:
     """Findings for one already-read document."""
+    escaped = escaped_property_findings(raw)
+    if escaped:
+        return [f"{path.name}: {finding}" for finding in escaped]
     findings: list = []
     doc = parse_document(raw)
     if doc.error is not None:

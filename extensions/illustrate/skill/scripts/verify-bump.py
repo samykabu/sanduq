@@ -74,6 +74,7 @@ import re
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+from css_property_scan import escaped_property_findings, mask_css_data  # noqa: E402
 from svg_scan import is_hand_variant, line_of  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -305,7 +306,7 @@ def transform_carrier(attrs: dict):
         return "transform=%r" % attrs["transform"]
     style = attrs.get("style")
     if style is not None:
-        found = CSS_MOVES_MARK_RE.search(style)
+        found = CSS_MOVES_MARK_RE.search(mask_css_data(style))
         if found is not None:
             return "style=%r (the %s property)" % (
                 style,
@@ -383,7 +384,7 @@ def check_transforms(source: str, findings: list, name: str) -> None:
         check_element(match.start(), attrs, what)
 
     for match in STYLE_RE.finditer(source):
-        found = CSS_MOVES_MARK_RE.search(match.group("body"))
+        found = CSS_MOVES_MARK_RE.search(mask_css_data(match.group("body")))
         if found:
             findings.append(
                 "%s:%d: a CSS `%s` declaration — this checker cannot tell "
@@ -775,6 +776,9 @@ def check_captions(series: list, source: str, findings: list, name: str) -> None
 
 
 def check_source(path: Path, raw: str) -> list:
+    escaped = escaped_property_findings(raw)
+    if escaped:
+        return [f"{path.name}: {finding}" for finding in escaped]
     source = blank_comments(raw)
     findings: list = []
     series = parse_series(source, findings, path.name)

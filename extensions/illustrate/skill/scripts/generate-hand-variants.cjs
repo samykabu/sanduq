@@ -96,6 +96,16 @@ const TYPES = [
   'axonometric-plan-campus',
   'axonometric-plan-coffee-shop',
   'axonometric-plan-warehouse',
+  'architecture-containment',
+  'steps',
+  'service-blueprint',
+  'event-modeling',
+  'schedule-network',
+  'unit-grid',
+  'box-plot',
+  'requirement-traceability',
+  'arc-diagram',
+  'sbgn',
 ];
 
 const PAPER = '#f5f5f5';

@@ -194,6 +194,8 @@ def line_of(source: str, offset: int) -> int:
 
 
 def median(values: list) -> float:
+    if not values:
+        raise ValueError("median() needs at least one value")
     ordered = sorted(values)
     middle = len(ordered) // 2
     if len(ordered) % 2:

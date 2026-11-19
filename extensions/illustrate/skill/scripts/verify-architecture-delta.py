@@ -22,6 +22,7 @@ from dataclasses import dataclass, field
 from html.parser import HTMLParser
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+from css_property_scan import mask_css_data  # noqa: E402
 from svg_scan import is_hand_variant  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -147,7 +148,7 @@ def within(node: Node, ancestor: Node) -> bool:
 
 
 def clean_css(raw: str) -> str:
-    return re.sub(r"/\*.*?\*/", "", raw, flags=re.S)
+    return mask_css_data(raw)
 
 
 def hiding_values(values: dict[str, str]) -> bool:

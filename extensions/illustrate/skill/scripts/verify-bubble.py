@@ -107,6 +107,7 @@ import re
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+from css_property_scan import escaped_property_findings, mask_css_data  # noqa: E402
 import svg_scan  # noqa: E402  shared SVG scanning helpers, loaded like theme_tokens.py
 from svg_scan import is_hand_variant, median  # noqa: E402
 
@@ -142,12 +143,6 @@ CSS_MOVES_MARK_RE = re.compile(
     r"\s*:",
     re.IGNORECASE,
 )
-# A CSS comment is whitespace to the browser, so `/**/transform:` is a live
-# declaration. CSS_MOVES_MARK_RE allows only whitespace between a declaration
-# boundary and the property name, which let a comment sitting there hide the
-# property from it while Chromium applied it. Non-greedy and DOTALL: a comment
-# spans lines, and a stylesheet holds many. See css_moves_mark.
-CSS_COMMENT_RE = re.compile(r"/\*.*?\*/", re.DOTALL)
 # Detection only - deliberately a text search over the raw bytes, HTML comments
 # removed, so a file that so much as mentions the binding in live markup is
 # held to the contract even when the parser cannot read the tag that binds it.
@@ -228,9 +223,7 @@ def css_moves_mark(css: str):
     returned match is an offset into `css` as written, and a <style> finding
     that counts newlines up to the property names the right line.
     """
-    stripped = CSS_COMMENT_RE.sub(
-        lambda found: re.sub(r"[^\n]", " ", found.group()), css)
-    return CSS_MOVES_MARK_RE.search(stripped)
+    return CSS_MOVES_MARK_RE.search(mask_css_data(css))
 
 
 def declares_bubble(source: str) -> bool:
@@ -472,6 +465,13 @@ def check_axis(bubbles: list, axis: str, findings: list, name: str):
         )
         return None, None
 
+    if slope == 0 or not all(map(math.isfinite, (slope, intercept))):
+        findings.append(
+            "%s:%d: the %s axis has a zero or non-finite scale — distinct "
+            "values must map to distinct finite positions" % (name, line, axis)
+        )
+        return None, None
+
     # A bubble whose PEERS all share one value cannot be measured: the
     # leave-one-out fit for it is degenerate, so `outliers` skips it, and the
     # full-set fit passes exactly through wherever it was drawn — its position
@@ -698,6 +698,9 @@ def check_ticks(x_fit, y_fit, doc: svg_scan.Scanner, findings: list, name: str) 
 
 def check_source(path: Path, raw: str) -> list:
     """Findings for one already-read document."""
+    escaped = escaped_property_findings(raw)
+    if escaped:
+        return [f"{path.name}: {finding}" for finding in escaped]
     findings: list = []
     doc = parse_document(raw)
     if doc.error is not None:

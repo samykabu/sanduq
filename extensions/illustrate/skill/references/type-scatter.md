@@ -34,6 +34,7 @@
 
 ## Variants
 
+- **Box plot:** Five-number summaries, whiskers, and outliers across groups. See [type-box-plot.md](type-box-plot.md).
 - **Bubble:** three quantities per item, area as the third → `type-bubble.md`.
 - **Beeswarm:** one value axis, one dot per item, dodged perpendicular → `type-beeswarm.md`.
 

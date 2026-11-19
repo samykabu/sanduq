@@ -118,6 +118,7 @@ import re
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+from css_property_scan import escaped_property_findings, mask_css_data  # noqa: E402
 import svg_scan  # noqa: E402  shared SVG scanning helpers, loaded like theme_tokens.py
 from svg_scan import is_hand_variant, line_of, median  # noqa: E402
 
@@ -315,7 +316,7 @@ def transform_carrier(attrs: dict):
         return "transform=%r" % attrs["transform"]
     style = attrs.get("style")
     if style is not None:
-        found = CSS_MOVES_MARK_RE.search(style)
+        found = CSS_MOVES_MARK_RE.search(mask_css_data(style))
         if found is not None:
             return "style=%r (the %s property)" % (style, found.group("prop").lower())
     return None
@@ -464,7 +465,7 @@ def check_transforms(source: str, findings: list, name: str) -> None:
                       % (kind, plain(match.group("body"))[:20]))
 
     for match in STYLE_RE.finditer(source):
-        found = CSS_MOVES_MARK_RE.search(match.group("body"))
+        found = CSS_MOVES_MARK_RE.search(mask_css_data(match.group("body")))
         if found:
             findings.append(
                 "%s:%d: a CSS `%s` declaration — this checker cannot tell "
@@ -512,6 +513,12 @@ def check_scale(dots: list, findings: list, source: str, name: str):
         return None, None
 
     slope, intercept = fit(points)
+    if slope == 0 or not all(map(math.isfinite, (slope, intercept))):
+        findings.append(
+            "%s: the value axis has a zero or non-finite scale — distinct "
+            "values must map to distinct finite positions" % name
+        )
+        return None, None
     if len(points) >= 4:
         for index, (value, drawn) in enumerate(points):
             peers = points[:index] + points[index + 1:]
@@ -798,6 +805,9 @@ def check_ticks(scale, source: str, findings: list, name: str) -> None:
 
 def check_source(path: Path, raw: str) -> list:
     """Findings for one already-read document."""
+    escaped = escaped_property_findings(raw)
+    if escaped:
+        return [f"{path.name}: {finding}" for finding in escaped]
     source = blank_comments(raw)
     findings: list = []
     dots = parse_dots(source, findings, path.name)

@@ -4,27 +4,55 @@
 from __future__ import annotations
 
 import argparse
+import base64
+import hashlib
+import math
 import re
+import struct
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import animate_export  # noqa: E402
+import svg_standalone as safe  # noqa: E402
 
 SVG_RE = re.compile(r"<svg\b[^>]*>.*?</svg>", re.IGNORECASE | re.DOTALL)
-OPENING_SVG_RE = re.compile(r"<svg\b[^>]*>", re.IGNORECASE | re.DOTALL)
-DEFS_RE = re.compile(r"<defs\b[^>]*>", re.IGNORECASE | re.DOTALL)
-FONT_STYLE = (
-    "<style data-illustrate-export-fonts=\"true\">"
-    "@import url('https://fonts.googleapis.com/css2?"
-    "family=Instrument+Serif:ital@0;1&amp;family=Geist:wght@400;500;600&amp;"
-    "family=Geist+Mono:wght@400;500;600&amp;display=swap');"
-    "</style>"
+
+
+DEFAULT_FONT_URL = (
+    "https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@400;500;600&"
+    "family=Geist+Mono:wght@400;500;600&display=swap"
 )
+GIF_SCALES = (1, 2, 3)
+NETWORK_IDLE_TIMEOUT_MS = 15_000   # a stalled webfont request must not hang the PNG export
+FALLBACK_SETTLE_MS = 4_000         # paint time after the stalled load is cancelled
+FONTS_READY_TIMEOUT_MS = 5_000
+STATIC_FRAME_TIMEOUT_MS = 5_000
+PLAYWRIGHT_INSTALL = "pip install playwright\npython -m playwright install chromium"
 
 
 class ExportError(RuntimeError):
     """A user-actionable export error."""
+
+
+def font_style(urls: list[str]) -> str:
+    """The <style> that loads the figure's web fonts: the page's own Google Fonts (its theme)."""
+    imports = "".join(f"@import url('{url}');" for url in urls)
+    return f'<style data-illustrate-export-fonts="true">{safe.escape_css_for_xml(imports)}</style>'
+
+
+def png_scale(value: str) -> float:
+    """--scale: a finite number from 1 to 4, fractions included (1.25 gives exact 1.25x pixels)."""
+    try:
+        scale = float(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(f"invalid scale {value!r}: use a number from 1 to 4") from exc
+    if not math.isfinite(scale) or not 1 <= scale <= 4:
+        raise argparse.ArgumentTypeError(f"invalid scale {value!r}: use a number from 1 to 4")
+    return scale
+
+
+FONT_STYLE = font_style([DEFAULT_FONT_URL])  # the sample HTML default, when the page loads no Google Fonts
 
 
 def parse_args() -> argparse.Namespace:
@@ -44,7 +72,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--theme", choices=("light", "dark"), default="light",
                         help="Colour scheme the GIF is rendered in (default: light)")
     parser.add_argument("--fps", type=int, default=15, help="GIF frames per second (default: 15)")
-    parser.add_argument("--scale", type=int, choices=(1, 2, 3), default=2)
+    parser.add_argument("--scale", type=png_scale, default=2.0,
+                        help="Pixel density: PNG 1 to 4, fractions allowed (1.25); GIF 1, 2 or 3 (default: 2)")
+    parser.add_argument("--system-fonts", action="store_true",
+                        help="Offline: no Google Fonts @import in the SVG and no remote requests while "
+                             "rasterizing; text uses the installed faces in the theme's font stacks")
     parser.add_argument("--output", type=Path, help="Output base path; extension is appended")
     return parser.parse_args()
 
@@ -61,27 +93,22 @@ def read_source(source: Path) -> str:
         raise ExportError(f"Source HTML does not exist: {source}")
     if source.name.lower() == "index.html" and source.parent.name.lower() == "assets":
         raise ExportError("The gallery contains multiple diagrams; choose a specific example HTML file.")
-    html = source.read_text(encoding="utf-8")
-    if not SVG_RE.search(html):
-        raise ExportError(f"No <svg> diagram found in: {source}")
+    try:
+        html = source.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError) as exc:
+        raise ExportError(f"Cannot read {source}: {exc}") from exc
+    try:
+        safe.figure_span(html)
+    except ValueError:
+        raise ExportError(f"No <svg> diagram found in: {source}") from None
     return html
 
 
-TAG_RE = re.compile(r"<([a-zA-Z][\w:.-]*)((?:\s+[^\s=/>]+(?:\s*=\s*(?:\"[^\"]*\"|'[^']*'|[^\s>]+))?)*)\s*(/?)>")
-EMPTY_VALUE = '=""'
-ATTRIBUTE_RE = re.compile(r"\s+([^\s=/>]+)(\s*=\s*(?:\"[^\"]*\"|'[^']*'|[^\s>]+))?")
-
-
 def xml_attributes(svg: str) -> str:
-    """HTML allows valueless attributes (`data-motion-item`); a standalone .svg is XML and needs a value."""
-    def tag(match: re.Match) -> str:
-        attributes = ATTRIBUTE_RE.sub(lambda a: " " + a.group(1) + (a.group(2) or EMPTY_VALUE), match.group(2))
-        return f"<{match.group(1)}{attributes}{'/' if match.group(3) else ''}>"
-    return TAG_RE.sub(tag, svg)
+    """HTML allows valueless (`data-motion-item`) and unquoted attributes; a standalone .svg is XML."""
+    return safe.xmlify_attributes(svg)
 
 
-STYLE_RE = re.compile(r"<style\b[^>]*>(.*?)</style\s*>", re.IGNORECASE | re.DOTALL)
-CSS_COMMENT_RE = re.compile(r"/\*.*?\*/", re.DOTALL)
 # A compound that stands for the page itself (the html/body ancestors or the diagram's own <svg>).
 ROOT_COMPOUND_RE = re.compile(r"^(?:html|body|:root|svg)(?![\w-])", re.IGNORECASE)
 # What a page-level rule may pass down to the figure: tokens and inherited text/paint properties, not layout.
@@ -94,9 +121,13 @@ BLOCK_AT_RULES = ("@media", "@supports", "@layer")
 
 
 def split_top(text: str, separator: str) -> list[str]:
-    """Split CSS text at `separator` outside quotes, parentheses and brackets."""
-    parts, depth, quote, start = [], 0, "", 0
-    for index, char in enumerate(text):
+    """Split CSS text at `separator` outside quotes, escapes, parentheses and brackets."""
+    parts, depth, quote, start, index = [], 0, "", 0, 0
+    while index < len(text):
+        char = text[index]
+        if char == "\\":
+            index += 2
+            continue
         if quote:
             quote = "" if char == quote else quote
         elif char in "\"'":
@@ -108,44 +139,90 @@ def split_top(text: str, separator: str) -> list[str]:
         elif char == separator and depth == 0:
             parts.append(text[start:index])
             start = index + 1
+        index += 1
     parts.append(text[start:])
     return [part.strip() for part in parts if part.strip()]
 
 
-def css_blocks(css: str) -> list[tuple[str, str]]:
-    """Top-level (prelude, body) pairs; statement at-rules such as @import come back with body None."""
-    blocks, index, length = [], 0, len(css)
-    while index < length:
-        brace, semicolon = css.find("{", index), css.find(";", index)
-        if brace == -1:
-            break
-        if css[index:].lstrip().startswith("@") and semicolon != -1 and semicolon < brace:
-            blocks.append((css[index:semicolon].strip(), None))
-            index = semicolon + 1
+def css_blocks(css: str) -> list[tuple[str, str | None]]:
+    """Top-level (prelude, body) pairs; statement at-rules such as @import come back with body None.
+
+    Braces and semicolons inside strings or after a backslash are literal; a stray closing brace
+    between rules is skipped and an unclosed last block runs to the end, as browsers recover.
+    """
+    blocks: list[tuple[str, str | None]] = []
+    start, opening, depth, quote, index = 0, -1, 0, "", 0
+    while index < len(css):
+        char = css[index]
+        if char == "\\":
+            index += 2
             continue
-        depth, end, quote = 0, brace, ""
-        for end in range(brace, length):
-            char = css[end]
-            if quote:
-                quote = "" if char == quote else quote
-            elif char in "\"'":
-                quote = char
-            elif char == "{":
-                depth += 1
-            elif char == "}":
+        if quote:
+            quote = "" if char == quote else quote
+        elif char in "\"'":
+            quote = char
+        elif char == "{":
+            if depth == 0:
+                opening = index
+            depth += 1
+        elif char == "}":
+            if depth == 0:
+                start = index + 1
+            else:
                 depth -= 1
                 if depth == 0:
-                    break
-        blocks.append((css[index:brace].strip(), css[brace + 1 : end]))
-        index = end + 1
+                    blocks.append((css[start:opening].strip(), css[opening + 1 : index]))
+                    start = index + 1
+        elif char == ";" and depth == 0:
+            if css[start:index].strip().startswith("@"):
+                blocks.append((css[start:index].strip(), None))
+            start = index + 1
+        index += 1
+    if depth:
+        blocks.append((css[start:opening].strip(), css[opening + 1 :]))
     return blocks
 
 
-def figure_rules(css: str) -> str:
+SELECTOR_TOKENS = re.compile(
+    r"""\\[\s\S]|"(?:\\[\s\S]|[^"\\])*"|'(?:\\[\s\S]|[^'\\])*'|[\[\]()]"""
+    r"""|::|:(?:before|after|first-line|first-letter|root)(?![\w-])""",
+    re.IGNORECASE,
+)
+
+
+def scope_selector(selector: str, root: str) -> str:
+    """Constrain a selector's subject to this SVG, without adding specificity."""
+    if selector.lower() == ":root":
+        return root
+    guard = f":where({root},{root} *)"
+    parts: list[str] = []
+    start = brackets = parentheses = 0
+    for match in SELECTOR_TOKENS.finditer(selector):
+        token = match[0].lower()
+        if token == "[":
+            brackets += 1
+        elif token == "]":
+            brackets -= 1
+        elif token == "(":
+            parentheses += 1
+        elif token == ")":
+            parentheses -= 1
+        elif token == ":root" and not brackets:
+            parts.extend((selector[start:match.start()], root))
+            start = match.end()
+        elif token.startswith(":") and not brackets and not parentheses:
+            # Pseudo-elements follow the guard, which matches their originating element.
+            parts.extend((selector[start:match.start()], guard, selector[match.start():]))
+            return "".join(parts)
+    return "".join((*parts, selector[start:], guard))
+
+
+def figure_rules(css: str, scope: str | None = None) -> str:
     """The page CSS that styles the figure, rewritten for a standalone SVG document.
 
-    html/body rules move to :root (the <svg> in its own file) keeping only tokens and inherited
-    text and paint properties; @import, @font-face, @keyframes and motion runtime rules are dropped.
+    html/body rules keep only tokens and inherited text and paint properties. Ignore @import,
+    @font-face, @keyframes and runtime motion rules. When scoped, constrain ordinary rules to
+    the exported SVG so it can share a document with other themed figures.
     """
     out = []
     for prelude, body in css_blocks(css):
@@ -153,7 +230,7 @@ def figure_rules(css: str) -> str:
             continue
         lowered = prelude.lower()
         if lowered.startswith(BLOCK_AT_RULES):
-            inner = figure_rules(body)
+            inner = figure_rules(body, scope)
             if inner:
                 out.append(f"{prelude}{{{inner}}}")
             continue
@@ -169,6 +246,9 @@ def figure_rules(css: str) -> str:
             if selector not in group:
                 group.append(selector)
         inherited = [d for d in declarations if INHERITED_RE.match(d.split(":", 1)[0].strip())]
+        if scope is not None:
+            root = [scope_selector(selector, scope) for selector in root]
+            other = [scope_selector(selector, scope) for selector in other]
         if root and inherited:
             out.append(f"{','.join(root)}{{{';'.join(inherited)}}}")
         if other and declarations:
@@ -176,63 +256,60 @@ def figure_rules(css: str) -> str:
     return "".join(out)
 
 
-def page_style(html: str, svg_span: tuple[int, int]) -> str:
-    """The page's own <style> rules (outside the figure) as a <style> element for the standalone SVG.
+def page_style(html: str, svg_span: tuple[int, int], scope: str | None = None) -> str:
+    """The page's own live <style> rules (outside the figure) as a <style> element for the standalone SVG.
 
     Shapes styled by page classes or custom properties otherwise fall back to the SVG default
-    (black fill) once the figure leaves its page.
+    (black fill) once the figure leaves its page. Commented-out styles and style text inside
+    <script> or <textarea> are not live and stay behind; CSS comments go, quoted text stays.
     """
-    outside = html[: svg_span[0]] + html[svg_span[1] :]
-    css = CSS_COMMENT_RE.sub("", "".join(STYLE_RE.findall(outside)))
-    rules = figure_rules(css)
+    rules = figure_rules(safe.strip_css_comments(safe.page_css(html, svg_span)), scope)
     if not rules:
         return ""
-    rules = rules.replace("&", "&amp;").replace("<", "&lt;")
-    return f'<style data-illustrate-export-page="true">{rules}</style>'
-
-
-SVG_TAG_RE = re.compile(r"<(/?)svg\b[^>]*?(/?)>", re.IGNORECASE)
-COMMENT_RE = re.compile(r"<!--.*?-->", re.DOTALL)
+    return f'<style data-illustrate-export-page="true">{safe.escape_css_for_xml(rules)}</style>'
 
 
 def figure_span(html: str) -> tuple[int, int]:
-    """Start and end of the first top-level <svg>, nested <svg> icons included."""
-    depth, start = 0, None
-    for tag in SVG_TAG_RE.finditer(html):
-        if tag.group(1):
-            depth -= 1
-            if depth == 0 and start is not None:
-                return start, tag.end()
-        elif not tag.group(2):
-            if depth == 0:
-                start = tag.start()
-            depth += 1
-    raise ExportError("No <svg> diagram found in the source HTML.")
+    """Start and end of the first live top-level <svg>, nested <svg> icons included."""
+    try:
+        return safe.figure_span(html)
+    except ValueError as exc:
+        raise ExportError(str(exc)) from None
 
 
-def standalone_svg(html: str) -> str:
+def standalone_svg(html: str, source: Path | None = None, system_fonts: bool = False) -> str:
+    """The figure as a standalone SVG document.
+
+    `source` names the file the defs-ID prefix is derived from (unique per exported figure);
+    `system_fonts` leaves out the Google Fonts @import (offline use, and the animated export).
+    Use the authored theme's font-loading policy. Unthemed sources without an explicit font
+    import get the sample default.
+    """
     span = figure_span(html)
-    # HTML comments may hold "--", which XML forbids; an export has no use for them.
-    svg = COMMENT_RE.sub("", html[span[0] : span[1]])
-    figure_style = FONT_STYLE + page_style(html, span)
-    opening_match = OPENING_SVG_RE.match(svg)
-    if opening_match is None:
-        raise ExportError("The first SVG has an invalid opening tag.")
-    opening = opening_match.group(0)
-    if not re.search(r"\bviewBox\s*=", opening, re.IGNORECASE):
-        raise ExportError("The diagram SVG has no viewBox; refusing to guess export dimensions.")
-    if not re.search(r"\bxmlns\s*=", opening, re.IGNORECASE):
-        updated_opening = opening[:-1] + ' xmlns="http://www.w3.org/2000/svg">'
-        svg = updated_opening + svg[len(opening) :]
-
-    defs_match = DEFS_RE.search(svg)
-    if defs_match:
-        svg = svg[: defs_match.end()] + figure_style + svg[defs_match.end() :]
-    else:
-        opening_match = OPENING_SVG_RE.match(svg)
-        assert opening_match is not None
-        svg = svg[: opening_match.end()] + f"<defs>{figure_style}</defs>" + svg[opening_match.end() :]
-    return '<?xml version="1.0" encoding="UTF-8"?>\n' + xml_attributes(svg) + "\n"
+    try:
+        svg = safe.remove_comments(html[span[0] : span[1]])
+        svg = safe.normalize_html_entities(safe.xmlify_attributes(svg))
+        safe.ensure_viewbox(svg)
+        svg = safe.ensure_namespaces(svg)
+        offline = system_fonts or safe.theme_font_loading(html) in {"local", "system"}
+        fonts = "" if offline else font_style(safe.google_fonts_urls(html, span) or [DEFAULT_FONT_URL])
+        styles = page_style(html, span)
+        svg = safe.insert_into_defs(svg, fonts + styles)
+        prefix = safe.slug_for(source, svg)
+        svg = safe.normalize_rgba_paint(svg)
+        if styles:
+            # Analyze the original selectors for PowerPoint paint before adding the scope.
+            # Include the HTML rather than just the SVG or basename: styles can differ even
+            # when those are the same, and in-memory callers may supply no filename at all.
+            key = hashlib.sha256(html.encode("utf-8")).hexdigest()[:16]
+            scope = f'[data-illustrate-export="{key}"]'
+            svg = safe.set_export_scope(svg.replace(styles, page_style(html, span, scope), 1), key)
+        svg = safe.namespace_defs_ids(svg, prefix)
+        document = '<?xml version="1.0" encoding="UTF-8"?>\n' + svg + "\n"
+        safe.check_well_formed(document)
+    except ValueError as exc:
+        raise ExportError(str(exc)) from None
+    return document
 
 
 STEP_RE = re.compile(r"\bdata-step\s*=\s*\"(\d+)\"")
@@ -250,7 +327,7 @@ def motion_ms(html: str, name: str, default: int) -> int:
     return int(match.group(1)) if match else default
 
 
-def animated_svg(html: str, arrows: str = "draw") -> str:
+def animated_svg(html: str, arrows: str = "draw", source: Path | None = None) -> str:
     """The standalone SVG plus the figure's reveal as scoped CSS: no script, no remote fonts.
 
     GitHub and other Markdown hosts render an SVG image in a sandbox that runs CSS animation but
@@ -261,12 +338,12 @@ def animated_svg(html: str, arrows: str = "draw") -> str:
     attributes (axonometric and rotated parts) and move them.
     Decorative overlays depend on the HTML page's CSS and are left out.
     """
-    return animated_figure(html, arrows)[0]
+    return animated_figure(html, arrows, source)[0]
 
 
-def animated_figure(html: str, arrows: str = "draw") -> tuple[str, int]:
+def animated_figure(html: str, arrows: str = "draw", source: Path | None = None) -> tuple[str, int]:
     """(animated SVG text, intro length in ms): the step reveal plus the chosen arrow animation."""
-    svg = standalone_svg(html).replace(FONT_STYLE, "")
+    svg = standalone_svg(html, source, system_fonts=True)
     svg = DECORATIVE_RE.sub("", svg)
     if "data-motion-decorative" in svg:
         raise ExportError("A decorative motion overlay could not be removed; keep it on one element.")
@@ -297,47 +374,140 @@ def animated_figure(html: str, arrows: str = "draw") -> tuple[str, int]:
 
 
 def insert_style(svg: str, style: str) -> str:
-    defs_match = DEFS_RE.search(svg)
-    if defs_match:
-        return svg[: defs_match.end()] + style + svg[defs_match.end() :]
-    opening_match = OPENING_SVG_RE.search(svg)
-    assert opening_match is not None
-    return svg[: opening_match.end()] + f"<defs>{style}</defs>" + svg[opening_match.end() :]
+    """Put a <style> first in the figure's <defs> (a new <defs> goes after the leading title/desc)."""
+    head, sep, body = svg.partition("\n") if svg.startswith("<?xml") else ("", "", svg)
+    return head + sep + safe.insert_into_defs(body, style)
 
 
-def write_svg(html: str, destination: Path) -> None:
-    destination.parent.mkdir(parents=True, exist_ok=True)
-    destination.write_text(standalone_svg(html), encoding="utf-8", newline="\n")
-
-
-def write_png(source: Path, destination: Path, scale: int) -> None:
+def write_text(destination: Path, text: str) -> None:
     try:
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_text(text, encoding="utf-8", newline="\n")
+    except OSError as exc:
+        raise ExportError(f"Cannot write {destination}: {exc}") from exc
+
+
+def write_svg(html: str, destination: Path, source: Path | None = None, system_fonts: bool = False) -> None:
+    write_text(destination, standalone_svg(html, source, system_fonts))
+
+
+# Fix the capture size to one CSS pixel per viewBox unit, so the PNG is exactly viewBox x scale.
+EXACT_SIZE_JS = """el => {
+    const box = el.viewBox && el.viewBox.baseVal;
+    if (!box || ![box.width, box.height].every(n => Number.isFinite(n) && n > 0))
+        throw new Error('PNG export needs a viewBox with a finite, positive width and height');
+    for (const [axis, size] of [['width', box.width], ['height', box.height]])
+        for (const prefix of ['', 'min-', 'max-'])
+            el.style.setProperty(prefix + axis, size + 'px', 'important');
+    // Snap the figure onto the device-pixel grid (a sub-pixel nudge in place, so what is behind it
+    // stays the same); a fractional offset would round the capture one pixel larger.
+    const k = window.devicePixelRatio, r = el.getBoundingClientRect();
+    const snap = v => (Math.round(v * k) - v * k) / k;
+    el.style.setProperty('translate', `${snap(r.left + scrollX)}px ${snap(r.top + scrollY)}px`, 'important');
+    return [box.width, box.height];
+}"""
+# Release every clipping ancestor (local scroller, overflow:hidden chrome) so a wide SVG is whole.
+RELEASE_OVERFLOW_JS = (
+    "el => { for (let a = el.parentElement; a; a = a.parentElement)"
+    " a.style.setProperty('overflow', 'visible', 'important'); }"
+)
+STATIC_FRAME_JS = "[...document.querySelectorAll('[data-motion-root]')].every(r => r.dataset.frame === 'static')"
+
+
+def capture_exact_png(page, locator, scale: float, size: tuple[int, int]) -> bytes:
+    png = locator.screenshot(omit_background=True)
+    if struct.unpack_from(">II", png, 16) == size:
+        return png
+
+    # Locator screenshots enclose subpixel element bounds in whole CSS pixels
+    # before scaling. Clip directly in page coordinates if that adds pixels.
+    origin = locator.evaluate("""el => {
+        const bounds = el.getBoundingClientRect();
+        return {x: bounds.x + window.scrollX, y: bounds.y + window.scrollY};
+    }""")
+    session = page.context.new_cdp_session(page)
+    try:
+        session.send("Emulation.setDefaultBackgroundColorOverride", {
+            "color": {"r": 0, "g": 0, "b": 0, "a": 0},
+        })
+        result = session.send("Page.captureScreenshot", {
+            "format": "png",
+            "captureBeyondViewport": True,
+            "clip": {**origin, "width": size[0] / scale, "height": size[1] / scale, "scale": scale},
+        })
+    finally:
+        session.detach()
+    png = base64.b64decode(result["data"])
+    if struct.unpack_from(">II", png, 16) != size:
+        raise ExportError(f"PNG capture did not produce the requested {size[0]} × {size[1]} pixels.")
+    return png
+
+
+def write_png(source: Path, destination: Path, scale: float, *, system_fonts: bool = False,
+              network_idle_timeout_ms: int = NETWORK_IDLE_TIMEOUT_MS,
+              fallback_settle_ms: int = FALLBACK_SETTLE_MS) -> tuple[int, int]:
+    """Rasterize the source HTML's figure: transparent, viewBox x scale pixels, complete static frame.
+
+    Waits are bounded: a load that never goes network-idle (a stalled webfont behind a proxy) is
+    cancelled with window.stop() and captured with fallback typography, with a warning on stderr;
+    font readiness is awaited for at most FONTS_READY_TIMEOUT_MS. Motion figures load with
+    ?motion=static under reduced motion and must reach data-frame="static". Returns the PNG size.
+    """
+    try:
+        from playwright.sync_api import Error as PlaywrightError
+        from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
         from playwright.sync_api import sync_playwright
     except ImportError as exc:
-        raise ExportError(
-            "Playwright isn't installed. To enable PNG export, run:\n"
-            "pip install playwright\nplaywright install chromium"
-        ) from exc
+        raise ExportError("Playwright isn't installed. To enable PNG export, run:\n" + PLAYWRIGHT_INSTALL) from exc
 
-    destination.parent.mkdir(parents=True, exist_ok=True)
-    with sync_playwright() as playwright:
-        browser = playwright.chromium.launch()
-        try:
-            page = browser.new_page(device_scale_factor=scale)
-            page.goto(source.resolve().as_uri())
-            page.wait_for_load_state("networkidle")
-            locator = page.locator("svg").first
-            if locator.count() == 0:
-                raise ExportError("No SVG diagram was found after rendering the source HTML.")
-            # Release every clipping ancestor (local scroller, overflow:hidden chrome) so an SVG
-            # wider than its frame (min-width = viewBox width) is captured whole.
-            locator.evaluate(
-                "el => { for (let a = el.parentElement; a; a = a.parentElement)"
-                " a.style.setProperty('overflow', 'visible', 'important'); }"
-            )
-            locator.screenshot(path=str(destination), omit_background=True)
-        finally:
-            browser.close()
+    try:
+        destination.parent.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        raise ExportError(f"Cannot write {destination}: {exc}") from exc
+    try:
+        with sync_playwright() as playwright:
+            browser = playwright.chromium.launch()
+            try:
+                page = browser.new_page(device_scale_factor=scale, reduced_motion="reduce")
+                if system_fonts:
+                    page.route(re.compile(r"^https?://"), lambda route: route.abort())
+                page.goto(source.resolve().as_uri() + "?motion=static", wait_until="domcontentloaded")
+                try:
+                    page.wait_for_load_state("networkidle", timeout=network_idle_timeout_ms)
+                except PlaywrightTimeoutError:
+                    page.evaluate("window.stop()")
+                    page.wait_for_timeout(fallback_settle_ms)
+                    print("warning: a webfont or stylesheet request stalled - captured with fallback "
+                          "typography; the PNG may not match the intended fonts", file=sys.stderr)
+                page.evaluate("ms => Promise.race([document.fonts.ready, new Promise(r => setTimeout(r, ms))])",
+                              FONTS_READY_TIMEOUT_MS)
+                try:
+                    page.wait_for_function(STATIC_FRAME_JS, timeout=STATIC_FRAME_TIMEOUT_MS)
+                except PlaywrightTimeoutError:
+                    raise ExportError("The motion figure did not reach its complete static frame "
+                                      '(data-frame="static"); check its motion runtime.') from None
+                locator = page.locator("svg").first
+                if locator.count() == 0:
+                    raise ExportError("No SVG diagram was found after rendering the source HTML.")
+                locator.evaluate(RELEASE_OVERFLOW_JS)
+                width, height = locator.evaluate(EXACT_SIZE_JS)
+                size = (round(width * scale), round(height * scale))
+                if min(size) < 1:
+                    raise ExportError("The scaled viewBox must be at least one pixel in each dimension.")
+                png = capture_exact_png(page, locator, scale, size)
+            finally:
+                browser.close()
+    except PlaywrightError as exc:
+        text = str(exc).strip()
+        message = text.splitlines()[0] if text else type(exc).__name__
+        if "Executable doesn't exist" in text or "playwright install" in text:
+            message = "Chromium for Playwright isn't installed. Run:\npython -m playwright install chromium"
+        raise ExportError(f"PNG export failed: {message}") from None
+    try:
+        destination.write_bytes(png)
+    except OSError as exc:
+        raise ExportError(f"Cannot write {destination}: {exc}") from exc
+    return size
 
 
 def main() -> int:
@@ -349,36 +519,39 @@ def main() -> int:
         base = output_base(source, args.output)
         if args.animated:
             animated_path = base.with_name(base.name + ".animated.svg")
-            animated_path.parent.mkdir(parents=True, exist_ok=True)
-            animated_path.write_text(animated_svg(html, args.arrows), encoding="utf-8", newline="\n")
+            write_text(animated_path, animated_svg(html, args.arrows, source))
             outputs.append(animated_path)
         elif args.gif:
             if not 1 <= args.fps <= 30:
                 raise ExportError("--fps must be between 1 and 30.")
-            figure, intro_ms = animated_figure(html, args.arrows)
+            if args.scale not in GIF_SCALES:
+                raise ExportError(f"--gif renders at --scale 1, 2 or 3 (got {args.scale:g}).")
+            figure, intro_ms = animated_figure(html, args.arrows, source)
             total_ms, hold_ms = animate_export.timeline(args.arrows, intro_ms)
             gif_path = base.with_suffix(".gif")
             try:
-                animate_export.render_gif(figure, gif_path, total_ms, hold_ms, args.fps, args.scale, args.theme)
+                animate_export.render_gif(figure, gif_path, total_ms, hold_ms, args.fps, int(args.scale), args.theme)
             except RuntimeError as exc:
                 raise ExportError(str(exc)) from exc
             outputs.append(gif_path)
         elif not args.png_only:
             svg_path = base.with_suffix(".svg")
-            write_svg(html, svg_path)
+            write_svg(html, svg_path, source, args.system_fonts)
             outputs.append(svg_path)
         if not (args.svg_only or args.animated or args.gif):
             png_path = base.with_suffix(".png")
-            write_png(source, png_path, args.scale)
+            write_png(source, png_path, args.scale, system_fonts=args.system_fonts)
             outputs.append(png_path)
         for output in outputs:
             print(f"{output.resolve()} ({output.stat().st_size} bytes)")
         return 0
     except ExportError as exc:
-        for output in outputs:
-            if output.is_file():
-                print(f"{output.resolve()} ({output.stat().st_size} bytes)")
+        written = [output for output in outputs if output.is_file()]
+        for output in written:
+            print(f"{output.resolve()} ({output.stat().st_size} bytes)")
         print(f"export error: {exc}", file=sys.stderr)
+        if written:
+            print("The files listed above were written; only the failed format is missing.", file=sys.stderr)
         return 2
 
 

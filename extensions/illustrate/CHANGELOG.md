@@ -1,5 +1,11 @@
 # Changelog
 
+## [2.8.0] - 2026-11-19
+
+- Vendors illustration-tools 3.8.0. The new visual types are Service Blueprint, Steps, Unit Grid, Requirement Traceability, Event Modeling, Schedule Network and educational SBGN Process Description.
+- Adds Architecture Containment, Box Plot and Arc Diagram variants, PlantUML sequence and class redraws, and Mermaid quadrant redraws.
+- PNG export accepts fractional scales from 1 to 4. The release preserves the SVG, handwritten, animation, GIF, theme and technical-color workflows.
+
 ## [2.7.3] - 2026-10-28
 
 - `requires.tools` lists Python `>=3.11` as optional (the export and verify scripts), the floor every Sanduq extension now states.

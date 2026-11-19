@@ -174,11 +174,14 @@ ICONS: dict[str, list[tuple[str, str, str, str]]] = {
 
 
 def fetch(url: str) -> str | None:
+    if not url.startswith("https://"):
+        raise ValueError(f"refusing non-https icon source: {url}")
     try:
         req = urllib.request.Request(
             url, headers={"User-Agent": "illustrate-build/1.0 (https://github.com)"}
         )
-        with urllib.request.urlopen(req, timeout=15) as r:
+        # nosec B310 - the scheme is checked above; sources are the fixed https URLs in this file.
+        with urllib.request.urlopen(req, timeout=15) as r:  # nosec B310
             return r.read().decode("utf-8")
     except urllib.error.HTTPError:
         return None
@@ -324,6 +327,25 @@ def normalize_logz(raw: str) -> str:
     )
 
 
+def source_handlers(source: str, source_id: str):
+    """Return (normalize, attribution, fetcher) for one icon source; unknown sources raise."""
+    if source == "tabler":
+        return normalize_tabler, f"Tabler Icons / `{source_id}` (MIT)", lambda: fetch_tabler(source_id)
+    if source == "simple":
+        return normalize_simple, f"Simple Icons / `{source_id}` (CC0)", lambda: fetch_simple(source_id)
+    if source == "logz":
+        return normalize_logz, f"log-z/logos / `{source_id}` (MIT)", lambda: fetch_logz(source_id)
+    if source.startswith("devicon"):
+        variant = source.split(":")[1] if ":" in source else "plain"
+        return (normalize_devicon, f"Devicon / `{source_id}-{variant}` (MIT)",
+                lambda: fetch_devicon(source_id, variant))
+    if source == "url":
+        domain = re.sub(r"https?://([^/]+)/.*", r"\1", source_id)
+        return (normalize_url, f"Direct fetch / `{domain}` — verify license before use",
+                lambda: fetch_url(source_id))
+    raise ValueError(f"unknown source: {source}")
+
+
 def build(offline: bool = False) -> tuple[list[str], list[str], list[str], dict[str, dict[str, str]]]:
     md_chunks: list[str] = []
     gallery_chunks: list[str] = []
@@ -358,25 +380,7 @@ def build(offline: bool = False) -> tuple[list[str], list[str], list[str], dict[
         for slot, source, source_id, blurb in items:
             vpath = vendor_path(slot, source, source_id)
 
-            if source == "tabler":
-                normalize = normalize_tabler
-                attribution = f"Tabler Icons / `{source_id}` (MIT)"
-            elif source == "simple":
-                normalize = normalize_simple
-                attribution = f"Simple Icons / `{source_id}` (CC0)"
-            elif source == "logz":
-                normalize = normalize_logz
-                attribution = f"log-z/logos / `{source_id}` (MIT)"
-            elif source.startswith("devicon"):
-                variant = source.split(":")[1] if ":" in source else "plain"
-                normalize = normalize_devicon
-                attribution = f"Devicon / `{source_id}-{variant}` (MIT)"
-            elif source == "url":
-                normalize = normalize_url
-                domain = re.sub(r"https?://([^/]+)/.*", r"\1", source_id)
-                attribution = f"Direct fetch / `{domain}` — verify license before use"
-            else:
-                raise ValueError(f"unknown source: {source}")
+            normalize, attribution, fetcher = source_handlers(source, source_id)
 
             if vpath.exists():
                 if not offline:
@@ -386,18 +390,11 @@ def build(offline: bool = False) -> tuple[list[str], list[str], list[str], dict[
                 raw = None
             else:
                 print(f"  fetching {source}/{source_id} -> {slot}", file=sys.stderr)
-                if source == "tabler":
-                    raw = fetch_tabler(source_id)
-                elif source == "simple":
-                    raw = fetch_simple(source_id)
-                elif source == "logz":
-                    raw = fetch_logz(source_id)
-                elif source.startswith("devicon"):
-                    variant = source.split(":")[1] if ":" in source else "plain"
-                    raw = fetch_devicon(source_id, variant)
-                elif source == "url":
-                    raw = fetch_url(source_id)
+                raw = fetcher()
                 if raw is not None:
+                    # Upstream metadata headers (Tabler's tags/category comment) are not geometry and read
+                    # like hidden instructions to skill scanners; the cache keeps only the SVG.
+                    raw = re.sub(r"\A\s*<!--.*?-->\s*", "", raw, flags=re.DOTALL)
                     vpath.parent.mkdir(parents=True, exist_ok=True)
                     vpath.write_text(raw, encoding="utf-8")
 
