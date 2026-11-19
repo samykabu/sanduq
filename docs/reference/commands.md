@@ -118,7 +118,7 @@ before Plan, `/speckit-workflow-scope-reconcile` after Implement. To refresh par
 | --- | --- |
 | `/speckit-illustrate-theme` | Configure: `set cobalt light` or `validate` for the tracked project theme. |
 | `/speckit-illustrate-generate` | Explain: `Create a state diagram of refund request, approval/rejection, and settlement from the real implementation.` |
-| `/speckit-illustrate-export` | Embed: `docs/refund-approval.html --svg-only` |
+| `/speckit-illustrate-export` | Embed an SVG with `docs/refund-approval.html --svg-only`, or play one BPMN outcome with `docs/expense-approval.html --animated --bpmn-route approved`. |
 | `/speckit-illustrate-import` | Redraw: `docs/legacy/order-flow.mmd --size doc-wide --detail balanced` in the active project theme with a fidelity ledger. |
 
 ## Memory

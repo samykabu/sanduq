@@ -4,7 +4,7 @@ extension:
   id: illustrate
   name: "Illustrate"
   version: "2.8.0"
-  description: "Generate, import, and export 51 technical, product, architecture, process, and quantitative illustration types with tracked project-level light/dark color and font themes."
+  description: "Generate, import, and export 51 diagram and chart types with tracked project themes. The Process type includes a BPMN 2.0 variant with swimlanes and route animation."
   author: "Samy K. Abushanab"
   repository: "https://github.com/samykabu/sanduq"
   category: "documentation"
@@ -38,6 +38,7 @@ tags:
   - "diagram"
   - "architecture"
   - "process-flow"
+  - "bpmn"
   - "technical-color"
   - "flowchart"
   - "sequence"
