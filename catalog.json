@@ -1,6 +1,6 @@
 {
   "schema_version": "1.0",
-  "updated_at": "2026-11-19T23:32:38.078519+00:00",
+  "updated_at": "2026-11-27T15:01:43.823162+00:00",
   "catalog_url": "https://raw.githubusercontent.com/samykabu/sanduq/main/catalog.json",
   "extensions": {
     "project": {
@@ -326,7 +326,7 @@
     "workflow": {
       "name": "Sanduq Workflow",
       "id": "workflow",
-      "version": "2.4.1",
+      "version": "2.4.2",
       "description": "GitHub issue decisions and resumable Scope-to-PR orchestration with optional model-aware delegation, QA, User Manual, and workflow evidence CI.",
       "author": "Samy K. Abushanab",
       "license": "MIT",
@@ -334,7 +334,7 @@
       "homepage": "https://github.com/samykabu/sanduq/tree/main/extensions/workflow",
       "documentation": "https://github.com/samykabu/sanduq/blob/main/extensions/workflow/README.md",
       "changelog": "https://github.com/samykabu/sanduq/blob/main/extensions/workflow/CHANGELOG.md",
-      "download_url": "https://github.com/samykabu/sanduq/releases/download/workflow-v2.4.1/workflow.zip",
+      "download_url": "https://github.com/samykabu/sanduq/releases/download/workflow-v2.4.2/workflow.zip",
       "requires": {
         "speckit_version": ">=1.0.0,<2.0.0",
         "tools": [
@@ -368,9 +368,9 @@
       "category": "process",
       "effect": "read-write",
       "verified": false,
-      "sha256": "eb446183941fca24f452c9fc3b46d6c92e7ebaac52469bd02f28a4a07c6955fb",
-      "updated_at": "2026-11-19T23:32:38.078389+00:00",
-      "inventory_sha256": "abbd151a7c0345fa790831afb0bfb76b51e37cdb3592129327a9d679aca033ca"
+      "sha256": "e8f7748f562a4f8d4041cefd1f7ddc1dd5eeb1dc2365d8be25242dec00183915",
+      "updated_at": "2026-11-27T15:01:43.823031+00:00",
+      "inventory_sha256": "eb968470ccc2a0a69da0abb14b267584b92f5798561427336bf1fb474bbe96e1"
     },
     "scope": {
       "name": "Speckit Scope (retired)",

@@ -4,7 +4,7 @@ All notable changes to sanduq extensions/plugins are recorded here.
 Format: [Keep a Changelog](https://keepachangelog.com/). Extensions are versioned
 independently via `<extension>-vX.Y.Z` tags.
 
-## 2026-11-27 — Workflow 2.4.2 (pending release)
+## 2026-11-27 — Workflow 2.4.2
 
 - Scope accepts an independently approved issue under an organizational epic after verifying its approval origin and GitHub parent membership.
 - Specify revalidates a previously bound, rendered specification when the issue is reopened.
