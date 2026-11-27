@@ -1,6 +1,8 @@
 {
   "schema_version": 1,
-  "versions": {},
-  "status": "released",
-  "note": "Illustrate 2.8.0 adds the BPMN Process variant, and Workflow 2.4.1 selects the new Illustrate version."
+  "versions": {
+    "workflow": "2.4.2"
+  },
+  "status": "ready",
+  "note": "Workflow 2.4.2 fixes Scope approval under organizational epics and revalidation of bound specifications."
 }

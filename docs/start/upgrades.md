@@ -3,6 +3,13 @@
 Read the published version in the [catalog](../../catalog.json) before you upgrade. Release notes
 are in the root [CHANGELOG](../../CHANGELOG.md) and in each package's `CHANGELOG.md`.
 
+## Workflow 2.4.2
+
+| Workflow 2.4.1 | After upgrading to 2.4.2 |
+|---|---|
+| Scope can reject a leaf's own approval when GitHub groups it under an organizational epic. | Retry the Scope gate. It checks the issue's approval origin and its membership under the epic. |
+| Reopening Specify can put a rendered specification back in bind-only mode. | Reopen Specify on the existing feature and run its printed revalidation command. |
+
 ## Workflow 2.3.2, Assure 2.7.5 and User Manual 2.0.4
 
 | Before | After |

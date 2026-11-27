@@ -24,8 +24,9 @@ session to both gate and bind: `scope.py gate <issue> --feature specs/<feature> 
 <active-token> --session <active-session> --analysis <resolved-analysis.json>`, then during
 Specify the same flags with `scope.py bind <issue> --apply`. This narrow path permits mapped
 Feature Specification after answered clarification, verifies live applied decisions and the
-unchanged published native leaf with its retained parent approval (none for a root issue kept
-whole), and returns hashes without
+unchanged published native leaf with its retained parent approval. A root issue kept whole uses
+its own approval. It can retain that approval under an organizational epic when its approval
+origin identifies the issue and GitHub confirms the parent relationship. The gate returns hashes without
 republishing unchanged scope or creating a new approval. Use the explicit active feature, never
 a historical `.specify/feature.json` pointer. A missing or foreign claim, wrong
 branch/repository/issue, pending decision, stale scope, changed approved score or changed native

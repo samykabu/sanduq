@@ -1,5 +1,10 @@
 # Changelog
 
+## [2.4.2] - 2026-11-27
+
+- An independently approved issue can pass the Scope gate beneath an organizational epic. The gate still verifies GitHub parent membership and checks the approval against its recorded origin.
+- Reopening Specify for an already-bound, rendered specification keeps its revalidation mode and prints the bind command for the existing issue.
+
 ## [2.4.1] - 2026-11-20
 
 - Update the required Illustrate dependency to 2.8.0.
