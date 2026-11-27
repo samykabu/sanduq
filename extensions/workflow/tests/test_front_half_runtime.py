@@ -953,6 +953,37 @@ class BindOnlyAndLazyIssueTests(Base):
         self.bind_rendered_issue()
         self.assertEqual(w.read(self.root / self.feature / 'scope-source.json', {})['issue'], 10)
 
+    def test_bound_rendered_spec_revalidates_through_the_printed_scope_command(self):
+        import shlex
+        import test_scope as scope_fixture
+        sm = scope_fixture.m
+        run, app, gh = self.bind_rendered_issue(return_app=True)
+        run.complete(run.load()['active']['token'], self.receipt('specify'))
+        gh.statuses[10] = 'In progress'
+        app._board = None
+        # Reopen Specify without changing the approved Scope inputs or the rendered spec.
+        with patch.object(run, 'next', return_value={'stage': 'specify'}):
+            claimed = run.claim(self.usage())
+        self.assertEqual((claimed['stage'], claimed['mode']), ('specify', 'revalidate'))
+        self.assertEqual(run.load()['active']['mode'], 'revalidate')
+        self.assertFalse(claimed['scope_analysis_required'])
+        argv = shlex.split(claimed['scope_command']['command'])[2:]
+        self.assertEqual(argv, ['bind', '10', '--apply'])
+        decisions = sm.workflow_policy._decisions_module()
+        no_decisions = {'version': 1, 'feature': self.feature, 'issue': 'acme/app#10', 'decisions': []}
+        before = list(gh.writes)
+        previous = os.getcwd()
+        os.chdir(self.root)
+        try:
+            with patch.object(sm, 'Scope', return_value=app), patch('sys.stdout', new=__import__('io').StringIO()), \
+                    patch.object(decisions, 'reconcile', return_value=no_decisions), \
+                    patch.object(sm.workflow_policy, '_decisions_module', return_value=decisions):
+                self.assertEqual(sm.main(argv), 0)
+        finally:
+            os.chdir(previous)
+        self.assertEqual(gh.statuses[10], 'In progress')
+        self.assertEqual(gh.writes, before)
+
     def test_scope_bind_gives_the_pr_lint_its_prerequisites(self):
         """B5: bind records the checked prerequisites in scope-source.json, and the PR stage's lint reads them."""
         run = self.bind_rendered_issue(prerequisite=9)
@@ -974,7 +1005,7 @@ class BindOnlyAndLazyIssueTests(Base):
             w.pr_lint_binding(self.root, self.feature, run.load(), receipt)
         self.assertIn('PR_BOUND_ISSUE_NOT_CLOSED', w.ERRORS)
 
-    def bind_rendered_issue(self, prerequisite=None):
+    def bind_rendered_issue(self, prerequisite=None, return_app=False):
         """Publish #10 with Scope's fake GitHub, complete Scope, render the spec, claim Specify and run the
         claim's printed Scope bind; returns the run."""
         import shlex
@@ -1017,7 +1048,7 @@ class BindOnlyAndLazyIssueTests(Base):
         finally:
             os.chdir(previous)
         self.assertEqual(code, 0)
-        return run
+        return (run, app, gh) if return_app else run
 
     def test_plain_spec_keeps_the_existing_modes(self):
         run = self.run_object()

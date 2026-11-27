@@ -604,9 +604,15 @@ class Scope:
                     "forward from another issue's approval; re-scope it and approve it as its own root.")
             if parent_number:
                 parent_receipt = metadata(self.issue(parent_number).get('body'))
-                require(issue['number'] in parent_receipt.get('children', [])
-                        and self.retains_parent_approval(issue['number'], receipt['approval'], parent_number, parent_receipt.get('approval')),
-                        'SCOPE_RETAINED_PARENT_APPROVAL_MISMATCH')
+                approval = receipt['approval']
+                origin = approval.get('approval_origin')
+                own = (approval.get('child_count') == 0 and isinstance(origin, dict)
+                       and origin.get('issue') == issue['number'] and self.carries_own_approval(issue, approval))
+                # An organizational epic has no Scope approval to retain; an actual Scope parent still does.
+                if parent_receipt or not own:
+                    require(issue['number'] in parent_receipt.get('children', [])
+                            and self.retains_parent_approval(issue['number'], approval, parent_number, parent_receipt.get('approval')),
+                            'SCOPE_RETAINED_PARENT_APPROVAL_MISMATCH')
                 children = self.gh.api(f'{self.base}/{parent_number}/sub_issues?per_page=100', pages=True)
                 require(any(child.get('number') == issue['number'] for child in children), 'SCOPE_NATIVE_PARENT_MISMATCH')
             # A local replacement inherits owner resolutions only when the exact consumed
@@ -772,21 +778,21 @@ class Scope:
         return True
 
     def carries_own_approval(self, issue, approval):
-        """For an issue with no native parent: True unless its receipt approval is carried forward from another
-        issue's (a former parent's) approval. With this checkout's records, `revision_of` must lead, without a
+        """True when the receipt approval is this issue's own, including carried revisions.
+        With this checkout's records, `revision_of` must lead, without a
         cycle, through this issue's carried records to an approval recorded for this issue itself, and the
         receipt's `approval_origin`, when present, must name that approval. Without the newest record (another
-        checkout), the receipt's `approval_origin` must name this issue; a receipt from before 2.0.4 has none,
+        checkout), the receipt's `approval_origin` must name this issue and, for direct approval, its receipt hash;
+        a receipt from before 2.0.4 has none,
         and then the issue must not be a node another issue's publish created."""
-        if not (approval.get('carried_forward') or approval.get('revision_of')):
-            return True
         number, folder = issue['number'], self.root / '.specify/scope/approvals'
         sha, expected, seen = approval.get('analysis_sha256'), approval, set()
         valid = lambda value: isinstance(value, str) and re.fullmatch(r'[a-f0-9]{64}', value)
         origin = approval.get('approval_origin')
         if not (valid(sha) and (folder / f'{number}-{sha}.json').is_file()):
             if origin is not None:
-                return isinstance(origin, dict) and origin.get('issue') == number
+                return (isinstance(origin, dict) and origin.get('issue') == number and valid(origin.get('analysis_sha256'))
+                        and (approval.get('carried_forward') is True or origin['analysis_sha256'] == sha))
             return not re.search(rf'<!-- speckit-scope:node (?!{number}:)\d+:', issue.get('body') or '')
         while True:
             record = read_json(folder / f'{number}-{sha}.json', {}) if valid(sha) and sha not in seen else {}

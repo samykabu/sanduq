@@ -91,6 +91,96 @@ class FreshBindingTests(unittest.TestCase):
         self.assertIsNone(result['parent'])
         self.assertFalse(result['publication_required'])
 
+    def prepare_own_approval_under_epic(self, revisions=0):
+        analysis = self.prepare_root_kept_whole()
+        for n in range(revisions):
+            self.gh.issues[1]['body'] += f'\n\nOwner note {n}.'
+            snap = self.app.inspect('1'); analysis = dict(analysis, fingerprint=snap['fingerprint'])
+            self.app.publish(snap, analysis, True)
+        self.gh.add(18, title='Phase epic')
+        self.gh.children[18] = {1}
+        self.gh.statuses[1] = 'Feature Specification'; self.app._board = None
+        return analysis
+
+    def test_fresh_gate_accepts_own_direct_or_revised_approval_under_an_unscoped_epic(self):
+        for revisions, records in ((0, True), (0, False), (2, True), (2, False)):
+            with self.subTest(revisions=revisions, records=records):
+                self.tearDown(); self.setUp()
+                analysis = self.prepare_own_approval_under_epic(revisions)
+                if not records: self.drop_records()
+                approval = m.metadata(self.gh.issues[1]['body'])['approval']
+                self.assertEqual(approval['child_count'], 0)
+                self.assertEqual(approval['approval_origin']['issue'], 1)
+                before = list(self.gh.writes)
+                hierarchy = {(parent, child) for parent, children in self.gh.children.items() for child in children}
+                with patch.object(m.workflow_policy, '_decisions_module', return_value=self.decisions()):
+                    result = self.app.gate('1', feature='specs/001-new', token='owned', session='session', analysis=analysis)
+                self.assertEqual((result['parent'], result['approval']), (18, approval))
+                self.assertFalse(result['publication_required'])
+                self.assertEqual(self.gh.writes, before)
+                self.assertEqual({(parent, child) for parent, children in self.gh.children.items() for child in children}, hierarchy)
+                self.assertEqual(self.gh.statuses[1], 'Feature Specification')
+
+    def test_fresh_gate_requires_reciprocal_native_membership_for_both_approval_paths(self):
+        for own in (True, False):
+            with self.subTest(own=own):
+                self.tearDown(); self.setUp()
+                analysis = self.prepare_own_approval_under_epic() if own else self.prepare_published_child()
+                original = self.gh.api
+                self.gh.api = lambda endpoint, *a, **kw: [] if endpoint == 'repos/acme/app/issues/18/sub_issues?per_page=100' else original(endpoint, *a, **kw)
+                with patch.object(m.workflow_policy, '_decisions_module', return_value=self.decisions()):
+                    with self.assertRaisesRegex(m.ScopeError, 'SCOPE_NATIVE_PARENT_MISMATCH'):
+                        self.app.gate('1', feature='specs/001-new', token='owned', session='session', analysis=analysis)
+
+    def test_fresh_gate_refuses_own_approval_that_contradicts_local_records_under_an_epic(self):
+        for revisions in (0, 2):
+            with self.subTest(revisions=revisions):
+                self.tearDown(); self.setUp()
+                analysis = self.prepare_own_approval_under_epic(revisions)
+                approval = m.metadata(self.gh.issues[1]['body'])['approval']
+                path = self.root / '.specify/scope/approvals' / f'1-{approval["analysis_sha256"]}.json'
+                m.write_json(path, dict(m.read_json(path), approved_by='another owner'))
+                with patch.object(m.workflow_policy, '_decisions_module', return_value=self.decisions()):
+                    with self.assertRaisesRegex(m.ScopeError, 'SCOPE_RETAINED_PARENT_APPROVAL_MISMATCH'):
+                        self.app.gate('1', feature='specs/001-new', token='owned', session='session', analysis=analysis)
+
+    def test_fresh_gate_requires_explicit_own_origin_to_bypass_unscoped_parent_approval(self):
+        for origin in (None, {'issue': 7, 'analysis_sha256': 'a' * 64}, {'issue': 1}):
+            with self.subTest(origin=origin):
+                self.tearDown(); self.setUp()
+                analysis = self.prepare_own_approval_under_epic()
+                approval = m.metadata(self.gh.issues[1]['body'])['approval']
+                self.set_receipt(1, approval=dict(approval, approval_origin=origin))
+                self.drop_records()
+                with patch.object(m.workflow_policy, '_decisions_module', return_value=self.decisions()):
+                    with self.assertRaisesRegex(m.ScopeError, 'SCOPE_RETAINED_PARENT_APPROVAL_MISMATCH'):
+                        self.app.gate('1', feature='specs/001-new', token='owned', session='session', analysis=analysis)
+
+    def test_fresh_gate_refuses_a_direct_approval_with_a_different_valid_origin_hash(self):
+        for epic, records in ((False, True), (False, False), (True, True), (True, False)):
+            with self.subTest(epic=epic, records=records):
+                self.tearDown(); self.setUp()
+                analysis = self.prepare_own_approval_under_epic() if epic else self.prepare_root_kept_whole()
+                approval = m.metadata(self.gh.issues[1]['body'])['approval']
+                self.assertNotEqual(approval['analysis_sha256'], 'f' * 64)
+                self.assertNotIn('carried_forward', approval)
+                self.set_receipt(1, approval=dict(approval, approval_origin={'issue': 1, 'analysis_sha256': 'f' * 64}))
+                if not records: self.drop_records()
+                before = list(self.gh.writes)
+                error = 'SCOPE_RETAINED_PARENT_APPROVAL_MISMATCH' if epic else 'SCOPE_CARRIED_APPROVAL_WITHOUT_PARENT'
+                with patch.object(m.workflow_policy, '_decisions_module', return_value=self.decisions()):
+                    with self.assertRaisesRegex(m.ScopeError, error):
+                        self.app.gate('1', feature='specs/001-new', token='owned', session='session', analysis=analysis)
+                self.assertEqual(self.gh.writes, before)
+                self.assertEqual(self.gh.statuses[1], 'Feature Specification')
+
+    def test_fresh_gate_refuses_own_approval_when_the_actual_scope_parent_changes(self):
+        analysis = self.prepare_published_child()
+        self.set_receipt(18, approval=dict(m.metadata(self.gh.issues[18]['body'])['approval'], approved_by='another owner'))
+        with patch.object(m.workflow_policy, '_decisions_module', return_value=self.decisions()):
+            with self.assertRaisesRegex(m.ScopeError, 'SCOPE_RETAINED_PARENT_APPROVAL_MISMATCH'):
+                self.app.gate('1', feature='specs/001-new', token='owned', session='session', analysis=analysis)
+
     def test_fresh_gate_refuses_a_child_that_lost_its_parent(self):
         analysis = self.prepare_root_kept_whole()
         receipt = m.metadata(self.gh.issues[1]['body'])
@@ -139,6 +229,25 @@ class FreshBindingTests(unittest.TestCase):
     def fresh_gate_child(self, analysis):
         with patch.object(m.workflow_policy, '_decisions_module', return_value=self.decisions(issue=2)):
             return self.app.gate('2', feature='specs/001-new', token='owned', session='session', analysis=analysis)
+
+    def test_fresh_gate_refuses_inherited_approval_reparented_to_an_unscoped_epic(self):
+        for tamper in ('none', 'missing records', 'forged origin', 'missing middle', 'cycle'):
+            with self.subTest(tamper=tamper):
+                self.tearDown(); self.setUp()
+                analysis = self.carried_child(2)
+                approval = m.metadata(self.gh.issues[2]['body'])['approval']
+                self.gh.add(18, title='Phase epic'); self.gh.children = {18: {2}}
+                if tamper == 'missing records': self.drop_records()
+                if tamper in ('forged origin', 'missing middle', 'cycle'):
+                    self.set_receipt(2, approval=dict(approval, approval_origin={'issue': 2, 'analysis_sha256': approval['revision_of']}))
+                    if tamper != 'forged origin':
+                        path = self.root / '.specify/scope/approvals' / f'2-{approval["analysis_sha256"]}.json'
+                        m.write_json(path, dict(m.read_json(path), approval_origin={'issue': 2, 'analysis_sha256': approval['revision_of']}))
+                        middle = path.with_name(f'2-{approval["revision_of"]}.json')
+                        if tamper == 'missing middle': middle.unlink()
+                        else: m.write_json(middle, dict(m.read_json(middle), revision_of=approval['analysis_sha256']))
+                with self.assertRaisesRegex(m.ScopeError, 'SCOPE_RETAINED_PARENT_APPROVAL_MISMATCH'):
+                    self.fresh_gate_child(analysis)
 
     def test_fresh_gate_accepts_a_carried_child_revision_traced_to_the_live_parent_approval(self):
         for revisions in (1, 2):
