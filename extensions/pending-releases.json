@@ -3,6 +3,6 @@
   "versions": {
     "workflow": "2.4.2"
   },
-  "status": "implementation-in-progress",
+  "status": "ready",
   "note": "Workflow 2.4.2 fixes Scope approval under organizational epics and revalidation of bound specifications."
 }

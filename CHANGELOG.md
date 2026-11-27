@@ -4,6 +4,11 @@ All notable changes to sanduq extensions/plugins are recorded here.
 Format: [Keep a Changelog](https://keepachangelog.com/). Extensions are versioned
 independently via `<extension>-vX.Y.Z` tags.
 
+## 2026-11-27 — Workflow 2.4.2 (pending release)
+
+- Scope accepts an independently approved issue under an organizational epic after verifying its approval origin and GitHub parent membership.
+- Specify revalidates a previously bound, rendered specification when the issue is reopened.
+
 ## 2026-11-20 — Illustrate 2.8.0, Workflow 2.4.1
 
 - Vendors illustration-tools 3.9.1 with 51 diagram types, four additional variants, PlantUML and Mermaid quadrant redraws, and fractional PNG export.
